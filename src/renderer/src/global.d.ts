@@ -6,6 +6,7 @@ declare global {
       getDashboard: () => Promise<DashboardData>
       importLibrary: () => Promise<DashboardData>
       updateSettings: (payload: Partial<AppSettings>) => Promise<DashboardData>
+      autoDetectSettings: () => Promise<DashboardData>
       syncFox: (payload: FoxSyncRequest) => Promise<{ dashboard: DashboardData }>
       startReview: (payload: ReviewRequest) => Promise<ReviewResult>
       openPath: (filePath: string) => Promise<void>

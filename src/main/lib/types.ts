@@ -12,6 +12,16 @@ export interface AppSettings {
   defaultPlayerName: string
 }
 
+export interface SystemProfile {
+  katagoBin: string
+  katagoConfig: string
+  katagoModel: string
+  proxyBaseUrl: string
+  proxyApiKey: string
+  proxyModels: string[]
+  notes: string[]
+}
+
 export interface LibraryGame {
   id: string
   title: string
@@ -61,4 +71,5 @@ export interface ReviewRequest {
 export interface DashboardData {
   settings: AppSettings
   games: LibraryGame[]
+  systemProfile: SystemProfile
 }

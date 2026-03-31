@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { findGame, getSettings, reviewsDir } from '@main/lib/store'
 import type { ReviewArtifact, ReviewRequest, ReviewResult } from '@main/lib/types'
+import { ensurePythonRuntime } from './pythonRuntime'
 
 interface PythonReviewOutput {
   markdown_path: string
@@ -24,6 +25,7 @@ export async function runReview(request: ReviewRequest): Promise<ReviewResult> {
   }
 
   const settings = getSettings()
+  const pythonBin = await ensurePythonRuntime(process.cwd())
   const reviewRoot = join(reviewsDir, game.id)
   mkdirSync(reviewRoot, { recursive: true })
 
@@ -56,7 +58,7 @@ export async function runReview(request: ReviewRequest): Promise<ReviewResult> {
   }
 
   const output = await new Promise<PythonReviewOutput>((resolve, reject) => {
-    const child = spawn(settings.pythonBin || 'python3', args, {
+    const child = spawn(pythonBin || settings.pythonBin || 'python3', args, {
       cwd: process.cwd(),
       env: { ...process.env }
     })

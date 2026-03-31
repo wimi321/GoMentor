@@ -14,7 +14,16 @@ const emptyDashboard: DashboardData = {
     reviewLanguage: 'zh-CN',
     defaultPlayerName: ''
   },
-  games: []
+  games: [],
+  systemProfile: {
+    katagoBin: '',
+    katagoConfig: '',
+    katagoModel: '',
+    proxyBaseUrl: '',
+    proxyApiKey: '',
+    proxyModels: [],
+    notes: []
+  }
 }
 
 export function App(): ReactElement {
@@ -43,7 +52,11 @@ export function App(): ReactElement {
   }, [selectedGame, selectedId])
 
   async function refresh(): Promise<void> {
-    setDashboard(await window.katasensei.getDashboard())
+    try {
+      setDashboard(await window.katasensei.getDashboard())
+    } catch (cause) {
+      setError(`初始化失败: ${String(cause)}`)
+    }
   }
 
   async function importSgf(): Promise<void> {
@@ -106,6 +119,22 @@ export function App(): ReactElement {
     }
   }
 
+  async function autoDetectSettings(): Promise<void> {
+    setBusy('detect')
+    setError('')
+    try {
+      const next = await window.katasensei.autoDetectSettings()
+      setDashboard(next)
+      if (!playerName && next.settings.defaultPlayerName) {
+        setPlayerName(next.settings.defaultPlayerName)
+      }
+    } catch (cause) {
+      setError(String(cause))
+    } finally {
+      setBusy('')
+    }
+  }
+
   async function startReview(): Promise<void> {
     if (!selectedGame) {
       return
@@ -137,6 +166,11 @@ export function App(): ReactElement {
           <p className="hero-copy">
             用 KataGo 做判断，用大语言模型做解释。给学生一份看得懂、改得动、能立刻练起来的复盘。
           </p>
+          <div className="hero-chips">
+            <span className={dashboard.settings.katagoBin ? 'chip ok' : 'chip'}>KataGo {dashboard.settings.katagoBin ? 'Ready' : 'Missing'}</span>
+            <span className={dashboard.settings.llmApiKey ? 'chip ok' : 'chip'}>LLM {dashboard.settings.llmApiKey ? 'Ready' : 'Missing'}</span>
+            <span className="chip">{dashboard.systemProfile.proxyModels.length || 0} models</span>
+          </div>
         </div>
         <div className="hero-actions">
           <button className="primary" onClick={() => void importSgf()} disabled={busy !== ''}>
@@ -271,7 +305,26 @@ export function App(): ReactElement {
             <h2>Settings</h2>
             <span>第一次配置后可反复使用</span>
           </div>
+          <div className="summary-card">
+            <div className="subsection-title">
+              <h3>本机自动探测</h3>
+              <p>自动识别 KataGo、cliproxyapi 和可用模型。</p>
+            </div>
+            <div className="stack">
+              <button className="primary" onClick={() => void autoDetectSettings()} disabled={busy !== ''}>
+                {busy === 'detect' ? '探测中…' : '一键自动配置'}
+              </button>
+              <div className="detect-list">
+                {dashboard.systemProfile.notes.map((note) => (
+                  <div key={note} className="detect-item">
+                    {note}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
           <form
+            key={`${dashboard.settings.katagoBin}|${dashboard.settings.katagoConfig}|${dashboard.settings.katagoModel}|${dashboard.settings.llmBaseUrl}|${dashboard.settings.llmModel}|${dashboard.settings.defaultPlayerName}`}
             className="settings-form"
             onSubmit={(event) => {
               event.preventDefault()
@@ -325,7 +378,17 @@ export function App(): ReactElement {
             </label>
             <label>
               LLM model
-              <input name="llmModel" defaultValue={dashboard.settings.llmModel} placeholder="gpt-5-mini" />
+              {dashboard.systemProfile.proxyModels.length > 0 ? (
+                <select name="llmModel" defaultValue={dashboard.settings.llmModel}>
+                  {dashboard.systemProfile.proxyModels.map((model) => (
+                    <option key={model} value={model}>
+                      {model}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input name="llmModel" defaultValue={dashboard.settings.llmModel} placeholder="gpt-5-mini" />
+              )}
             </label>
             <label>
               默认学生名

@@ -20,6 +20,7 @@ KataSensei 是一个面向普通围棋用户的本地优先桌面程序，核心
 - `野狐同步`: 参考 `lizzyzy-youhua` 的恢复链路，支持野狐昵称/UID 获取公开棋谱
 - `KataGo 优先`: 所有关键错手都由 KataGo 数值与变化支撑
 - `LLM 解说`: 可接 OpenAI 兼容接口，把专业变化翻成学生能读懂的话
+- `自管 Python 运行时`: 应用会在 `~/.katasensei/runtime/venv` 准备自己的 Python 环境，避开系统 Python 限制
 - `本地优先`: 棋谱和复盘结果默认保存在 `~/.katasensei`
 - `多平台`: Electron 桌面应用，可打包 macOS / Windows / Linux
 
@@ -117,6 +118,16 @@ docs/ARCHITECTURE.md
 - 多盘批量复盘
 - 用户画像、弱点统计、训练计划自动汇总
 - 自动下载正式发布包
+
+## 本轮真实测试
+
+已在本机完成这些实际验证:
+
+- 本机 `KataGo v1.16.4` 可正常调用
+- 本机 `cliproxyapi` 在 `127.0.0.1:8317` 可用，`gpt-5-codex-mini` 可正常返回讲解
+- `scripts/review_game.py` 已真实跑通，产出 Markdown / JSON 报告
+- Electron 开发模式和打包后的 `.app` 都已实际启动
+- 使用 `computer-use-macos` 运行时做了桌面窗口截图验证
 
 ## 开发命令
 

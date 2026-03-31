@@ -1,10 +1,11 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { join } from 'node:path'
-import { getGames, getSettings, setSettings, upsertGames } from './lib/store'
+import { getGames, getSettings, replaceSettings, setSettings, upsertGames } from './lib/store'
 import type { AppSettings, DashboardData, FoxSyncRequest, ReviewRequest } from './lib/types'
 import { importSgfFile } from './services/sgf'
 import { syncFoxGames } from './services/fox'
 import { runReview } from './services/review'
+import { applyDetectedDefaults, detectSystemProfile } from './services/systemProfile'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -17,7 +18,7 @@ async function createWindow(): Promise<void> {
     title: 'KataSensei',
     backgroundColor: '#0f1115',
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js')
+      preload: join(__dirname, '../preload/index.mjs')
     }
   })
 
@@ -33,10 +34,13 @@ async function createWindow(): Promise<void> {
   }
 }
 
-function dashboard(): DashboardData {
+async function dashboard(): Promise<DashboardData> {
+  const hydratedSettings = await applyDetectedDefaults(getSettings())
+  replaceSettings(hydratedSettings)
   return {
-    settings: getSettings(),
-    games: getGames()
+    settings: hydratedSettings,
+    games: getGames(),
+    systemProfile: await detectSystemProfile(),
   }
 }
 
@@ -44,8 +48,14 @@ app.whenReady().then(() => {
   ipcMain.handle('dashboard:get', async () => dashboard())
 
   ipcMain.handle('settings:update', async (_event, payload: Partial<AppSettings>) => {
-    const settings = setSettings(payload)
-    return { settings, games: getGames() }
+    setSettings(payload)
+    return dashboard()
+  })
+
+  ipcMain.handle('settings:auto-detect', async () => {
+    const next = await applyDetectedDefaults(getSettings())
+    replaceSettings(next)
+    return dashboard()
   })
 
   ipcMain.handle('library:import', async () => {
@@ -64,7 +74,7 @@ app.whenReady().then(() => {
   ipcMain.handle('fox:sync', async (_event, payload: FoxSyncRequest) => {
     const result = await syncFoxGames(payload)
     upsertGames(result.saved)
-    return { dashboard: dashboard(), result }
+    return { dashboard: await dashboard(), result }
   })
 
   ipcMain.handle('review:start', async (_event, payload: ReviewRequest) => runReview(payload))

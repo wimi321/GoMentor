@@ -46,6 +46,11 @@ export function setSettings(next: Partial<AppSettings>): AppSettings {
   return getSettings()
 }
 
+export function replaceSettings(next: AppSettings): AppSettings {
+  settingsStore.store = next
+  return getSettings()
+}
+
 export function getGames(): LibraryGame[] {
   return [...libraryStore.get('games', [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 }

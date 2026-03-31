@@ -27,14 +27,22 @@ def load_game(path):
     board, plays = sgf_moves.get_setup_and_moves(game)
     size = game.get_size()
     root = game.get_root()
+
+    def prop(name, default=""):
+        try:
+            value = root.get(name)
+        except KeyError:
+            return default
+        return value if value not in (None, "") else default
+
     info = {
         "size": size,
         "komi": game.get_komi() or 7.5,
-        "black": root.get("PB", ""),
-        "white": root.get("PW", ""),
-        "result": root.get("RE", ""),
-        "event": root.get("EV", ""),
-        "date": root.get("DT", ""),
+        "black": prop("PB", ""),
+        "white": prop("PW", ""),
+        "result": prop("RE", ""),
+        "event": prop("EV", ""),
+        "date": prop("DT", ""),
     }
     moves = []
     for color, move in plays:
@@ -171,6 +179,7 @@ def call_llm(base_url, api_key, model, payload):
             },
         ],
         "temperature": 0.4,
+        "max_completion_tokens": 700,
     }
     req = urllib.request.Request(
         f"{base_url.rstrip('/')}/chat/completions",
@@ -180,7 +189,7 @@ def call_llm(base_url, api_key, model, payload):
             "Authorization": f"Bearer {api_key}",
         },
     )
-    with urllib.request.urlopen(req, timeout=90) as response:
+    with urllib.request.urlopen(req, timeout=150) as response:
         data = json.loads(response.read().decode("utf-8"))
     return data["choices"][0]["message"]["content"].strip()
 
@@ -219,9 +228,10 @@ def main():
             if not move_infos:
                 continue
             best = move_infos[0]
-            played = next((item for item in move_infos if item.get("move") == played_move), None)
             best_wr = float(best.get("winrate", 0.5)) * 100.0
-            played_wr = float(played.get("winrate", 0.5 if played else 0.0)) * 100.0
+            played_response = analyzer.query(moves[: index + 1], info["komi"], args.max_visits, f"played-{index}")
+            played_root = played_response.get("rootInfo", {})
+            played_wr = float(played_root.get("winrate", 0.5)) * 100.0
             loss = max(0.0, best_wr - played_wr)
             if loss < args.min_winrate_drop:
                 continue
@@ -252,7 +262,14 @@ def main():
     llm_text = ""
     if args.llm_api_key and args.llm_model and args.llm_base_url:
         try:
-            llm_text = call_llm(args.llm_base_url, args.llm_api_key, args.llm_model, summary)
+            llm_payload = {
+                "student_color": summary["student_color"],
+                "student_name": summary["student_name"],
+                "mistake_count": summary["mistake_count"],
+                "top_loss": summary["top_loss"],
+                "issues": summary["issues"][:5],
+            }
+            llm_text = call_llm(args.llm_base_url, args.llm_api_key, args.llm_model, llm_payload)
         except Exception as exc:
             llm_text = f"LLM 讲解生成失败：{exc}"
 

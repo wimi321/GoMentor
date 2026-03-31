@@ -85,6 +85,28 @@ select {
   font-size: 18px;
 }
 
+.hero-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.chip {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #d8ddd8;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.chip.ok {
+  background: rgba(120, 168, 104, 0.2);
+  color: #cde7c5;
+}
+
 .hero-actions {
   display: flex;
   gap: 12px;
@@ -242,6 +264,20 @@ label {
 .error-box {
   color: #ffd7d7;
   background: rgba(150, 24, 24, 0.28);
+}
+
+.detect-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.detect-item {
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #ced4cf;
+  font-size: 13px;
 }
 
 @media (max-width: 1280px) {

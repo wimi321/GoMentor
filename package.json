@@ -48,7 +48,8 @@
     ],
     "asar": true,
     "mac": {
-      "category": "public.app-category.education"
+      "category": "public.app-category.education",
+      "icon": "assets/icon.icns"
     },
     "win": {
       "target": [
