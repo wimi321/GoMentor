@@ -1,0 +1,12 @@
+node_modules
+out
+dist
+.DS_Store
+*.log
+.katasensei
+__pycache__
+*.pyc
+release
+coverage
+
+*.tsbuildinfo
