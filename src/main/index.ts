@@ -18,7 +18,10 @@ async function createWindow(): Promise<void> {
     title: 'KataSensei',
     backgroundColor: '#0f1115',
     webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs')
+      preload: join(__dirname, '../preload/index.mjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
     }
   })
 

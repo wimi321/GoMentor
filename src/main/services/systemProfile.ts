@@ -37,13 +37,20 @@ function parseSimpleYamlListValue(text: string, key: string): string {
 
 async function detectKatago(): Promise<Pick<SystemProfile, 'katagoBin' | 'katagoConfig' | 'katagoModel' | 'notes'>> {
   const notes: string[] = []
-  let katagoBin = ''
+  let katagoBin = await firstExisting([
+    '/opt/homebrew/bin/katago',
+    '/usr/local/bin/katago',
+    '/opt/local/bin/katago',
+    '/usr/bin/katago',
+  ])
 
-  try {
-    const { stdout } = await execFileAsync('which', ['katago'])
-    katagoBin = stdout.trim()
-  } catch {
-    notes.push('未在 PATH 中找到 katago。')
+  if (!katagoBin) {
+    try {
+      const { stdout } = await execFileAsync('/usr/bin/which', ['katago'])
+      katagoBin = stdout.trim()
+    } catch {
+      notes.push('未在常见位置或 PATH 中找到 katago。')
+    }
   }
 
   const home = os.homedir()
@@ -77,16 +84,33 @@ async function detectCliproxy(): Promise<Pick<SystemProfile, 'proxyBaseUrl' | 'p
   let proxyBaseUrl = ''
   let proxyApiKey = ''
   let proxyModels: string[] = []
+  const home = os.homedir()
+  let configPath = ''
 
   try {
-    const { stdout } = await execFileAsync('sh', [
+    const { stdout } = await execFileAsync('/bin/sh', [
       '-lc',
       "ps ax -o pid=,comm=,args= | grep cliproxyapi | grep -v grep | head -n 1",
     ])
     const line = stdout.trim()
-    const configMatch = line.match(/-config\s+(\S+)/)
-    if (configMatch) {
-      const configPath = configMatch[1]
+    const configMatch =
+      line.match(/(?:^|\s)--?config(?:=|\s+)(?:"([^"]+)"|'([^']+)'|(\S+))/) ??
+      line.match(/(?:^|\s)-config(?:=|\s+)(?:"([^"]+)"|'([^']+)'|(\S+))/)
+    configPath = configMatch?.[1] ?? configMatch?.[2] ?? configMatch?.[3] ?? ''
+  } catch {
+    notes.push('未检测到运行中的 cliproxyapi。')
+  }
+
+  if (!configPath) {
+    configPath = await firstExisting([
+      join(home, 'Developer/fixx/cliproxyapi-12auth.local.yaml'),
+      join(home, '.config/cliproxyapi/config.yaml'),
+      join(home, '.cliproxyapi/config.yaml'),
+    ])
+  }
+
+  if (configPath) {
+    try {
       const configText = await readFile(configPath, 'utf8')
       const host = parseSimpleYamlValue(configText, 'host') || '127.0.0.1'
       const port = parseSimpleYamlValue(configText, 'port') || '8317'
@@ -96,9 +120,9 @@ async function detectCliproxy(): Promise<Pick<SystemProfile, 'proxyBaseUrl' | 'p
       if (proxyApiKey) {
         notes.push('检测到本机代理 API key，可直接用于 LLM 讲解。')
       }
+    } catch {
+      notes.push(`检测到 cliproxy 配置文件，但读取失败: ${configPath}`)
     }
-  } catch {
-    notes.push('未检测到运行中的 cliproxyapi。')
   }
 
   if (proxyBaseUrl && proxyApiKey) {
