@@ -659,7 +659,7 @@ label,
 
 .evaluation-canvas {
   width: 100%;
-  height: 138px;
+  height: 148px;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
   background: #0d1013;
@@ -862,6 +862,19 @@ label,
   font-weight: 900;
   text-anchor: middle;
   dominant-baseline: middle;
+  pointer-events: none;
+}
+
+.evaluation-current-label-bg {
+  fill: rgb(13 16 19 / 0.92);
+  stroke: rgb(242 209 132 / 0.42);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.evaluation-current-caret {
+  fill: #f2d184;
+  opacity: 0.95;
   pointer-events: none;
 }
 

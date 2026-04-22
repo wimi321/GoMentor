@@ -948,16 +948,19 @@ function EvaluationGraph({
   const currentAnalysis = analysis ?? sortedEvaluations.find((item) => item.moveNumber === moveNumber) ?? null
   const hasEvaluations = sortedEvaluations.length > 0
   const width = 720
-  const height = 156
+  const height = 168
   const plotLeft = 42
   const plotRight = 34
   const plotTop = 16
-  const plotBottom = 112
-  const barTop = 123
-  const barBottom = 138
+  const plotBottom = 108
+  const barTop = 119
+  const barBottom = 132
   const plotWidth = width - plotLeft - plotRight
   const plotHeight = plotBottom - plotTop
   const centerY = plotTop + plotHeight / 2
+  const moveTickLabelY = 144
+  const currentBadgeY = 149
+  const currentBadgeHeight = 16
   const domainMoves = Math.max(totalMoves, 1)
   const xForMove = (move: number): number => plotLeft + (clamp(move, 0, domainMoves) / domainMoves) * plotWidth
   const lossScale = roundedScale(Math.max(...sortedEvaluations.map((item) => Math.max(0, item.playedMove?.scoreLoss ?? 0)), 0), 5, 5)
@@ -997,6 +1000,9 @@ function EvaluationGraph({
   const currentLabel = currentAnalysis
     ? `第 ${moveNumber} 手，黑胜率 ${currentAnalysis.after.winrate.toFixed(1)}%，${leadText}`
     : (loading ? `KataGo 正在快速生成整盘胜率图${loadingLabel ? ` · ${loadingLabel}` : ''}` : '等待 KataGo 分析')
+  const currentMoveLabel = totalMoves > 0 ? `第 ${moveNumber}/${totalMoves} 手` : '第 0 手'
+  const currentBadgeWidth = clamp(68 + currentMoveLabel.length * 5, 92, 136)
+  const currentBadgeX = clamp(currentX - currentBadgeWidth / 2, plotLeft, width - plotRight - currentBadgeWidth)
 
   function moveFromPointer(event: PointerEvent<SVGSVGElement>): number {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -1098,7 +1104,7 @@ function EvaluationGraph({
         {moveTicks.map((tick) => (
           <g key={`move-tick-${tick}`}>
             <line className="evaluation-grid evaluation-grid--vertical" x1={xForMove(tick)} y1={plotTop} x2={xForMove(tick)} y2={barBottom} />
-            <text className="evaluation-move-label" x={xForMove(tick)} y={barBottom + 6}>
+            <text className="evaluation-move-label" x={xForMove(tick)} y={moveTickLabelY}>
               {tick}
             </text>
           </g>
@@ -1155,10 +1161,12 @@ function EvaluationGraph({
             </text>
           </g>
         ) : null}
-        <text className="evaluation-current-label" x={clamp(currentX, plotLeft + 18, width - plotRight - 18)} y={barTop - 7}>
-          {moveNumber}
-        </text>
         <line className="evaluation-bar-baseline" x1={plotLeft} y1={barBottom} x2={width - plotRight} y2={barBottom} />
+        <path className="evaluation-current-caret" d={`M ${currentX.toFixed(2)} ${barBottom + 2} l -4 6 h 8 Z`} />
+        <rect className="evaluation-current-label-bg" x={currentBadgeX} y={currentBadgeY} width={currentBadgeWidth} height={currentBadgeHeight} rx="5" />
+        <text className="evaluation-current-label" x={currentBadgeX + currentBadgeWidth / 2} y={currentBadgeY + currentBadgeHeight / 2}>
+          {currentMoveLabel}
+        </text>
       </svg>
     </div>
   )
