@@ -55,6 +55,12 @@ type ChatMessage = {
 }
 
 type EvaluationByMove = Record<number, KataGoMoveAnalysis>
+type StatusTone = 'good' | 'warn' | 'neutral'
+
+interface StatusPill {
+  label: string
+  tone: StatusTone
+}
 
 const letters = 'ABCDEFGHJKLMNOPQRSTUVWXYZ'
 
@@ -417,11 +423,20 @@ export function App(): ReactElement {
     }
   }
 
-  const statusText = [
-    dashboard.systemProfile.katagoReady ? dashboard.systemProfile.katagoStatus : 'KataGo Missing',
-    dashboard.systemProfile.hasLlmApiKey ? 'LLM Ready' : 'LLM Missing',
-    `${dashboard.games.length} games`
-  ].join(' / ')
+  const statusItems: StatusPill[] = [
+    {
+      label: dashboard.systemProfile.katagoReady ? dashboard.systemProfile.katagoStatus : 'KataGo 缺失',
+      tone: dashboard.systemProfile.katagoReady ? 'good' : 'warn'
+    },
+    {
+      label: dashboard.systemProfile.hasLlmApiKey ? 'LLM 就绪' : 'LLM 未配置',
+      tone: dashboard.systemProfile.hasLlmApiKey ? 'good' : 'warn'
+    },
+    {
+      label: `${dashboard.games.length} 棋谱`,
+      tone: 'neutral'
+    }
+  ]
 
   return (
     <div className={`studio ${libraryCollapsed ? 'studio--collapsed' : ''}`}>
@@ -455,7 +470,7 @@ export function App(): ReactElement {
         <header className="topbar">
           <div>
             <h1>{selectedGame ? gameDisplayName(selectedGame) : '未选择棋谱'}</h1>
-            <p>{statusText}</p>
+            <StatusPills items={statusItems} />
           </div>
           <div className="topbar-actions">
             <button className="primary-button" onClick={() => void runCurrentMoveAnalysis()} disabled={!record || busy !== ''}>
@@ -604,6 +619,18 @@ function LibraryPanel({
   )
 }
 
+function StatusPills({ items }: { items: StatusPill[] }): ReactElement {
+  return (
+    <div className="status-strip" aria-label="系统状态">
+      {items.map((item) => (
+        <span key={item.label} className={`status-pill status-pill--${item.tone}`}>
+          {item.label}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 function TeacherPanel({
   messages,
   prompt,
@@ -636,9 +663,9 @@ function TeacherPanel({
   return (
     <div className="teacher-panel">
       <div className="teacher-head">
-        <div>
+        <div className="teacher-title">
           <strong>AI 围棋老师</strong>
-          <span>{busy === 'teacher' ? '执行中' : '待命'}</span>
+          <span className={`teacher-status ${busy === 'teacher' ? 'is-running' : ''}`}>{busy === 'teacher' ? '执行中' : '待命'}</span>
         </div>
         <div className="head-actions">
           <button className="ghost-button" onClick={onAnalyze} disabled={busy !== ''}>
@@ -663,11 +690,17 @@ function TeacherPanel({
       <div className="message-list">
         {messages.map((message) => (
           <article key={message.id} className={`message message--${message.role}`}>
+            <div className="message-meta">{message.role === 'teacher' ? '老师' : '学生'}</div>
             <div className="message-copy">{message.content}</div>
             {message.result ? <ToolLogList result={message.result} /> : null}
           </article>
         ))}
-        {busy === 'teacher' ? <div className="message message--teacher">老师正在规划和调用工具...</div> : null}
+        {busy === 'teacher' ? (
+          <div className="message message--teacher message--running">
+            <div className="message-meta">老师</div>
+            <div className="message-copy">正在规划任务、调用工具和整理讲解...</div>
+          </div>
+        ) : null}
       </div>
 
       {error ? <div className="error-line">{error}</div> : null}
@@ -761,11 +794,20 @@ function SettingsDrawer({
 }
 
 function ToolLogList({ result }: { result: TeacherRunResult }): ReactElement {
+  const statusLabel: Record<string, string> = {
+    running: '运行中',
+    done: '完成',
+    error: '错误',
+    skipped: '跳过'
+  }
   return (
     <div className="tool-log">
       {result.toolLogs.map((log) => (
         <div key={log.id} className={`tool-log-row tool-log-row--${log.status}`}>
-          <span>{log.label}</span>
+          <span>
+            {log.label}
+            <em>{statusLabel[log.status] ?? log.status}</em>
+          </span>
           <small>{log.detail}</small>
         </div>
       ))}
@@ -932,8 +974,12 @@ function EvaluationGraph({
     : ''
   const currentX = xForMove(moveNumber)
   const currentY = currentAnalysis ? yForWinrate(currentAnalysis.after.winrate) : centerY
+  const blackWinrate = currentAnalysis?.after.winrate
+  const whiteWinrate = blackWinrate === undefined ? undefined : 100 - blackWinrate
+  const leadText = formatScoreLead(currentAnalysis?.after.scoreLead)
+  const bestCandidate = boardCandidateMoves(currentAnalysis)[0]
   const currentLabel = currentAnalysis
-    ? `第 ${moveNumber} 手，黑胜率 ${currentAnalysis.after.winrate.toFixed(1)}%，${formatScoreLead(currentAnalysis.after.scoreLead)}`
+    ? `第 ${moveNumber} 手，黑胜率 ${currentAnalysis.after.winrate.toFixed(1)}%，${leadText}`
     : (loading ? `KataGo 正在快速生成整盘胜率图${loadingLabel ? ` · ${loadingLabel}` : ''}` : '等待 KataGo 分析')
 
   function handlePointer(event: PointerEvent<SVGSVGElement>): void {
@@ -1019,6 +1065,31 @@ function EvaluationGraph({
 
         <line className="evaluation-current" x1={currentX} y1={plotTop} x2={currentX} y2={barBottom} />
         <circle className="evaluation-current-dot" cx={currentX} cy={currentY} r="5.2" />
+        {currentAnalysis ? (
+          <g className="evaluation-readout-panel">
+            <rect className="evaluation-readout-bg" x="22" y="18" width="276" height="34" rx="7" />
+            <text className="evaluation-readout evaluation-readout--black" x="36" y="35">
+              {`黑 ${blackWinrate?.toFixed(1)}%`}
+            </text>
+            <text className="evaluation-readout evaluation-readout--white" x="108" y="35">
+              {`白 ${whiteWinrate?.toFixed(1)}%`}
+            </text>
+            <text className="evaluation-readout evaluation-readout--lead" x="182" y="35">
+              {leadText}
+            </text>
+          </g>
+        ) : null}
+        {bestCandidate ? (
+          <g className="evaluation-candidate-readout">
+            <rect className="evaluation-readout-bg" x={width - 254} y="18" width="232" height="34" rx="7" />
+            <text className="evaluation-readout evaluation-readout--candidate" x={width - 240} y="35">
+              {`1选 ${bestCandidate.move} · ${bestCandidate.winrate.toFixed(1)}%`}
+            </text>
+          </g>
+        ) : null}
+        <text className="evaluation-current-label" x={clamp(currentX, plotLeft + 18, width - plotRight - 18)} y={barTop - 7}>
+          {moveNumber}
+        </text>
         <line className="evaluation-bar-baseline" x1={plotLeft} y1={barBottom} x2={width - plotRight} y2={barBottom} />
       </svg>
     </div>
