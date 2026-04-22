@@ -1,18 +1,32 @@
 {
   "name": "katasensei",
   "version": "0.1.0",
-  "description": "Professional KataGo + LLM Go review studio for human learners.",
+  "description": "KataGo + multimodal LLM desktop workbench for Go students and teachers.",
   "main": "out/main/index.js",
   "type": "module",
   "author": "haoc",
   "license": "MIT",
+  "homepage": "https://github.com/wimi321/katasensei#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wimi321/katasensei.git"
+  },
+  "bugs": {
+    "url": "https://github.com/wimi321/katasensei/issues"
+  },
+  "packageManager": "pnpm@10.30.3",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "preview": "electron-vite preview",
     "lint": "pnpm typecheck",
-    "package": "npm run build && electron-builder",
+    "check": "pnpm typecheck && pnpm build",
+    "package": "pnpm dist",
+    "dist": "pnpm build && electron-builder",
+    "dist:mac": "pnpm build && electron-builder --mac --publish never",
+    "dist:win": "pnpm build && electron-builder --win --publish never",
+    "dist:linux": "pnpm build && electron-builder --linux --publish never",
     "postinstall": "electron-builder install-app-deps",
     "prepare:python": "python3 -m pip install -r scripts/requirements.txt"
   },
@@ -40,28 +54,79 @@
   "build": {
     "appId": "com.katasensei.desktop",
     "productName": "KataSensei",
+    "directories": {
+      "output": "release/${version}"
+    },
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "files": [
       "out/**/*",
       "scripts/**/*",
+      "data/**/*",
       "assets/**/*",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "data/katago",
+        "to": "data/katago",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "asarUnpack": [
+      "data/katago/**/*"
     ],
     "asar": true,
     "mac": {
       "category": "public.app-category.education",
-      "icon": "assets/icon.icns"
+      "icon": "assets/icon.icns",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
     },
     "win": {
       "target": [
-        "nsis"
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
     },
     "linux": {
       "target": [
         "AppImage",
-        "deb"
+        "deb",
+        "tar.gz"
       ],
       "category": "Education"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "wimi321",
+      "repo": "katasensei"
     }
   }
 }

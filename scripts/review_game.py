@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -19,6 +20,16 @@ def sgf_to_gtp(move, size):
         return "pass"
     row, col = move
     return f"{LETTERS[col]}{size - row}"
+
+
+def normalize_komi(value):
+    try:
+        parsed = float(value if value not in (None, "") else 7.5)
+    except (TypeError, ValueError):
+        return 7.5
+    if abs(parsed) > 150 and parsed.is_integer():
+        return parsed / 50
+    return parsed
 
 
 def load_game(path):
@@ -37,7 +48,7 @@ def load_game(path):
 
     info = {
         "size": size,
-        "komi": game.get_komi() or 7.5,
+        "komi": normalize_komi(game.get_komi()),
         "black": prop("PB", ""),
         "white": prop("PW", ""),
         "result": prop("RE", ""),
@@ -165,8 +176,78 @@ def build_markdown(info, student_name, student_color, issues, language, llm_text
     return "\n".join(lines)
 
 
+def is_reasoning_model(model):
+    lowered = model.lower()
+    return (
+        lowered.startswith("o")
+        or "gpt-5" in lowered
+        or "reason" in lowered
+        or "r1" in lowered
+    )
+
+
+def text_from_content(content):
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts = []
+        for part in content:
+            if isinstance(part, str):
+                parts.append(part)
+            elif isinstance(part, dict):
+                text = part.get("text") or part.get("content") or ""
+                if isinstance(text, dict):
+                    text = text.get("value", "")
+                if isinstance(text, str):
+                    parts.append(text)
+        return "\n".join(parts).strip()
+    return ""
+
+
+def extract_llm_text(data):
+    choices = data.get("choices") or []
+    if choices:
+        choice = choices[0]
+        message = choice.get("message") or {}
+        text = text_from_content(message.get("content"))
+        if text:
+            return text
+        if isinstance(choice.get("text"), str) and choice["text"].strip():
+            return choice["text"].strip()
+    if isinstance(data.get("output_text"), str) and data["output_text"].strip():
+        return data["output_text"].strip()
+    output = data.get("output") or []
+    if isinstance(output, list):
+        text = "\n".join(
+            text_from_content(item.get("content"))
+            for item in output
+            if isinstance(item, dict)
+        ).strip()
+        if text:
+            return text
+    return ""
+
+
+def llm_empty_error(data, model):
+    choice = (data.get("choices") or [{}])[0]
+    usage = data.get("usage") or {}
+    finish_reason = choice.get("finish_reason") or choice.get("native_finish_reason") or "unknown"
+    usage_fields = {
+        key: usage[key]
+        for key in ("prompt_tokens", "completion_tokens", "total_tokens", "output_tokens")
+        if isinstance(usage, dict) and isinstance(usage.get(key), int)
+    }
+    details = usage.get("completion_tokens_details") if isinstance(usage, dict) else None
+    if isinstance(details, dict) and isinstance(details.get("reasoning_tokens"), int):
+        usage_fields["reasoning_tokens"] = details["reasoning_tokens"]
+    return RuntimeError(
+        f"LLM 没有返回文本内容（model={model}, finish_reason={finish_reason}, usage={json.dumps(usage_fields, ensure_ascii=False)}）。"
+    )
+
+
 def call_llm(base_url, api_key, model, payload):
-    body = {
+    max_tokens = 4096
+    base_body = {
         "model": model,
         "messages": [
             {
@@ -178,20 +259,47 @@ def call_llm(base_url, api_key, model, payload):
                 "content": json.dumps(payload, ensure_ascii=False),
             },
         ],
-        "temperature": 0.4,
-        "max_completion_tokens": 700,
     }
-    req = urllib.request.Request(
-        f"{base_url.rstrip('/')}/chat/completions",
-        data=json.dumps(body).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}",
-        },
-    )
-    with urllib.request.urlopen(req, timeout=150) as response:
-        data = json.loads(response.read().decode("utf-8"))
-    return data["choices"][0]["message"]["content"].strip()
+    if is_reasoning_model(model):
+        bodies = [
+            {**base_body, "max_completion_tokens": max_tokens, "reasoning_effort": "low"},
+            {**base_body, "max_completion_tokens": max_tokens},
+            {**base_body, "max_tokens": max_tokens},
+        ]
+    else:
+        bodies = [
+            {**base_body, "temperature": 0.4, "max_completion_tokens": max_tokens},
+            {**base_body, "temperature": 0.4, "max_tokens": max_tokens},
+            {**base_body, "max_tokens": max_tokens},
+        ]
+
+    last_error = ""
+    for body in bodies:
+        req = urllib.request.Request(
+            f"{base_url.rstrip('/')}/chat/completions",
+            data=json.dumps(body).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=180) as response:
+                data = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as error:
+            error_text = error.read().decode("utf-8", errors="replace")
+            if error.code == 400 and any(
+                token in error_text.lower()
+                for token in ("max_completion_tokens", "max_tokens", "temperature", "reasoning_effort", "unsupported", "unknown parameter")
+            ):
+                last_error = error_text[:240]
+                continue
+            raise
+        text = extract_llm_text(data)
+        if not text:
+            raise llm_empty_error(data, model)
+        return text
+    raise RuntimeError(f"LLM 请求参数不被当前 OpenAI-compatible 服务接受：{last_error}")
 
 
 def main():

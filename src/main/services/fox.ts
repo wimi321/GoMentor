@@ -100,7 +100,8 @@ export async function syncFoxGames(request: FoxSyncRequest): Promise<FoxSyncResu
   const user = await resolveUser(request.keyword.trim())
   const list = await fetchList(user.uid)
   const saved = []
-  for (const item of list.slice(0, request.maxGames)) {
+  const selectedItems = typeof request.maxGames === 'number' ? list.slice(0, request.maxGames) : list
+  for (const item of selectedItems) {
     const chessId = String(item.chessid ?? '').trim()
     if (!chessId) continue
     try {

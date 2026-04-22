@@ -1,13 +1,26 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
-import { join } from 'node:path'
-import { getGames, getSettings, replaceSettings, setSettings, upsertGames } from './lib/store'
-import type { AppSettings, DashboardData, FoxSyncRequest, ReviewRequest } from './lib/types'
-import { importSgfFile } from './services/sgf'
+import { isAbsolute, relative, resolve, join } from 'node:path'
+import { appHome, findGame, getGames, getSettings, hasLlmApiKey, replaceSettings, setSettings, upsertGames } from './lib/store'
+import type { AnalyzeGameQuickRequest, AnalyzePositionRequest, AppSettings, DashboardData, FoxSyncRequest, LlmSettingsTestRequest, ReviewRequest, TeacherRunRequest } from './lib/types'
+import { importSgfFile, readGameRecord } from './services/sgf'
 import { syncFoxGames } from './services/fox'
 import { runReview } from './services/review'
 import { applyDetectedDefaults, detectSystemProfile } from './services/systemProfile'
+import { runTeacherTask } from './services/teacherAgent'
+import { testLlmSettings } from './services/llm'
+import { analyzeGameQuick, analyzePosition } from './services/katago'
 
 let mainWindow: BrowserWindow | null = null
+
+function assertManagedPath(filePath: string): string {
+  const root = resolve(appHome)
+  const target = resolve(filePath)
+  const rel = relative(root, target)
+  if (rel.startsWith('..') || isAbsolute(rel)) {
+    throw new Error('只能打开 KataSensei 管理目录中的文件')
+  }
+  return target
+}
 
 async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
@@ -40,10 +53,16 @@ async function createWindow(): Promise<void> {
 async function dashboard(): Promise<DashboardData> {
   const hydratedSettings = await applyDetectedDefaults(getSettings())
   replaceSettings(hydratedSettings)
+  const publicSettings = { ...hydratedSettings, llmApiKey: '' }
+  const detectedProfile = await detectSystemProfile(hydratedSettings)
   return {
-    settings: hydratedSettings,
+    settings: publicSettings,
     games: getGames(),
-    systemProfile: await detectSystemProfile(),
+    systemProfile: {
+      ...detectedProfile,
+      proxyApiKey: '',
+      hasLlmApiKey: hasLlmApiKey()
+    },
   }
 }
 
@@ -74,6 +93,14 @@ app.whenReady().then(() => {
     return dashboard()
   })
 
+  ipcMain.handle('library:record', async (_event, gameId: string) => {
+    const game = findGame(gameId)
+    if (!game) {
+      throw new Error(`找不到棋谱: ${gameId}`)
+    }
+    return readGameRecord(game)
+  })
+
   ipcMain.handle('fox:sync', async (_event, payload: FoxSyncRequest) => {
     const result = await syncFoxGames(payload)
     upsertGames(result.saved)
@@ -81,7 +108,21 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('review:start', async (_event, payload: ReviewRequest) => runReview(payload))
-  ipcMain.handle('path:open', async (_event, filePath: string) => shell.showItemInFolder(filePath))
+  ipcMain.handle('katago:analyze-position', async (_event, payload: AnalyzePositionRequest) =>
+    analyzePosition(payload.gameId, payload.moveNumber, payload.maxVisits ?? 500)
+  )
+  ipcMain.handle('katago:analyze-game-quick', async (event, payload: AnalyzeGameQuickRequest) =>
+    analyzeGameQuick(payload.gameId, payload.maxVisits ?? 12, (progress) => {
+      event.sender.send('katago:analyze-game-quick-progress', {
+        ...progress,
+        runId: payload.runId,
+        gameId: payload.gameId
+      })
+    })
+  )
+  ipcMain.handle('teacher:run', async (_event, payload: TeacherRunRequest) => runTeacherTask(payload))
+  ipcMain.handle('llm:test', async (_event, payload: LlmSettingsTestRequest) => testLlmSettings(payload))
+  ipcMain.handle('path:open', async (_event, filePath: string) => shell.showItemInFolder(assertManagedPath(filePath)))
 
   createWindow().catch((error) => {
     console.error(error)

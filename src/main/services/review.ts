@@ -3,19 +3,13 @@ import { mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { findGame, getSettings, reviewsDir } from '@main/lib/store'
 import type { ReviewArtifact, ReviewRequest, ReviewResult } from '@main/lib/types'
+import { resolveKataGoRuntime } from './katagoRuntime'
 import { ensurePythonRuntime } from './pythonRuntime'
 
 interface PythonReviewOutput {
   markdown_path: string
   json_path: string
   summary: Record<string, unknown>
-}
-
-function required(value: string, label: string): string {
-  if (!value.trim()) {
-    throw new Error(`${label} 未配置，请先在 Settings 中填写`)
-  }
-  return value.trim()
 }
 
 export async function runReview(request: ReviewRequest): Promise<ReviewResult> {
@@ -25,6 +19,10 @@ export async function runReview(request: ReviewRequest): Promise<ReviewResult> {
   }
 
   const settings = getSettings()
+  const runtime = resolveKataGoRuntime(settings)
+  if (!runtime.ready) {
+    throw new Error(`${runtime.status}: ${runtime.notes.join('；')}`)
+  }
   const pythonBin = await ensurePythonRuntime(process.cwd())
   const reviewRoot = join(reviewsDir, game.id)
   mkdirSync(reviewRoot, { recursive: true })
@@ -36,11 +34,11 @@ export async function runReview(request: ReviewRequest): Promise<ReviewResult> {
     '--out-dir',
     reviewRoot,
     '--katago-bin',
-    required(settings.katagoBin, 'KataGo binary'),
+    runtime.katagoBin,
     '--katago-config',
-    required(settings.katagoConfig, 'KataGo config'),
+    runtime.katagoConfig,
     '--katago-model',
-    required(settings.katagoModel, 'KataGo model'),
+    runtime.katagoModel,
     '--player-name',
     request.playerName.trim() || settings.defaultPlayerName.trim() || game.black,
     '--max-visits',
@@ -51,7 +49,7 @@ export async function runReview(request: ReviewRequest): Promise<ReviewResult> {
     settings.reviewLanguage
   ]
 
-  if (settings.llmApiKey.trim()) {
+  if (request.useLlm !== false && settings.llmApiKey.trim()) {
     args.push('--llm-base-url', settings.llmBaseUrl.trim())
     args.push('--llm-api-key', settings.llmApiKey.trim())
     args.push('--llm-model', settings.llmModel.trim())

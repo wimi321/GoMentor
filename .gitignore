@@ -1,12 +1,23 @@
 node_modules
 out
 dist
+release
 .DS_Store
 *.log
 .katasensei
 __pycache__
 *.pyc
-release
 coverage
 
 *.tsbuildinfo
+
+# Local secrets and environment files
+.env
+.env.*
+!.env.example
+
+# Large local KataGo runtime files are not committed.
+# See data/katago/README.md for the expected packaging layout.
+data/katago/bin/**
+data/katago/models/**
+!data/katago/README.md

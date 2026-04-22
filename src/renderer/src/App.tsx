@@ -1,12 +1,26 @@
-import type { ReactElement } from 'react'
-import { useEffect, useMemo, useState } from 'react'
-import type { DashboardData, LibraryGame, ReviewResult } from '@main/lib/types'
+import type { FormEvent, PointerEvent, ReactElement } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type {
+  AnalyzeGameQuickProgress,
+  DashboardData,
+  GameMove,
+  GameRecord,
+  KataGoMoveAnalysis,
+  KataGoModelPresetId,
+  LibraryGame,
+  StoneColor,
+  TeacherRunResult
+} from '@main/lib/types'
+import lizzieBlackStoneUrl from './assets/lizzie/black.png'
+import lizzieBoardUrl from './assets/lizzie/board.png'
+import lizzieWhiteStoneUrl from './assets/lizzie/white.png'
 
 const emptyDashboard: DashboardData = {
   settings: {
     katagoBin: '',
     katagoConfig: '',
     katagoModel: '',
+    katagoModelPreset: 'official-b18-recommended',
     pythonBin: 'python3',
     llmBaseUrl: 'https://api.openai.com/v1',
     llmApiKey: '',
@@ -19,22 +33,65 @@ const emptyDashboard: DashboardData = {
     katagoBin: '',
     katagoConfig: '',
     katagoModel: '',
+    katagoReady: false,
+    katagoStatus: 'KataGo Missing',
+    katagoModelPreset: 'official-b18-recommended',
+    katagoModelPresets: [],
     proxyBaseUrl: '',
     proxyApiKey: '',
     proxyModels: [],
+    hasLlmApiKey: false,
     notes: []
   }
+}
+
+type ChatMessage = {
+  id: string
+  role: 'student' | 'teacher'
+  content: string
+  result?: TeacherRunResult
+}
+
+type EvaluationByMove = Record<number, KataGoMoveAnalysis>
+
+const letters = 'ABCDEFGHJKLMNOPQRSTUVWXYZ'
+
+function safePlayerName(name: string | undefined, fallback: string): string {
+  const value = (name ?? '').trim()
+  return value || fallback
+}
+
+function gameDisplayName(game: LibraryGame): string {
+  const black = safePlayerName(game.black, '黑方')
+  const white = safePlayerName(game.white, '白方')
+  return `${black} vs ${white}`
 }
 
 export function App(): ReactElement {
   const [dashboard, setDashboard] = useState<DashboardData>(emptyDashboard)
   const [selectedId, setSelectedId] = useState('')
+  const [record, setRecord] = useState<GameRecord | null>(null)
+  const [moveNumber, setMoveNumber] = useState(0)
+  const [analysis, setAnalysis] = useState<KataGoMoveAnalysis | null>(null)
+  const [evaluations, setEvaluations] = useState<EvaluationByMove>({})
   const [foxKeyword, setFoxKeyword] = useState('')
-  const [foxCount, setFoxCount] = useState(10)
   const [playerName, setPlayerName] = useState('')
-  const [review, setReview] = useState<ReviewResult | null>(null)
+  const [prompt, setPrompt] = useState('')
   const [busy, setBusy] = useState('')
+  const [graphBusy, setGraphBusy] = useState(false)
+  const [graphProgress, setGraphProgress] = useState('')
   const [error, setError] = useState('')
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [libraryCollapsed, setLibraryCollapsed] = useState(false)
+  const [llmTestMessage, setLlmTestMessage] = useState('')
+  const graphRunId = useRef('')
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      id: 'hello',
+      role: 'teacher',
+      content: '我会像围棋老师智能体一样工作：看棋盘、读 KataGo、查知识库、记住学生画像。'
+    }
+  ])
 
   useEffect(() => {
     void refresh()
@@ -51,11 +108,86 @@ export function App(): ReactElement {
     }
   }, [selectedGame, selectedId])
 
+  useEffect(() => {
+    if (!selectedGame) {
+      setRecord(null)
+      return
+    }
+    void loadRecord(selectedGame.id)
+  }, [selectedGame?.id])
+
   async function refresh(): Promise<void> {
     try {
-      setDashboard(await window.katasensei.getDashboard())
+      const next = await window.katasensei.getDashboard()
+      setDashboard(next)
+      if (!playerName && next.settings.defaultPlayerName) {
+        setPlayerName(next.settings.defaultPlayerName)
+      }
     } catch (cause) {
       setError(`初始化失败: ${String(cause)}`)
+    }
+  }
+
+  async function loadRecord(gameId: string): Promise<void> {
+    try {
+      const next = await window.katasensei.getGameRecord(gameId)
+      setRecord(next)
+      setMoveNumber(next.moves.length)
+      setAnalysis(null)
+      setEvaluations({})
+      void warmupEvaluationGraph(gameId, next.moves.length)
+    } catch (cause) {
+      setError(String(cause))
+    }
+  }
+
+  async function warmupEvaluationGraph(gameId: string, defaultMoveNumber: number): Promise<void> {
+    const runId = crypto.randomUUID()
+    graphRunId.current = runId
+    setGraphBusy(true)
+    setGraphProgress('启动快速胜率图')
+    const disposeProgress = window.katasensei.onAnalyzeGameQuickProgress((progress: AnalyzeGameQuickProgress) => {
+      if (graphRunId.current !== runId || progress.runId !== runId || progress.gameId !== gameId) {
+        return
+      }
+      const done = Math.min(progress.analyzedPositions, progress.totalPositions)
+      setGraphProgress(`${done}/${progress.totalPositions} 局面`)
+      rememberEvaluation(progress.evaluation)
+      if (progress.evaluation.moveNumber === defaultMoveNumber) {
+        setAnalysis((current) => current?.before.topMoves.length ? current : progress.evaluation)
+      }
+    })
+    try {
+      const quickEvaluations = await window.katasensei.analyzeGameQuick({
+        gameId,
+        maxVisits: 12,
+        runId
+      })
+      if (graphRunId.current !== runId) {
+        return
+      }
+      const nextMap = Object.fromEntries(quickEvaluations.map((item) => [item.moveNumber, item]))
+      setEvaluations((current) => {
+        const merged = { ...current }
+        for (const item of quickEvaluations) {
+          if (!merged[item.moveNumber]?.before.topMoves.length) {
+            merged[item.moveNumber] = item
+          }
+        }
+        return merged
+      })
+      const preferred = nextMap[defaultMoveNumber] ?? quickEvaluations[quickEvaluations.length - 1] ?? null
+      setAnalysis((current) => current?.before.topMoves.length ? current : preferred)
+    } catch (cause) {
+      if (graphRunId.current === runId) {
+        setError(`胜率图生成失败: ${String(cause)}`)
+      }
+    } finally {
+      disposeProgress()
+      if (graphRunId.current === runId) {
+        setGraphBusy(false)
+        setGraphProgress('')
+      }
     }
   }
 
@@ -79,12 +211,14 @@ export function App(): ReactElement {
     setBusy('fox')
     setError('')
     try {
-      const { dashboard: next } = await window.katasensei.syncFox({
-        keyword: foxKeyword,
-        maxGames: foxCount
+      const { dashboard: next, result } = await window.katasensei.syncFox({
+        keyword: foxKeyword
       })
       setDashboard(next)
-      if (next.games[0]) {
+      setFoxKeyword(result.nickname)
+      if (result.saved[0]) {
+        setSelectedId(result.saved[0].id)
+      } else if (next.games[0]) {
         setSelectedId(next.games[0].id)
       }
     } catch (cause) {
@@ -94,39 +228,23 @@ export function App(): ReactElement {
     }
   }
 
-  async function saveSettings(formData: FormData): Promise<void> {
+  async function saveSettings(form: HTMLFormElement): Promise<void> {
     setBusy('settings')
     setError('')
     try {
+      const formData = new FormData(form)
       const next = await window.katasensei.updateSettings({
-        katagoBin: String(formData.get('katagoBin') ?? ''),
-        katagoConfig: String(formData.get('katagoConfig') ?? ''),
-        katagoModel: String(formData.get('katagoModel') ?? ''),
-        pythonBin: String(formData.get('pythonBin') ?? 'python3'),
+        katagoModelPreset: String(formData.get('katagoModelPreset') ?? dashboard.settings.katagoModelPreset) as KataGoModelPresetId,
         llmBaseUrl: String(formData.get('llmBaseUrl') ?? ''),
         llmApiKey: String(formData.get('llmApiKey') ?? ''),
-        llmModel: String(formData.get('llmModel') ?? ''),
-        defaultPlayerName: String(formData.get('defaultPlayerName') ?? ''),
-        reviewLanguage: String(
-          formData.get('reviewLanguage') ?? 'zh-CN'
-        ) as DashboardData['settings']['reviewLanguage']
+        llmModel: String(formData.get('llmModel') ?? '')
       })
       setDashboard(next)
-    } catch (cause) {
-      setError(String(cause))
-    } finally {
-      setBusy('')
-    }
-  }
-
-  async function autoDetectSettings(): Promise<void> {
-    setBusy('detect')
-    setError('')
-    try {
-      const next = await window.katasensei.autoDetectSettings()
-      setDashboard(next)
-      if (!playerName && next.settings.defaultPlayerName) {
-        setPlayerName(next.settings.defaultPlayerName)
+      setLlmTestMessage('配置已保存')
+      if (selectedGame && record) {
+        setAnalysis(null)
+        setEvaluations({})
+        void warmupEvaluationGraph(selectedGame.id, moveNumber)
       }
     } catch (cause) {
       setError(String(cause))
@@ -135,316 +253,1064 @@ export function App(): ReactElement {
     }
   }
 
-  async function startReview(): Promise<void> {
-    if (!selectedGame) {
-      return
-    }
-    setBusy('review')
-    setError('')
-    setReview(null)
+  async function testLlmSettings(form: HTMLFormElement): Promise<void> {
+    setBusy('llm-test')
+    setLlmTestMessage('')
     try {
-      const result = await window.katasensei.startReview({
-        gameId: selectedGame.id,
-        playerName,
-        maxVisits: 600,
-        minWinrateDrop: 7
+      const formData = new FormData(form)
+      const result = await window.katasensei.testLlmSettings({
+        llmBaseUrl: String(formData.get('llmBaseUrl') ?? ''),
+        llmApiKey: String(formData.get('llmApiKey') ?? ''),
+        llmModel: String(formData.get('llmModel') ?? '')
       })
-      setReview(result)
+      setLlmTestMessage(result.message)
     } catch (cause) {
-      setError(String(cause))
+      setLlmTestMessage(String(cause))
     } finally {
       setBusy('')
     }
   }
 
+  function appendMessage(message: Omit<ChatMessage, 'id'>): void {
+    setMessages((current) => [...current, { ...message, id: crypto.randomUUID() }])
+  }
+
+  function rememberEvaluation(nextAnalysis: KataGoMoveAnalysis): void {
+    setEvaluations((current) => ({
+      ...current,
+      [nextAnalysis.moveNumber]: current[nextAnalysis.moveNumber]?.before.topMoves.length && !nextAnalysis.before.topMoves.length
+        ? current[nextAnalysis.moveNumber]
+        : nextAnalysis
+    }))
+  }
+
+  function jumpToMove(next: number): void {
+    setMoveNumber(next)
+    setAnalysis(evaluations[next] ?? null)
+  }
+
+  async function runCurrentMoveAnalysis(): Promise<void> {
+    if (!record || !selectedGame) {
+      return
+    }
+    setBusy('teacher')
+    setError('')
+    const ask = `分析第 ${moveNumber} 手`
+    appendMessage({ role: 'student', content: ask })
+    try {
+      const nextAnalysis = await window.katasensei.analyzePosition({
+        gameId: selectedGame.id,
+        moveNumber,
+        maxVisits: 520
+      })
+      setAnalysis(nextAnalysis)
+      rememberEvaluation(nextAnalysis)
+      const boardImageDataUrl = await renderBoardPng(record, moveNumber, nextAnalysis)
+      const result = await window.katasensei.runTeacherTask({
+        mode: 'current-move',
+        prompt: ask,
+        gameId: selectedGame.id,
+        moveNumber,
+        playerName,
+        boardImageDataUrl,
+        prefetchedAnalysis: nextAnalysis
+      })
+      const finalAnalysis = result.analysis ?? nextAnalysis
+      setAnalysis(finalAnalysis)
+      rememberEvaluation(finalAnalysis)
+      appendMessage({ role: 'teacher', content: result.markdown, result })
+    } catch (cause) {
+      appendMessage({ role: 'teacher', content: `任务失败：${String(cause)}` })
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function runTeacherQuickTask(text: string): Promise<void> {
+    if (busy !== '') {
+      return
+    }
+    setBusy('teacher')
+    setError('')
+    appendMessage({ role: 'student', content: text })
+    try {
+      const result = await window.katasensei.runTeacherTask({
+        mode: 'freeform',
+        prompt: text,
+        gameId: selectedGame?.id,
+        moveNumber,
+        playerName
+      })
+      if (result.analysis) {
+        setAnalysis(result.analysis)
+        rememberEvaluation(result.analysis)
+      }
+      appendMessage({ role: 'teacher', content: result.markdown, result })
+    } catch (cause) {
+      appendMessage({ role: 'teacher', content: `任务失败：${String(cause)}` })
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function sendTeacherPrompt(event: FormEvent): Promise<void> {
+    event.preventDefault()
+    const text = prompt.trim()
+    if (!text) {
+      return
+    }
+    setPrompt('')
+    appendMessage({ role: 'student', content: text })
+    setBusy('teacher')
+    try {
+      const wantsCurrentMove = /当前手|这手|这一手|本手/.test(text)
+      if (wantsCurrentMove && record && selectedGame) {
+        const nextAnalysis = await window.katasensei.analyzePosition({
+          gameId: selectedGame.id,
+          moveNumber,
+          maxVisits: 520
+        })
+        setAnalysis(nextAnalysis)
+        rememberEvaluation(nextAnalysis)
+        const boardImageDataUrl = await renderBoardPng(record, moveNumber, nextAnalysis)
+        const result = await window.katasensei.runTeacherTask({
+          mode: 'current-move',
+          prompt: text,
+          gameId: selectedGame.id,
+          moveNumber,
+          playerName,
+          boardImageDataUrl,
+          prefetchedAnalysis: nextAnalysis
+        })
+        if (result.analysis) {
+          setAnalysis(result.analysis)
+          rememberEvaluation(result.analysis)
+        }
+        appendMessage({ role: 'teacher', content: result.markdown, result })
+      } else {
+        const result = await window.katasensei.runTeacherTask({
+          mode: 'freeform',
+          prompt: text,
+          gameId: selectedGame?.id,
+          moveNumber,
+          playerName
+        })
+        appendMessage({ role: 'teacher', content: result.markdown, result })
+      }
+    } catch (cause) {
+      appendMessage({ role: 'teacher', content: `任务失败：${String(cause)}` })
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const statusText = [
+    dashboard.systemProfile.katagoReady ? dashboard.systemProfile.katagoStatus : 'KataGo Missing',
+    dashboard.systemProfile.hasLlmApiKey ? 'LLM Ready' : 'LLM Missing',
+    `${dashboard.games.length} games`
+  ].join(' / ')
+
   return (
-    <div className="shell">
-      <header className="hero">
-        <div>
-          <p className="eyebrow">Professional Go Review Studio</p>
-          <h1>KataSensei</h1>
-          <p className="hero-copy">
-            用 KataGo 做判断，用大语言模型做解释。给学生一份看得懂、改得动、能立刻练起来的复盘。
-          </p>
-          <div className="hero-chips">
-            <span className={dashboard.settings.katagoBin ? 'chip ok' : 'chip'}>KataGo {dashboard.settings.katagoBin ? 'Ready' : 'Missing'}</span>
-            <span className={dashboard.settings.llmApiKey ? 'chip ok' : 'chip'}>LLM {dashboard.settings.llmApiKey ? 'Ready' : 'Missing'}</span>
-            <span className="chip">{dashboard.systemProfile.proxyModels.length || 0} models</span>
-          </div>
-        </div>
-        <div className="hero-actions">
-          <button className="primary" onClick={() => void importSgf()} disabled={busy !== ''}>
-            {busy === 'import' ? '导入中…' : '上传 SGF'}
+    <div className={`studio ${libraryCollapsed ? 'studio--collapsed' : ''}`}>
+      <aside className="library-rail">
+        <div className="rail-head">
+          <button className="icon-button" onClick={() => setLibraryCollapsed((value) => !value)} title="切换棋谱栏">
+            {libraryCollapsed ? '>' : '<'}
           </button>
-          <button
-            className="secondary"
-            onClick={() => selectedGame && void window.katasensei.openPath(selectedGame.filePath)}
-            disabled={!selectedGame}
-          >
-            打开棋谱位置
-          </button>
+          {!libraryCollapsed ? <strong>KataSensei</strong> : null}
         </div>
-      </header>
+        {!libraryCollapsed ? (
+          <LibraryPanel
+            dashboard={dashboard}
+            selectedGame={selectedGame}
+            foxKeyword={foxKeyword}
+            busy={busy}
+            onSelect={setSelectedId}
+            onImport={() => void importSgf()}
+            onSync={() => void syncFox()}
+            onFoxKeyword={setFoxKeyword}
+          />
+        ) : null}
+      </aside>
 
-      <main className="grid">
-        <section className="panel">
-          <div className="panel-header">
-            <h2>棋谱库</h2>
-            <span>{dashboard.games.length} games</span>
+      <main className="board-workspace">
+        <header className="topbar">
+          <div>
+            <h1>{selectedGame ? gameDisplayName(selectedGame) : '未选择棋谱'}</h1>
+            <p>{statusText}</p>
           </div>
-          <div className="game-list">
-            {dashboard.games.map((game) => (
-              <button
-                key={game.id}
-                className={`game-card ${selectedGame?.id === game.id ? 'selected' : ''}`}
-                onClick={() => setSelectedId(game.id)}
-              >
-                <div className="game-card-top">
-                  <strong>{game.title}</strong>
-                  <span>{game.source === 'fox' ? 'Fox' : 'Upload'}</span>
-                </div>
-                <p>
-                  {game.black} vs {game.white}
-                </p>
-                <small>
-                  {game.date || '未知日期'} · {game.result || '结果待定'}
-                </small>
-              </button>
-            ))}
+          <div className="topbar-actions">
+            <button className="primary-button" onClick={() => void runCurrentMoveAnalysis()} disabled={!record || busy !== ''}>
+              {busy === 'teacher' ? '老师分析中' : '分析当前手'}
+            </button>
+            <button className="ghost-button" onClick={() => void runTeacherQuickTask('分析这盘整盘围棋，找出关键问题手、胜负转折点和复盘重点。')} disabled={!record || busy !== ''}>
+              分析整盘围棋
+            </button>
+            <button className="ghost-button" onClick={() => void runTeacherQuickTask('分析当前学生最近10局围棋，找出常见问题、薄弱环节，并更新学生画像。')} disabled={dashboard.games.length === 0 || busy !== ''}>
+              分析近10局围棋
+            </button>
           </div>
-        </section>
+        </header>
 
-        <section className="panel">
-          <div className="panel-header">
-            <h2>一键复盘</h2>
-            <span>{selectedGame ? selectedGame.sourceLabel : '请选择棋谱'}</span>
-          </div>
-          {selectedGame ? (
-            <GameSummary game={selectedGame} />
+        <section className="board-stage">
+          {record ? (
+            <div className="board-table">
+              <BoardMatchBar record={record} moveNumber={moveNumber} analysis={analysis} />
+              <GoBoard record={record} moveNumber={moveNumber} analysis={analysis} />
+            </div>
           ) : (
-            <EmptyState label="先上传 SGF 或同步野狐棋谱。" />
+            <div className="empty-board">导入 SGF 后开始复盘</div>
           )}
-
-          <div className="stack">
-            <label>
-              学生名字 / 野狐 ID
-              <input
-                value={playerName}
-                onChange={(event) => setPlayerName(event.target.value)}
-                placeholder={dashboard.settings.defaultPlayerName || '留空则自动使用黑棋名字'}
-              />
-            </label>
-            <button
-              className="primary large"
-              onClick={() => void startReview()}
-              disabled={!selectedGame || busy !== ''}
-            >
-              {busy === 'review' ? 'KataGo 正在复盘…' : '开始复盘'}
-            </button>
-          </div>
-
-          <div className="panel-subsection">
-            <div className="subsection-title">
-              <h3>野狐同步</h3>
-              <p>支持输入野狐昵称或 UID，自动抓最近公开棋谱。</p>
-            </div>
-            <div className="fox-row">
-              <input
-                value={foxKeyword}
-                onChange={(event) => setFoxKeyword(event.target.value)}
-                placeholder="野狐昵称 / UID"
-              />
-              <input
-                type="number"
-                min={1}
-                max={30}
-                value={foxCount}
-                onChange={(event) => setFoxCount(Number(event.target.value))}
-              />
-              <button
-                className="secondary"
-                onClick={() => void syncFox()}
-                disabled={!foxKeyword.trim() || busy !== ''}
-              >
-                {busy === 'fox' ? '同步中…' : '同步野狐'}
-              </button>
-            </div>
-          </div>
-
-          <div className="panel-subsection">
-            <div className="subsection-title">
-              <h3>复盘报告</h3>
-              <p>自动标出大失误、关键转折、训练建议和人话解说。</p>
-            </div>
-            {review?.artifact ? (
-              <article className="report">
-                <div className="report-actions">
-                  <button
-                    className="secondary"
-                    onClick={() => void window.katasensei.openPath(review.artifact!.markdownPath)}
-                  >
-                    打开 Markdown
-                  </button>
-                  <button
-                    className="secondary"
-                    onClick={() => void window.katasensei.openPath(review.artifact!.jsonPath)}
-                  >
-                    打开 JSON
-                  </button>
-                </div>
-                <pre>{review.artifact.markdown}</pre>
-              </article>
-            ) : (
-              <EmptyState label="复盘完成后，这里会展示完整讲解。" />
-            )}
-          </div>
         </section>
 
-        <section className="panel">
-          <div className="panel-header">
-            <h2>Settings</h2>
-            <span>第一次配置后可反复使用</span>
-          </div>
-          <div className="summary-card">
-            <div className="subsection-title">
-              <h3>本机自动探测</h3>
-              <p>自动识别 KataGo、cliproxyapi 和可用模型。</p>
-            </div>
-            <div className="stack">
-              <button className="primary" onClick={() => void autoDetectSettings()} disabled={busy !== ''}>
-                {busy === 'detect' ? '探测中…' : '一键自动配置'}
-              </button>
-              <div className="detect-list">
-                {dashboard.systemProfile.notes.map((note) => (
-                  <div key={note} className="detect-item">
-                    {note}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-          <form
-            key={`${dashboard.settings.katagoBin}|${dashboard.settings.katagoConfig}|${dashboard.settings.katagoModel}|${dashboard.settings.llmBaseUrl}|${dashboard.settings.llmModel}|${dashboard.settings.defaultPlayerName}`}
-            className="settings-form"
-            onSubmit={(event) => {
-              event.preventDefault()
-              void saveSettings(new FormData(event.currentTarget))
-            }}
-          >
-            <label>
-              KataGo binary
-              <input
-                name="katagoBin"
-                defaultValue={dashboard.settings.katagoBin}
-                placeholder="/usr/local/bin/katago"
-              />
-            </label>
-            <label>
-              KataGo config
-              <input
-                name="katagoConfig"
-                defaultValue={dashboard.settings.katagoConfig}
-                placeholder="~/.katago/configs/analysis_example.cfg"
-              />
-            </label>
-            <label>
-              KataGo model
-              <input
-                name="katagoModel"
-                defaultValue={dashboard.settings.katagoModel}
-                placeholder="~/.katago/models/latest-kata1.bin.gz"
-              />
-            </label>
-            <label>
-              Python
-              <input name="pythonBin" defaultValue={dashboard.settings.pythonBin} placeholder="python3" />
-            </label>
-            <label>
-              LLM base URL
-              <input
-                name="llmBaseUrl"
-                defaultValue={dashboard.settings.llmBaseUrl}
-                placeholder="https://api.openai.com/v1"
-              />
-            </label>
-            <label>
-              LLM API key
-              <input
-                name="llmApiKey"
-                type="password"
-                defaultValue={dashboard.settings.llmApiKey}
-                placeholder="sk-..."
-              />
-            </label>
-            <label>
-              LLM model
-              {dashboard.systemProfile.proxyModels.length > 0 ? (
-                <select name="llmModel" defaultValue={dashboard.settings.llmModel}>
-                  {dashboard.systemProfile.proxyModels.map((model) => (
-                    <option key={model} value={model}>
-                      {model}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input name="llmModel" defaultValue={dashboard.settings.llmModel} placeholder="gpt-5-mini" />
-              )}
-            </label>
-            <label>
-              默认学生名
-              <input
-                name="defaultPlayerName"
-                defaultValue={dashboard.settings.defaultPlayerName}
-                placeholder="你的学生或账号名"
-              />
-            </label>
-            <label>
-              输出语言
-              <select name="reviewLanguage" defaultValue={dashboard.settings.reviewLanguage}>
-                <option value="zh-CN">简体中文</option>
-                <option value="en-US">English</option>
-                <option value="ja-JP">日本語</option>
-                <option value="ko-KR">한국어</option>
-              </select>
-            </label>
-            <button className="primary" type="submit" disabled={busy !== ''}>
-              {busy === 'settings' ? '保存中…' : '保存配置'}
-            </button>
-          </form>
-          {error ? <div className="error-box">{error}</div> : null}
+        <section className="timeline-panel">
+          <EvaluationGraph
+            analysis={analysis}
+            evaluations={Object.values(evaluations)}
+            moveNumber={moveNumber}
+            totalMoves={record?.moves.length ?? 0}
+            loading={graphBusy}
+            loadingLabel={graphProgress}
+            onMove={jumpToMove}
+          />
         </section>
       </main>
+
+      <aside className="teacher-column">
+        <TeacherPanel
+          messages={messages}
+          prompt={prompt}
+          busy={busy}
+          settingsOpen={settingsOpen}
+          dashboard={dashboard}
+          llmTestMessage={llmTestMessage}
+          error={error}
+          onPrompt={setPrompt}
+          onSubmit={(event) => void sendTeacherPrompt(event)}
+          onAnalyze={() => void runCurrentMoveAnalysis()}
+          onSettingsOpen={() => setSettingsOpen((value) => !value)}
+          onSaveSettings={(form) => void saveSettings(form)}
+          onTestLlm={(form) => void testLlmSettings(form)}
+        />
+      </aside>
     </div>
   )
 }
 
-function GameSummary({ game }: { game: LibraryGame }): ReactElement {
+function LibraryPanel({
+  dashboard,
+  selectedGame,
+  foxKeyword,
+  busy,
+  onSelect,
+  onImport,
+  onSync,
+  onFoxKeyword
+}: {
+  dashboard: DashboardData
+  selectedGame?: LibraryGame
+  foxKeyword: string
+  busy: string
+  onSelect: (id: string) => void
+  onImport: () => void
+  onSync: () => void
+  onFoxKeyword: (value: string) => void
+}): ReactElement {
+  const [page, setPage] = useState(1)
+  const pageSize = 10
+  const keyword = foxKeyword.trim().toLowerCase()
+  const visibleGames = useMemo(() => {
+    if (!keyword) {
+      return dashboard.games
+    }
+    return dashboard.games.filter((game) => {
+      const haystack = [
+        gameDisplayName(game),
+        game.black,
+        game.white,
+        game.sourceLabel,
+        game.event,
+        game.title
+      ].join(' ').toLowerCase()
+      return haystack.includes(keyword)
+    })
+  }, [dashboard.games, keyword])
+  const pageCount = Math.max(1, Math.ceil(visibleGames.length / pageSize))
+  const safePage = Math.min(page, pageCount)
+  const pageGames = visibleGames.slice((safePage - 1) * pageSize, safePage * pageSize)
+
+  useEffect(() => {
+    setPage(1)
+  }, [keyword, dashboard.games.length])
+
   return (
-    <div className="summary-card">
-      <div>
-        <h3>{game.title}</h3>
-        <p>
-          {game.black} vs {game.white}
-        </p>
+    <div className="rail-body">
+      <form
+        className="fox-sync-form"
+        onSubmit={(event) => {
+          event.preventDefault()
+          onSync()
+        }}
+      >
+        <input value={foxKeyword} onChange={(event) => onFoxKeyword(event.target.value)} placeholder="输入野狐昵称 / UID" />
+        <button className="primary-button" type="submit" disabled={!foxKeyword.trim() || busy !== ''}>
+          {busy === 'fox' ? '同步中' : '同步'}
+        </button>
+      </form>
+      <button className="ghost-button library-upload-button" onClick={onImport} disabled={busy !== ''}>
+        {busy === 'import' ? '导入中' : '上传 SGF'}
+      </button>
+      <div className="library-list-head">
+        <span>{keyword ? '野狐棋谱' : '棋谱库'}</span>
+        <small>{visibleGames.length} 盘</small>
       </div>
-      <div className="summary-metrics">
-        <div>
-          <span>结果</span>
-          <strong>{game.result || '未写入'}</strong>
-        </div>
-        <div>
-          <span>日期</span>
-          <strong>{game.date || '未知'}</strong>
-        </div>
-        <div>
-          <span>来源</span>
-          <strong>{game.sourceLabel}</strong>
-        </div>
+      <div className="game-list">
+        {pageGames.map((game) => (
+          <button key={game.id} className={`game-row ${selectedGame?.id === game.id ? 'is-active' : ''}`} onClick={() => onSelect(game.id)}>
+            <span>{gameDisplayName(game)}</span>
+            <small>{game.date || '未知日期'} · {game.result || '未知结果'}</small>
+          </button>
+        ))}
+        {pageGames.length === 0 ? <div className="empty-list">没有匹配的棋谱</div> : null}
+      </div>
+      <div className="pagination-row">
+        <button className="ghost-button" onClick={() => setPage(Math.max(1, safePage - 1))} disabled={safePage <= 1}>
+          上一页
+        </button>
+        <span>{safePage} / {pageCount}</span>
+        <button className="ghost-button" onClick={() => setPage(Math.min(pageCount, safePage + 1))} disabled={safePage >= pageCount}>
+          下一页
+        </button>
       </div>
     </div>
   )
 }
 
-function EmptyState({ label }: { label: string }): ReactElement {
-  return <div className="empty">{label}</div>
+function TeacherPanel({
+  messages,
+  prompt,
+  busy,
+  settingsOpen,
+  dashboard,
+  llmTestMessage,
+  error,
+  onPrompt,
+  onSubmit,
+  onAnalyze,
+  onSettingsOpen,
+  onSaveSettings,
+  onTestLlm
+}: {
+  messages: ChatMessage[]
+  prompt: string
+  busy: string
+  settingsOpen: boolean
+  dashboard: DashboardData
+  llmTestMessage: string
+  error: string
+  onPrompt: (value: string) => void
+  onSubmit: (event: FormEvent) => void
+  onAnalyze: () => void
+  onSettingsOpen: () => void
+  onSaveSettings: (form: HTMLFormElement) => void
+  onTestLlm: (form: HTMLFormElement) => void
+}): ReactElement {
+  return (
+    <div className="teacher-panel">
+      <div className="teacher-head">
+        <div>
+          <strong>AI 围棋老师</strong>
+          <span>{busy === 'teacher' ? '执行中' : '待命'}</span>
+        </div>
+        <div className="head-actions">
+          <button className="ghost-button" onClick={onAnalyze} disabled={busy !== ''}>
+            当前手
+          </button>
+          <button className="icon-button" onClick={onSettingsOpen} title="LLM 配置">
+            ⚙
+          </button>
+        </div>
+      </div>
+
+      {settingsOpen ? (
+        <SettingsDrawer
+          dashboard={dashboard}
+          busy={busy}
+          llmTestMessage={llmTestMessage}
+          onSave={onSaveSettings}
+          onTest={onTestLlm}
+        />
+      ) : null}
+
+      <div className="message-list">
+        {messages.map((message) => (
+          <article key={message.id} className={`message message--${message.role}`}>
+            <div className="message-copy">{message.content}</div>
+            {message.result ? <ToolLogList result={message.result} /> : null}
+          </article>
+        ))}
+        {busy === 'teacher' ? <div className="message message--teacher">老师正在规划和调用工具...</div> : null}
+      </div>
+
+      {error ? <div className="error-line">{error}</div> : null}
+      <form className="composer" onSubmit={onSubmit}>
+        <textarea
+          value={prompt}
+          onChange={(event) => onPrompt(event.target.value)}
+          placeholder="让老师分析最近10盘棋、找常见问题、做训练计划..."
+        />
+        <button className="primary-button" type="submit" disabled={busy !== '' || !prompt.trim()}>
+          发送
+        </button>
+      </form>
+    </div>
+  )
+}
+
+function SettingsDrawer({
+  dashboard,
+  busy,
+  llmTestMessage,
+  onSave,
+  onTest
+}: {
+  dashboard: DashboardData
+  busy: string
+  llmTestMessage: string
+  onSave: (form: HTMLFormElement) => void
+  onTest: (form: HTMLFormElement) => void
+}): ReactElement {
+  const modelPresets = dashboard.systemProfile.katagoModelPresets
+  const selectedPreset = modelPresets.find((preset) => preset.id === dashboard.settings.katagoModelPreset) ?? modelPresets[0]
+  return (
+    <form
+      key={`${dashboard.settings.katagoModelPreset}|${dashboard.settings.llmBaseUrl}|${dashboard.settings.llmModel}`}
+      className="settings-drawer"
+      onSubmit={(event) => {
+        event.preventDefault()
+        onSave(event.currentTarget)
+      }}
+    >
+      <label>
+        KataGo 权重
+        <select name="katagoModelPreset" defaultValue={dashboard.settings.katagoModelPreset}>
+          {modelPresets.map((preset) => (
+            <option key={preset.id} value={preset.id}>
+              {preset.label} · {preset.badge}
+            </option>
+          ))}
+        </select>
+        {selectedPreset ? <small>{selectedPreset.description}</small> : null}
+        <small>{dashboard.systemProfile.katagoStatus}</small>
+      </label>
+      <label>
+        LLM Base URL
+        <input name="llmBaseUrl" defaultValue={dashboard.settings.llmBaseUrl} />
+      </label>
+      <label>
+        LLM API Key
+        <input
+          name="llmApiKey"
+          type="password"
+          placeholder={dashboard.systemProfile.hasLlmApiKey ? '已安全保存；留空则继续使用' : '需要支持图片输入的模型 API key'}
+        />
+      </label>
+      <label>
+        多模态模型
+        {dashboard.systemProfile.proxyModels.length > 0 ? (
+          <select name="llmModel" defaultValue={dashboard.settings.llmModel}>
+            {dashboard.systemProfile.proxyModels.map((model) => (
+              <option key={model} value={model}>
+                {model}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <input name="llmModel" defaultValue={dashboard.settings.llmModel} />
+        )}
+      </label>
+      <div className="settings-actions">
+        <button className="ghost-button" type="button" onClick={(event) => onTest(event.currentTarget.form!)} disabled={busy !== ''}>
+          图片测试
+        </button>
+        <button className="primary-button" type="submit" disabled={busy !== ''}>
+          保存
+        </button>
+      </div>
+      {llmTestMessage ? <div className="test-message">{llmTestMessage}</div> : null}
+    </form>
+  )
+}
+
+function ToolLogList({ result }: { result: TeacherRunResult }): ReactElement {
+  return (
+    <div className="tool-log">
+      {result.toolLogs.map((log) => (
+        <div key={log.id} className={`tool-log-row tool-log-row--${log.status}`}>
+          <span>{log.label}</span>
+          <small>{log.detail}</small>
+        </div>
+      ))}
+      {result.reportPath ? <small className="report-path">报告: {result.reportPath}</small> : null}
+    </div>
+  )
+}
+
+function MoveControls({ record, moveNumber, onMove }: { record: GameRecord | null; moveNumber: number; onMove: (value: number) => void }): ReactElement {
+  const total = record?.moves.length ?? 0
+  const current = moveNumber > 0 ? record?.moves[moveNumber - 1] : undefined
+  return (
+    <div className="move-controls">
+      <div className="move-buttons">
+        <button className="icon-button" onClick={() => onMove(0)} disabled={!record || moveNumber === 0}>
+          {'|<'}
+        </button>
+        <button className="icon-button" onClick={() => onMove(Math.max(0, moveNumber - 10))} disabled={!record || moveNumber === 0}>
+          -10
+        </button>
+        <button className="icon-button" onClick={() => onMove(Math.max(0, moveNumber - 1))} disabled={!record || moveNumber === 0}>
+          {'<'}
+        </button>
+        <button className="icon-button" onClick={() => onMove(Math.min(total, moveNumber + 1))} disabled={!record || moveNumber === total}>
+          {'>'}
+        </button>
+        <button className="icon-button" onClick={() => onMove(Math.min(total, moveNumber + 10))} disabled={!record || moveNumber === total}>
+          +10
+        </button>
+        <button className="icon-button" onClick={() => onMove(total)} disabled={!record || moveNumber === total}>
+          {'>|'}
+        </button>
+      </div>
+      <div className="move-meta">
+        <strong>{moveNumber}</strong>
+        <span>/ {total}</span>
+        <span>{current ? `${current.color === 'B' ? '黑' : '白'} ${current.gtp}` : '开局'}</span>
+      </div>
+    </div>
+  )
+}
+
+function BoardMatchBar({ record, moveNumber, analysis }: { record: GameRecord; moveNumber: number; analysis: KataGoMoveAnalysis | null }): ReactElement {
+  const black = safePlayerName(record.game.black, '黑方')
+  const white = safePlayerName(record.game.white, '白方')
+  const current = moveNumber > 0 ? record.moves[moveNumber - 1] : undefined
+  const scoreLead = analysis?.after.scoreLead
+  return (
+    <div className="board-matchbar">
+      <div className="player-chip player-chip--black">
+        <span className="player-stone" aria-hidden="true" />
+        <small>黑棋</small>
+        <strong>{black}</strong>
+      </div>
+      <div className="match-state">
+        <strong>{moveNumber}</strong>
+        <span>/ {record.moves.length}</span>
+        <span>{current ? `${current.color === 'B' ? '黑' : '白'} ${current.gtp}` : '开局'}</span>
+        <small>{formatScoreLead(scoreLead)}</small>
+      </div>
+      <div className="player-chip player-chip--white">
+        <span className="player-stone" aria-hidden="true" />
+        <small>白棋</small>
+        <strong>{white}</strong>
+      </div>
+    </div>
+  )
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
+}
+
+function roundedScale(value: number, granularity: number, floor: number): number {
+  return Math.max(floor, Math.ceil(Math.max(0, value) / granularity) * granularity)
+}
+
+function formatScoreLead(scoreLead: number | undefined): string {
+  if (scoreLead === undefined) {
+    return '待分析'
+  }
+  if (Math.abs(scoreLead) < 0.05) {
+    return '均势'
+  }
+  return `${scoreLead > 0 ? '黑' : '白'}+${Math.abs(scoreLead).toFixed(1)}`
+}
+
+function evaluationSeverity(item: KataGoMoveAnalysis): 'quiet' | 'inaccuracy' | 'mistake' | 'blunder' {
+  if (item.judgement === 'blunder' || (item.playedMove?.scoreLoss ?? 0) >= 8 || (item.playedMove?.winrateLoss ?? 0) >= 18) {
+    return 'blunder'
+  }
+  if (item.judgement === 'mistake' || (item.playedMove?.scoreLoss ?? 0) >= 4 || (item.playedMove?.winrateLoss ?? 0) >= 10) {
+    return 'mistake'
+  }
+  if (item.judgement === 'inaccuracy' || (item.playedMove?.scoreLoss ?? 0) >= 1.5 || (item.playedMove?.winrateLoss ?? 0) >= 4) {
+    return 'inaccuracy'
+  }
+  return 'quiet'
+}
+
+function EvaluationGraph({
+  analysis,
+  evaluations,
+  moveNumber,
+  totalMoves,
+  loading,
+  loadingLabel,
+  onMove
+}: {
+  analysis: KataGoMoveAnalysis | null
+  evaluations: KataGoMoveAnalysis[]
+  moveNumber: number
+  totalMoves: number
+  loading: boolean
+  loadingLabel: string
+  onMove: (value: number) => void
+}): ReactElement {
+  const sortedEvaluations = evaluations.slice().sort((left, right) => left.moveNumber - right.moveNumber)
+  const currentAnalysis = analysis ?? sortedEvaluations.find((item) => item.moveNumber === moveNumber) ?? null
+  const hasEvaluations = sortedEvaluations.length > 0
+  const width = 720
+  const height = 148
+  const plotLeft = 12
+  const plotRight = 12
+  const plotTop = 12
+  const plotBottom = 116
+  const barTop = 124
+  const barBottom = 140
+  const plotWidth = width - plotLeft - plotRight
+  const plotHeight = plotBottom - plotTop
+  const centerY = plotTop + plotHeight / 2
+  const domainMoves = Math.max(totalMoves, 15)
+  const xForMove = (move: number): number => plotLeft + (clamp(move, 0, domainMoves) / domainMoves) * plotWidth
+  const lossScale = roundedScale(Math.max(...sortedEvaluations.map((item) => Math.max(0, item.playedMove?.scoreLoss ?? 0)), 0), 5, 5)
+  const yForWinrate = (winrate: number): number => clamp(plotTop + ((100 - winrate) / 100) * plotHeight, plotTop, plotBottom)
+  const winrateSamples = sortedEvaluations.length > 0
+    ? [
+        { move: Math.max(0, sortedEvaluations[0].moveNumber - 1), winrate: sortedEvaluations[0].before.winrate },
+        ...sortedEvaluations.map((item) => ({ move: item.moveNumber, winrate: item.after.winrate }))
+      ]
+    : []
+  const winratePath = winrateSamples
+    .map((item, index) => `${index === 0 ? 'M' : 'L'} ${xForMove(item.move).toFixed(2)} ${yForWinrate(item.winrate).toFixed(2)}`)
+    .join(' ')
+  const areaPath = winrateSamples.length > 0
+    ? `${winratePath} L ${xForMove(winrateSamples[winrateSamples.length - 1].move).toFixed(2)} ${centerY.toFixed(2)} L ${xForMove(winrateSamples[0].move).toFixed(2)} ${centerY.toFixed(2)} Z`
+    : ''
+  const currentX = xForMove(moveNumber)
+  const currentY = currentAnalysis ? yForWinrate(currentAnalysis.after.winrate) : centerY
+  const currentLabel = currentAnalysis
+    ? `第 ${moveNumber} 手，黑胜率 ${currentAnalysis.after.winrate.toFixed(1)}%，${formatScoreLead(currentAnalysis.after.scoreLead)}`
+    : (loading ? `KataGo 正在快速生成整盘胜率图${loadingLabel ? ` · ${loadingLabel}` : ''}` : '等待 KataGo 分析')
+
+  function handlePointer(event: PointerEvent<SVGSVGElement>): void {
+    if (totalMoves < 1) {
+      return
+    }
+    const rect = event.currentTarget.getBoundingClientRect()
+    const ratio = clamp((event.clientX - rect.left) / rect.width, 0, 1)
+    onMove(Math.round(ratio * totalMoves))
+  }
+
+  return (
+    <div className="evaluation-graph">
+      <svg
+        className="evaluation-canvas"
+        viewBox={`0 0 ${width} ${height}`}
+        role="slider"
+        aria-label="KataGo 评估图"
+        aria-valuemin={0}
+        aria-valuemax={totalMoves}
+        aria-valuenow={moveNumber}
+        tabIndex={0}
+        onPointerDown={handlePointer}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowLeft') {
+            onMove(Math.max(0, moveNumber - 1))
+          }
+          if (event.key === 'ArrowRight') {
+            onMove(Math.min(totalMoves, moveNumber + 1))
+          }
+        }}
+      >
+        <title>{currentLabel}</title>
+        <defs>
+          <linearGradient id="evaluation-board-gradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#20242a" />
+            <stop offset="49%" stopColor="#191d22" />
+            <stop offset="51%" stopColor="#171b20" />
+            <stop offset="100%" stopColor="#242018" />
+          </linearGradient>
+          <linearGradient id="evaluation-winrate-glow" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#e7d9b4" stopOpacity="0.28" />
+            <stop offset="50%" stopColor="#d2b36a" stopOpacity="0.12" />
+            <stop offset="100%" stopColor="#d2b36a" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <rect className="evaluation-plot" x="0" y="0" width={width} height={height} rx="6" />
+        <rect className="evaluation-zone evaluation-zone--black" x={plotLeft} y={plotTop} width={plotWidth} height={plotHeight / 2} />
+        <rect className="evaluation-zone evaluation-zone--white" x={plotLeft} y={centerY} width={plotWidth} height={plotHeight / 2} />
+        {[0.25, 0.75].map((tick) => (
+          <line key={`h-${tick}`} className="evaluation-grid evaluation-grid--horizontal" x1={plotLeft} y1={plotTop + tick * plotHeight} x2={width - plotRight} y2={plotTop + tick * plotHeight} />
+        ))}
+        {[0, 0.25, 0.5, 0.75, 1].map((tick) => (
+          <line key={`v-${tick}`} className="evaluation-grid evaluation-grid--vertical" x1={plotLeft + tick * plotWidth} y1={plotTop} x2={plotLeft + tick * plotWidth} y2={barBottom} />
+        ))}
+        <line className="evaluation-grid evaluation-grid--center" x1={plotLeft} y1={centerY} x2={width - plotRight} y2={centerY} />
+
+        {hasEvaluations ? (
+          <>
+            <path className="evaluation-area" d={areaPath} />
+            <path className="evaluation-line evaluation-line--winrate" d={winratePath} />
+            {sortedEvaluations.map((item) => {
+              const loss = Math.max(0, item.playedMove?.scoreLoss ?? 0)
+              if (loss <= 0.2) {
+                return null
+              }
+              const barHeight = clamp((loss / lossScale) * (barBottom - barTop), 1, barBottom - barTop)
+              const x = xForMove(item.moveNumber)
+              return <rect key={`loss-${item.moveNumber}`} className={`loss-bar loss-bar--${evaluationSeverity(item)}`} x={x - 2.5} y={barBottom - barHeight} width="5" height={barHeight} />
+            })}
+            {sortedEvaluations.filter((item) => evaluationSeverity(item) !== 'quiet').map((item) => (
+              <circle key={`dot-${item.moveNumber}`} className={`evaluation-dot evaluation-dot--${evaluationSeverity(item)}`} cx={xForMove(item.moveNumber)} cy={yForWinrate(item.after.winrate)} r={item.moveNumber === moveNumber ? 4.2 : 2.4} />
+            ))}
+          </>
+        ) : (
+          <>
+            <path className="evaluation-empty-line" d={`M ${plotLeft} ${centerY} L ${width - plotRight} ${centerY}`} />
+            <text className="evaluation-empty-copy" x={plotLeft + plotWidth / 2} y={centerY - 8}>
+              {loading ? `正在生成胜率图${loadingLabel ? ` · ${loadingLabel}` : ''}` : '待 KataGo 分析'}
+            </text>
+          </>
+        )}
+
+        <line className="evaluation-current" x1={currentX} y1={plotTop} x2={currentX} y2={barBottom} />
+        <circle className="evaluation-current-dot" cx={currentX} cy={currentY} r="5.2" />
+        <line className="evaluation-bar-baseline" x1={plotLeft} y1={barBottom} x2={width - plotRight} y2={barBottom} />
+      </svg>
+    </div>
+  )
+}
+
+function GoBoard({ record, moveNumber, analysis }: { record: GameRecord; moveNumber: number; analysis: KataGoMoveAnalysis | null }): ReactElement {
+  const size = record.boardSize
+  const board = computeBoard(record, moveNumber)
+  const viewSize = 760
+  const boardInset = 18
+  const gridInset = 76
+  const step = (viewSize - gridInset * 2) / (size - 1)
+  const starPoints = getStarPoints(size)
+  const lastMove = moveNumber > 0 ? record.moves[moveNumber - 1] : undefined
+  const candidates = analysis?.before.topMoves.slice(0, 3).map((candidate, index) => ({ ...candidate, index, point: gtpToPoint(candidate.move, size) })) ?? []
+  const coordinates = Array.from({ length: size }, (_, index) => index)
+
+  return (
+    <svg className="go-board" viewBox={`0 0 ${viewSize} ${viewSize}`} role="img" aria-label="围棋棋盘">
+      <defs>
+        <pattern id="lizzie-board-texture" patternUnits="userSpaceOnUse" width="438" height="567">
+          <image href={lizzieBoardUrl} width="438" height="567" preserveAspectRatio="none" />
+        </pattern>
+        <filter id="stone-shadow" x="-35%" y="-35%" width="170%" height="170%">
+          <feDropShadow dx="0" dy="2.4" stdDeviation="2.1" floodColor="#000000" floodOpacity="0.42" />
+        </filter>
+      </defs>
+      <rect className="board-edge" x="0" y="0" width={viewSize} height={viewSize} rx="8" />
+      <rect className="board-surface" x={boardInset} y={boardInset} width={viewSize - boardInset * 2} height={viewSize - boardInset * 2} rx="6" />
+      <g className="board-grid">
+        {coordinates.map((index) => {
+          const p = gridInset + index * step
+          return (
+            <g key={`line-${index}`}>
+              <line x1={gridInset} y1={p} x2={viewSize - gridInset} y2={p} />
+              <line x1={p} y1={gridInset} x2={p} y2={viewSize - gridInset} />
+            </g>
+          )
+        })}
+      </g>
+      <g className="board-coordinates" aria-hidden="true">
+        {coordinates.map((index) => {
+          const p = gridInset + index * step
+          return (
+            <g key={`coord-${index}`}>
+              <text x={p} y="46">
+                {letters[index]}
+              </text>
+              <text x={p} y={viewSize - 43}>
+                {letters[index]}
+              </text>
+              <text x="45" y={p}>
+                {size - index}
+              </text>
+              <text x={viewSize - 45} y={p}>
+                {size - index}
+              </text>
+            </g>
+          )
+        })}
+      </g>
+      {starPoints.map(([row, col]) => (
+        <circle key={`${row}-${col}`} className="star-point" cx={gridInset + col * step} cy={gridInset + row * step} r={step * 0.095} />
+      ))}
+      {board.flatMap((row, rowIndex) =>
+        row.map((stone, colIndex) => {
+          if (!stone) {
+            return null
+          }
+          const x = gridInset + colIndex * step
+          const y = gridInset + rowIndex * step
+          const isLast = lastMove?.row === rowIndex && lastMove.col === colIndex
+          const stoneRadius = step * 0.505
+          return (
+            <g key={`${rowIndex}-${colIndex}`}>
+              <image
+                className={`stone stone--${stone}`}
+                href={stone === 'B' ? lizzieBlackStoneUrl : lizzieWhiteStoneUrl}
+                x={x - stoneRadius}
+                y={y - stoneRadius}
+                width={stoneRadius * 2}
+                height={stoneRadius * 2}
+                preserveAspectRatio="xMidYMid meet"
+                filter="url(#stone-shadow)"
+              />
+              {isLast ? <circle className={`last-marker last-marker--${stone}`} cx={x} cy={y} r={step * 0.19} /> : null}
+            </g>
+          )
+        })
+      )}
+      {candidates.map((candidate) => {
+        if (!candidate.point) {
+          return null
+        }
+        const x = gridInset + candidate.point.col * step
+        const y = gridInset + candidate.point.row * step
+        return (
+          <g key={`${candidate.move}-${candidate.index}`} className={`candidate candidate--${candidate.index + 1}`}>
+            <circle cx={x} cy={y} r={step * 0.34} />
+            <text className="candidate-rank" x={x} y={y + 5}>
+              {candidate.index + 1}
+            </text>
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
+
+type Board = Array<Array<StoneColor | null>>
+
+function computeBoard(record: GameRecord, moveNumber: number): Board {
+  const size = record.boardSize
+  const board: Board = Array.from({ length: size }, () => Array<StoneColor | null>(size).fill(null))
+  for (const move of record.moves.slice(0, moveNumber)) {
+    if (move.pass || move.row === null || move.col === null) {
+      continue
+    }
+    board[move.row][move.col] = move.color
+    const opponent = move.color === 'B' ? 'W' : 'B'
+    for (const [row, col] of neighbors(move.row, move.col, size)) {
+      if (board[row][col] === opponent && countLiberties(board, row, col).liberties === 0) {
+        for (const [groupRow, groupCol] of countLiberties(board, row, col).stones) {
+          board[groupRow][groupCol] = null
+        }
+      }
+    }
+    if (countLiberties(board, move.row, move.col).liberties === 0) {
+      board[move.row][move.col] = null
+    }
+  }
+  return board
+}
+
+function neighbors(row: number, col: number, size: number): Array<[number, number]> {
+  return [
+    [row - 1, col],
+    [row + 1, col],
+    [row, col - 1],
+    [row, col + 1]
+  ].filter(([r, c]) => r >= 0 && c >= 0 && r < size && c < size) as Array<[number, number]>
+}
+
+function countLiberties(board: Board, row: number, col: number): { stones: Array<[number, number]>; liberties: number } {
+  const color = board[row][col]
+  if (!color) {
+    return { stones: [], liberties: 0 }
+  }
+  const seen = new Set<string>()
+  const liberties = new Set<string>()
+  const stones: Array<[number, number]> = []
+  const stack: Array<[number, number]> = [[row, col]]
+  while (stack.length > 0) {
+    const [r, c] = stack.pop()!
+    const key = `${r}:${c}`
+    if (seen.has(key)) {
+      continue
+    }
+    seen.add(key)
+    stones.push([r, c])
+    for (const [nr, nc] of neighbors(r, c, board.length)) {
+      if (!board[nr][nc]) {
+        liberties.add(`${nr}:${nc}`)
+      } else if (board[nr][nc] === color) {
+        stack.push([nr, nc])
+      }
+    }
+  }
+  return { stones, liberties: liberties.size }
+}
+
+function getStarPoints(size: number): Array<[number, number]> {
+  if (size < 7) {
+    return []
+  }
+  const starPointPosition = size <= 11 ? 3 : 4
+  const points = [starPointPosition - 1, size - starPointPosition]
+  if (size % 2 === 1 && size > 7) {
+    points.splice(1, 0, Math.floor(size / 2))
+  }
+  return points.flatMap((row) => points.map((col) => [row, col] as [number, number]))
+}
+
+function gtpToPoint(gtp: string, size: number): { row: number; col: number } | null {
+  if (!gtp || gtp.toLowerCase() === 'pass') {
+    return null
+  }
+  const col = letters.indexOf(gtp[0].toUpperCase())
+  const row = size - Number.parseInt(gtp.slice(1), 10)
+  if (col < 0 || !Number.isFinite(row) || row < 0 || row >= size) {
+    return null
+  }
+  return { row, col }
+}
+
+async function renderBoardPng(record: GameRecord, moveNumber: number, analysis: KataGoMoveAnalysis | null): Promise<string> {
+  const size = record.boardSize
+  const canvas = document.createElement('canvas')
+  canvas.width = 1000
+  canvas.height = 1000
+  const ctx = canvas.getContext('2d')!
+  const boardInset = 24
+  const margin = 104
+  const step = (canvas.width - margin * 2) / (size - 1)
+  const board = computeBoard(record, moveNumber)
+  const lastMove = moveNumber > 0 ? record.moves[moveNumber - 1] : undefined
+  const [boardTexture, blackStone, whiteStone] = await Promise.all([
+    loadCanvasImage(lizzieBoardUrl),
+    loadCanvasImage(lizzieBlackStoneUrl),
+    loadCanvasImage(lizzieWhiteStoneUrl)
+  ])
+
+  ctx.fillStyle = '#0b0d10'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  ctx.save()
+  roundedCanvasRect(ctx, boardInset, boardInset, canvas.width - boardInset * 2, canvas.height - boardInset * 2, 10)
+  ctx.clip()
+  const boardPattern = ctx.createPattern(boardTexture, 'repeat')
+  ctx.fillStyle = boardPattern ?? '#d8b15e'
+  ctx.fillRect(boardInset, boardInset, canvas.width - boardInset * 2, canvas.height - boardInset * 2)
+  ctx.restore()
+
+  ctx.strokeStyle = '#11100d'
+  for (let i = 0; i < size; i += 1) {
+    const p = margin + i * step
+    ctx.lineWidth = i === 0 || i === size - 1 ? 3 : 1.8
+    ctx.beginPath()
+    ctx.moveTo(margin, p)
+    ctx.lineTo(canvas.width - margin, p)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(p, margin)
+    ctx.lineTo(p, canvas.height - margin)
+    ctx.stroke()
+  }
+  ctx.fillStyle = '#11100d'
+  for (const [row, col] of getStarPoints(size)) {
+    ctx.beginPath()
+    ctx.arc(margin + col * step, margin + row * step, step * 0.095, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.fillStyle = '#15130f'
+  ctx.font = 'bold 28px Avenir Next, PingFang SC, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  for (let i = 0; i < size; i += 1) {
+    const p = margin + i * step
+    ctx.fillText(letters[i], p, 62)
+    ctx.fillText(letters[i], p, canvas.height - 52)
+    ctx.fillText(String(size - i), 60, p)
+    ctx.fillText(String(size - i), canvas.width - 60, p)
+  }
+
+  for (let row = 0; row < size; row += 1) {
+    for (let col = 0; col < size; col += 1) {
+      const stone = board[row][col]
+      if (!stone) {
+        continue
+      }
+      const x = margin + col * step
+      const y = margin + row * step
+      const stoneRadius = step * 0.505
+      ctx.save()
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.42)'
+      ctx.shadowBlur = 7
+      ctx.shadowOffsetY = 3
+      ctx.drawImage(stone === 'B' ? blackStone : whiteStone, x - stoneRadius, y - stoneRadius, stoneRadius * 2, stoneRadius * 2)
+      ctx.restore()
+      if (lastMove?.row === row && lastMove.col === col) {
+        ctx.strokeStyle = stone === 'B' ? '#f4efe4' : '#17191a'
+        ctx.lineWidth = 5
+        ctx.beginPath()
+        ctx.arc(x, y, step * 0.19, 0, Math.PI * 2)
+        ctx.stroke()
+      }
+    }
+  }
+
+  ctx.font = 'bold 28px Avenir Next, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  for (const [index, candidate] of (analysis?.before.topMoves ?? []).slice(0, 3).entries()) {
+    const point = gtpToPoint(candidate.move, size)
+    if (!point) {
+      continue
+    }
+    const x = margin + point.col * step
+    const y = margin + point.row * step
+    ctx.fillStyle = index === 0 ? '#66c783' : index === 1 ? '#5aa8d6' : '#d6b45f'
+    ctx.beginPath()
+    ctx.arc(x, y, step * 0.34, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = '#fff'
+    ctx.fillText(String(index + 1), x, y + 1)
+  }
+
+  ctx.fillStyle = '#1f1a12'
+  ctx.font = '24px Avenir Next, sans-serif'
+  ctx.textAlign = 'left'
+  ctx.fillText(`Move ${moveNumber} / ${record.moves.length}`, margin, canvas.height - 28)
+  if (analysis?.playedMove) {
+    ctx.fillText(`Loss ${analysis.playedMove.winrateLoss.toFixed(1)}% / ${analysis.playedMove.scoreLoss.toFixed(1)}目`, margin + 230, canvas.height - 28)
+  }
+
+  return canvas.toDataURL('image/png')
+}
+
+function loadCanvasImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error(`无法加载棋盘素材: ${src}`))
+    image.src = src
+  })
+}
+
+function roundedCanvasRect(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number): void {
+  ctx.beginPath()
+  ctx.moveTo(x + radius, y)
+  ctx.lineTo(x + width - radius, y)
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius)
+  ctx.lineTo(x + width, y + height - radius)
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height)
+  ctx.lineTo(x + radius, y + height)
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius)
+  ctx.lineTo(x, y + radius)
+  ctx.quadraticCurveTo(x, y, x + radius, y)
+  ctx.closePath()
 }

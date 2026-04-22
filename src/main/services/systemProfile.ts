@@ -1,25 +1,20 @@
 import { execFile } from 'node:child_process'
-import { access, readFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import os from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import type { AppSettings, SystemProfile } from '@main/lib/types'
+import { hydrateKataGoSettings, KATAGO_MODEL_PRESETS, resolveKataGoRuntime } from './katagoRuntime'
 
 const execFileAsync = promisify(execFile)
 
-async function exists(path: string): Promise<boolean> {
-  try {
-    await access(path)
-    return true
-  } catch {
-    return false
-  }
-}
-
 async function firstExisting(paths: string[]): Promise<string> {
   for (const path of paths) {
-    if (await exists(path)) {
+    try {
+      await readFile(path)
       return path
+    } catch {
+      // Continue checking the remaining lightweight config candidates.
     }
   }
   return ''
@@ -33,50 +28,6 @@ function parseSimpleYamlValue(text: string, key: string): string {
 function parseSimpleYamlListValue(text: string, key: string): string {
   const match = text.match(new RegExp(`^${key}:\\s*\\n\\s*-\\s*([^\\n]+)`, 'm'))
   return match?.[1]?.trim().replace(/^"|"$/g, '') ?? ''
-}
-
-async function detectKatago(): Promise<Pick<SystemProfile, 'katagoBin' | 'katagoConfig' | 'katagoModel' | 'notes'>> {
-  const notes: string[] = []
-  let katagoBin = await firstExisting([
-    '/opt/homebrew/bin/katago',
-    '/usr/local/bin/katago',
-    '/opt/local/bin/katago',
-    '/usr/bin/katago',
-  ])
-
-  if (!katagoBin) {
-    try {
-      const { stdout } = await execFileAsync('/usr/bin/which', ['katago'])
-      katagoBin = stdout.trim()
-    } catch {
-      notes.push('未在常见位置或 PATH 中找到 katago。')
-    }
-  }
-
-  const home = os.homedir()
-  const katagoConfig = await firstExisting([
-    join(home, '.katago/configs/analysis_macmini_m4pro_fast.cfg'),
-    join(home, '.katago/configs/analysis_example.cfg'),
-    join(home, '.katago/configs/gtp_analysis_compat.cfg'),
-    join(home, '.katago/gtp.cfg'),
-  ])
-  const katagoModel = await firstExisting([
-    join(home, '.katago/models/latest-kata1.bin.gz'),
-    join(home, '.katago/models/kata1-b28c512nbt-s12584338688-d5758872665.bin.gz'),
-    join(home, 'Developer/lizzyzy-youhua/weights/default.bin.gz'),
-  ])
-
-  if (katagoBin) {
-    notes.push(`检测到 KataGo: ${katagoBin}`)
-  }
-  if (katagoConfig) {
-    notes.push(`检测到分析配置: ${katagoConfig}`)
-  }
-  if (katagoModel) {
-    notes.push(`检测到模型: ${katagoModel}`)
-  }
-
-  return { katagoBin, katagoConfig, katagoModel, notes }
 }
 
 async function detectCliproxy(): Promise<Pick<SystemProfile, 'proxyBaseUrl' | 'proxyApiKey' | 'proxyModels' | 'notes'>> {
@@ -147,32 +98,35 @@ async function detectCliproxy(): Promise<Pick<SystemProfile, 'proxyBaseUrl' | 'p
   return { proxyBaseUrl, proxyApiKey, proxyModels, notes }
 }
 
-export async function detectSystemProfile(): Promise<SystemProfile> {
-  const katago = await detectKatago()
+export async function detectSystemProfile(settings?: AppSettings): Promise<SystemProfile> {
+  const katago = resolveKataGoRuntime(settings)
   const proxy = await detectCliproxy()
   return {
     katagoBin: katago.katagoBin,
     katagoConfig: katago.katagoConfig,
     katagoModel: katago.katagoModel,
+    katagoReady: katago.ready,
+    katagoStatus: katago.status,
+    katagoModelPreset: katago.modelPreset.id,
+    katagoModelPresets: KATAGO_MODEL_PRESETS,
     proxyBaseUrl: proxy.proxyBaseUrl,
     proxyApiKey: proxy.proxyApiKey,
     proxyModels: proxy.proxyModels,
+    hasLlmApiKey: false,
     notes: [...katago.notes, ...proxy.notes],
   }
 }
 
 export async function applyDetectedDefaults(settings: AppSettings): Promise<AppSettings> {
-  const detected = await detectSystemProfile()
+  const hydratedKatago = hydrateKataGoSettings(settings)
+  const detected = await detectSystemProfile(hydratedKatago)
   const preferredModel =
     detected.proxyModels.find((model) => model === 'gpt-5-codex-mini') ||
     detected.proxyModels.find((model) => model === 'gpt-5') ||
     detected.proxyModels[0] ||
     settings.llmModel
   return {
-    ...settings,
-    katagoBin: settings.katagoBin || detected.katagoBin,
-    katagoConfig: settings.katagoConfig || detected.katagoConfig,
-    katagoModel: settings.katagoModel || detected.katagoModel,
+    ...hydratedKatago,
     llmBaseUrl: settings.llmBaseUrl === 'https://api.openai.com/v1' && detected.proxyBaseUrl ? detected.proxyBaseUrl : settings.llmBaseUrl,
     llmApiKey: settings.llmApiKey || detected.proxyApiKey,
     llmModel:
