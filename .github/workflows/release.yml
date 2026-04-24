@@ -58,6 +58,16 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Prepare KataGo assets
+        shell: bash
+        env:
+          KATASENSEI_KATAGO_ASSET_DIR: ${{ secrets.KATASENSEI_KATAGO_ASSET_DIR }}
+          KATASENSEI_KATAGO_BINARY: ${{ secrets.KATASENSEI_KATAGO_BINARY }}
+          KATASENSEI_KATAGO_MODEL: ${{ secrets.KATASENSEI_KATAGO_MODEL }}
+        run: |
+          node scripts/prepare_katago_assets.mjs
+          node scripts/check_katago_assets.mjs --mode=release
+
       - name: Package desktop app
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"

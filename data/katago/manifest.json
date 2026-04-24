@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "defaultModelId": "official-b18-recommended",
+  "defaultModelFileName": "kata1-b18c384nbt-s9996604416-d4316597426.bin.gz",
+  "defaultModelDisplayName": "KataGo b18 Recommended",
+  "modelPath": "models/kata1-b18c384nbt-s9996604416-d4316597426.bin.gz",
+  "modelSha256": "",
+  "supportedPlatforms": {
+    "darwin-arm64": {
+      "binaryPath": "bin/darwin-arm64/katago",
+      "sha256": ""
+    },
+    "darwin-x64": {
+      "binaryPath": "bin/darwin-x64/katago",
+      "sha256": ""
+    },
+    "win32-x64": {
+      "binaryPath": "bin/win32-x64/katago.exe",
+      "sha256": ""
+    }
+  },
+  "notes": [
+    "Actual binary/model files are release assets or Git LFS assets, not ordinary Git blobs.",
+    "prepare_katago_assets.mjs can copy them from local paths or CI-provided artifact directories."
+  ]
+}

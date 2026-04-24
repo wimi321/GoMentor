@@ -6,21 +6,27 @@ import type {
   GameMove,
   GameRecord,
   KataGoCandidate,
+  KataGoAssetStatus,
   KataGoMoveAnalysis,
   KataGoModelPresetId,
   LibraryGame,
   StoneColor,
+  StudentBindingSuggestion,
+  StudentProfile,
   TeacherRunResult
 } from '@main/lib/types'
-import type { DiagnosticsReport } from '@main/services/diagnostics/types'
 import lizzieBlackStoneUrl from './assets/lizzie/black.png'
 import lizzieBoardUrl from './assets/lizzie/board.png'
 import lizzieWhiteStoneUrl from './assets/lizzie/white.png'
 import logoUrl from '../../../assets/logo.svg'
-import { DiagnosticsPanel } from './features/diagnostics/DiagnosticsPanel'
-import { TeacherResultCard } from './features/teacher/TeacherResultCard'
+import { DiagnosticsGate } from './features/diagnostics/DiagnosticsGate'
+import { StudentBindingDialog } from './features/student/StudentBindingDialog'
+import { StudentRailCard } from './features/student/StudentRailCard'
+import { KataGoAssetsPanel } from './features/settings/KataGoAssetsPanel'
+import { TeacherRunCard } from './features/teacher/TeacherRunCard'
 import './features/diagnostics/diagnostics.css'
-import './features/teacher/teacher-result.css'
+import './features/student/student.css'
+import './features/teacher/teacher-run-card.css'
 
 const emptyDashboard: DashboardData = {
   settings: {
@@ -67,6 +73,11 @@ interface StatusPill {
   tone: StatusTone
 }
 
+interface StudentBindingState {
+  game: LibraryGame
+  suggestions: StudentBindingSuggestion[]
+}
+
 const letters = 'ABCDEFGHJKLMNOPQRSTUVWXYZ'
 
 function safePlayerName(name: string | undefined, fallback: string): string {
@@ -108,8 +119,9 @@ export function App(): ReactElement {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [libraryCollapsed, setLibraryCollapsed] = useState(false)
   const [llmTestMessage, setLlmTestMessage] = useState('')
-  const [diagnostics, setDiagnostics] = useState<DiagnosticsReport | null>(null)
-  const [diagnosticsDismissed, setDiagnosticsDismissed] = useState(false)
+  const [currentStudent, setCurrentStudent] = useState<StudentProfile | null>(null)
+  const [studentBinding, setStudentBinding] = useState<StudentBindingState | null>(null)
+  const [katagoAssets, setKatagoAssets] = useState<KataGoAssetStatus | null>(null)
   const graphRunId = useRef('')
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -121,7 +133,7 @@ export function App(): ReactElement {
 
   useEffect(() => {
     void refresh()
-    void refreshDiagnostics()
+    void refreshKataGoAssets()
   }, [])
 
   const selectedGame = useMemo(
@@ -155,11 +167,11 @@ export function App(): ReactElement {
     }
   }
 
-  async function refreshDiagnostics(): Promise<void> {
+  async function refreshKataGoAssets(): Promise<void> {
     try {
-      setDiagnostics(await window.katasensei.getDiagnostics())
+      setKatagoAssets(await window.katasensei.inspectKataGoAssets())
     } catch (cause) {
-      setError(`启动诊断失败: ${String(cause)}`)
+      setError(`KataGo 资源检查失败: ${String(cause)}`)
     }
   }
 
@@ -230,9 +242,12 @@ export function App(): ReactElement {
     setBusy('import')
     setError('')
     try {
-      const next = await window.katasensei.importLibrary()
+      const { dashboard: next, imported } = await window.katasensei.importLibrary()
       setDashboard(next)
-      if (next.games[0]) {
+      if (imported[0]) {
+        setSelectedId(imported[0].id)
+        void openStudentBinding(imported[0])
+      } else if (next.games[0]) {
         setSelectedId(next.games[0].id)
       }
     } catch (cause) {
@@ -246,10 +261,11 @@ export function App(): ReactElement {
     setBusy('fox')
     setError('')
     try {
-      const { dashboard: next, result } = await window.katasensei.syncFox({
+      const { dashboard: next, result, student } = await window.katasensei.syncFox({
         keyword: foxKeyword
       })
       setDashboard(next)
+      setCurrentStudent(student ?? null)
       setFoxKeyword(result.nickname)
       if (result.saved[0]) {
         setSelectedId(result.saved[0].id)
@@ -260,6 +276,60 @@ export function App(): ReactElement {
       setError(String(cause))
     } finally {
       setBusy('')
+    }
+  }
+
+  async function openStudentBinding(game: LibraryGame): Promise<void> {
+    try {
+      const suggestions = await window.katasensei.suggestStudentBindings({
+        blackName: game.black,
+        whiteName: game.white,
+        source: game.source,
+        foxNickname: game.source === 'fox' ? (foxKeyword || game.sourceLabel.replace(/^Fox\s*/i, '')) : undefined
+      })
+      setStudentBinding({ game, suggestions })
+    } catch (cause) {
+      setError(`学生绑定建议生成失败: ${String(cause)}`)
+    }
+  }
+
+  async function bindImportedGameToExisting(input: { studentId: string; aliasFromPlayerName?: string }): Promise<void> {
+    if (!studentBinding) {
+      return
+    }
+    try {
+      const student = await window.katasensei.bindSgfGameToStudent({
+        gameId: studentBinding.game.id,
+        studentId: input.studentId,
+        aliasFromPlayerName: input.aliasFromPlayerName
+      })
+      setCurrentStudent(student)
+      setStudentBinding(null)
+    } catch (cause) {
+      setError(`绑定学生失败: ${String(cause)}`)
+    }
+  }
+
+  async function createStudentAndBind(input: { displayName: string; foxNickname?: string; aliasFromPlayerName?: string }): Promise<void> {
+    if (!studentBinding) {
+      return
+    }
+    try {
+      const student = input.foxNickname
+        ? await window.katasensei.bindFoxGamesToStudent({
+            foxNickname: input.foxNickname,
+            gameIds: [studentBinding.game.id],
+            aliases: [input.displayName, input.aliasFromPlayerName ?? ''].filter(Boolean)
+          })
+        : await window.katasensei.bindSgfGameToStudent({
+            gameId: studentBinding.game.id,
+            createDisplayName: input.displayName,
+            aliasFromPlayerName: input.aliasFromPlayerName
+          })
+      setCurrentStudent(student)
+      setStudentBinding(null)
+    } catch (cause) {
+      setError(`创建学生画像失败: ${String(cause)}`)
     }
   }
 
@@ -276,6 +346,7 @@ export function App(): ReactElement {
       })
       setDashboard(next)
       setLlmTestMessage('配置已保存')
+      void refreshKataGoAssets()
       if (selectedGame && record) {
         setAnalysis(null)
         setEvaluations({})
@@ -454,103 +525,112 @@ export function App(): ReactElement {
     }
   ]
 
-  if (diagnostics && diagnostics.overall === 'blocked' && !diagnosticsDismissed) {
-    return <DiagnosticsPanel report={diagnostics} onRetry={() => void refreshDiagnostics()} onContinue={() => setDiagnosticsDismissed(true)} />
-  }
-
-  if (diagnostics && diagnostics.overall === 'fixable' && !diagnosticsDismissed) {
-    return <DiagnosticsPanel report={diagnostics} onRetry={() => void refreshDiagnostics()} onContinue={() => setDiagnosticsDismissed(true)} />
-  }
-
   return (
-    <div className={`studio ${libraryCollapsed ? 'studio--collapsed' : ''}`}>
-      <aside className="library-rail">
-        <div className="rail-head">
-          <button className="icon-button" onClick={() => setLibraryCollapsed((value) => !value)} title="切换棋谱栏">
-            {libraryCollapsed ? '>' : '<'}
-          </button>
+    <DiagnosticsGate>
+      <div className={`studio ${libraryCollapsed ? 'studio--collapsed' : ''}`}>
+        <aside className="library-rail">
+          <div className="rail-head">
+            <button className="icon-button" onClick={() => setLibraryCollapsed((value) => !value)} title="切换棋谱栏">
+              {libraryCollapsed ? '>' : '<'}
+            </button>
+            {!libraryCollapsed ? (
+              <div className="brand-mark">
+                <img src={logoUrl} alt="" aria-hidden="true" />
+                <strong>KataSensei</strong>
+              </div>
+            ) : null}
+          </div>
           {!libraryCollapsed ? (
-            <div className="brand-mark">
-              <img src={logoUrl} alt="" aria-hidden="true" />
-              <strong>KataSensei</strong>
-            </div>
+            <LibraryPanel
+              dashboard={dashboard}
+              selectedGame={selectedGame}
+              foxKeyword={foxKeyword}
+              busy={busy}
+              currentStudent={currentStudent}
+              onSelect={setSelectedId}
+              onImport={() => void importSgf()}
+              onSync={() => void syncFox()}
+              onFoxKeyword={setFoxKeyword}
+              onAnalyzeRecent={() => void runTeacherQuickTask('分析当前学生最近10局围棋，找出常见问题、薄弱环节，并更新学生画像。')}
+            />
           ) : null}
-        </div>
-        {!libraryCollapsed ? (
-          <LibraryPanel
-            dashboard={dashboard}
-            selectedGame={selectedGame}
-            foxKeyword={foxKeyword}
-            busy={busy}
-            onSelect={setSelectedId}
-            onImport={() => void importSgf()}
-            onSync={() => void syncFox()}
-            onFoxKeyword={setFoxKeyword}
-          />
-        ) : null}
-      </aside>
+        </aside>
 
-      <main className="board-workspace">
-        <header className="topbar">
-          <div>
-            <h1>{selectedGame ? gameDisplayName(selectedGame) : '未选择棋谱'}</h1>
-            <StatusPills items={statusItems} />
-          </div>
-          <div className="topbar-actions">
-            <button className="primary-button" onClick={() => void runCurrentMoveAnalysis()} disabled={!record || busy !== ''}>
-              {busy === 'teacher' ? '老师分析中' : '分析当前手'}
-            </button>
-            <button className="ghost-button" onClick={() => void runTeacherQuickTask('分析这盘整盘围棋，找出关键问题手、胜负转折点和复盘重点。')} disabled={!record || busy !== ''}>
-              分析整盘围棋
-            </button>
-            <button className="ghost-button" onClick={() => void runTeacherQuickTask('分析当前学生最近10局围棋，找出常见问题、薄弱环节，并更新学生画像。')} disabled={dashboard.games.length === 0 || busy !== ''}>
-              分析近10局围棋
-            </button>
-          </div>
-        </header>
-
-        <section className="board-stage">
-          {record ? (
-            <div className="board-table">
-              <BoardMatchBar record={record} moveNumber={moveNumber} analysis={analysis} />
-              <GoBoard record={record} moveNumber={moveNumber} analysis={analysis} />
+        <main className="board-workspace">
+          <header className="topbar">
+            <div>
+              <h1>{selectedGame ? gameDisplayName(selectedGame) : '未选择棋谱'}</h1>
+              <StatusPills items={statusItems} />
             </div>
-          ) : (
-            <div className="empty-board">导入 SGF 后开始复盘</div>
-          )}
-        </section>
+            <div className="topbar-actions">
+              <button className="primary-button" onClick={() => void runCurrentMoveAnalysis()} disabled={!record || busy !== ''}>
+                {busy === 'teacher' ? '老师分析中' : '分析当前手'}
+              </button>
+              <button className="ghost-button" onClick={() => void runTeacherQuickTask('分析这盘整盘围棋，找出关键问题手、胜负转折点和复盘重点。')} disabled={!record || busy !== ''}>
+                分析整盘围棋
+              </button>
+              <button className="ghost-button" onClick={() => void runTeacherQuickTask('分析当前学生最近10局围棋，找出常见问题、薄弱环节，并更新学生画像。')} disabled={dashboard.games.length === 0 || busy !== ''}>
+                分析近10局围棋
+              </button>
+            </div>
+          </header>
 
-        <section className="timeline-panel">
-          <EvaluationGraph
-            analysis={analysis}
-            evaluations={Object.values(evaluations)}
-            moveNumber={moveNumber}
-            totalMoves={record?.moves.length ?? 0}
-            loading={graphBusy}
-            loadingLabel={graphProgress}
-            onMove={jumpToMove}
+          <section className="board-stage">
+            {record ? (
+              <div className="board-table">
+                <BoardMatchBar record={record} moveNumber={moveNumber} analysis={analysis} />
+                <GoBoard record={record} moveNumber={moveNumber} analysis={analysis} />
+              </div>
+            ) : (
+              <div className="empty-board">导入 SGF 后开始复盘</div>
+            )}
+          </section>
+
+          <section className="timeline-panel">
+            <EvaluationGraph
+              analysis={analysis}
+              evaluations={Object.values(evaluations)}
+              moveNumber={moveNumber}
+              totalMoves={record?.moves.length ?? 0}
+              loading={graphBusy}
+              loadingLabel={graphProgress}
+              onMove={jumpToMove}
+            />
+          </section>
+        </main>
+
+        <aside className="teacher-column">
+          <TeacherPanel
+            messages={messages}
+            prompt={prompt}
+            busy={busy}
+            settingsOpen={settingsOpen}
+            dashboard={dashboard}
+            katagoAssets={katagoAssets}
+            llmTestMessage={llmTestMessage}
+            error={error}
+            onPrompt={setPrompt}
+            onSubmit={(event) => void sendTeacherPrompt(event)}
+            onAnalyze={() => void runCurrentMoveAnalysis()}
+            onSettingsOpen={() => setSettingsOpen((value) => !value)}
+            onSaveSettings={(form) => void saveSettings(form)}
+            onTestLlm={(form) => void testLlmSettings(form)}
+            onRefreshKataGoAssets={() => void refreshKataGoAssets()}
+            onJumpToMove={jumpToMove}
           />
-        </section>
-      </main>
-
-      <aside className="teacher-column">
-        <TeacherPanel
-          messages={messages}
-          prompt={prompt}
-          busy={busy}
-          settingsOpen={settingsOpen}
-          dashboard={dashboard}
-          llmTestMessage={llmTestMessage}
-          error={error}
-          onPrompt={setPrompt}
-          onSubmit={(event) => void sendTeacherPrompt(event)}
-          onAnalyze={() => void runCurrentMoveAnalysis()}
-          onSettingsOpen={() => setSettingsOpen((value) => !value)}
-          onSaveSettings={(form) => void saveSettings(form)}
-          onTestLlm={(form) => void testLlmSettings(form)}
+        </aside>
+      </div>
+      <StudentBindingDialog
+        open={Boolean(studentBinding)}
+        blackName={studentBinding?.game.black}
+        whiteName={studentBinding?.game.white}
+        suggestions={studentBinding?.suggestions.map((suggestion) => suggestion.student)}
+        onClose={() => setStudentBinding(null)}
+        onSkip={() => setStudentBinding(null)}
+        onBindExisting={(input) => void bindImportedGameToExisting(input)}
+        onCreateStudent={(input) => void createStudentAndBind(input)}
         />
-      </aside>
-    </div>
+    </DiagnosticsGate>
   )
 }
 
@@ -559,19 +639,23 @@ function LibraryPanel({
   selectedGame,
   foxKeyword,
   busy,
+  currentStudent,
   onSelect,
   onImport,
   onSync,
-  onFoxKeyword
+  onFoxKeyword,
+  onAnalyzeRecent
 }: {
   dashboard: DashboardData
   selectedGame?: LibraryGame
   foxKeyword: string
   busy: string
+  currentStudent: StudentProfile | null
   onSelect: (id: string) => void
   onImport: () => void
   onSync: () => void
   onFoxKeyword: (value: string) => void
+  onAnalyzeRecent: () => void
 }): ReactElement {
   const [page, setPage] = useState(1)
   const pageSize = 10
@@ -617,6 +701,14 @@ function LibraryPanel({
       <button className="ghost-button library-upload-button" onClick={onImport} disabled={busy !== ''}>
         {busy === 'import' ? '导入中' : '上传 SGF'}
       </button>
+      <StudentRailCard
+        displayName={currentStudent?.displayName}
+        primaryFoxNickname={currentStudent?.primaryFoxNickname}
+        gameCount={currentStudent?.recentGameIds.length ?? 0}
+        lastAnalyzedAt={currentStudent?.lastAnalyzedAt}
+        weaknessStats={currentStudent?.weaknessStats}
+        onAnalyzeRecent={onAnalyzeRecent}
+      />
       <div className="library-list-head">
         <span>{keyword ? '野狐棋谱' : '棋谱库'}</span>
         <small>{visibleGames.length} 盘</small>
@@ -661,6 +753,7 @@ function TeacherPanel({
   busy,
   settingsOpen,
   dashboard,
+  katagoAssets,
   llmTestMessage,
   error,
   onPrompt,
@@ -668,13 +761,16 @@ function TeacherPanel({
   onAnalyze,
   onSettingsOpen,
   onSaveSettings,
-  onTestLlm
+  onTestLlm,
+  onRefreshKataGoAssets,
+  onJumpToMove
 }: {
   messages: ChatMessage[]
   prompt: string
   busy: string
   settingsOpen: boolean
   dashboard: DashboardData
+  katagoAssets: KataGoAssetStatus | null
   llmTestMessage: string
   error: string
   onPrompt: (value: string) => void
@@ -683,6 +779,8 @@ function TeacherPanel({
   onSettingsOpen: () => void
   onSaveSettings: (form: HTMLFormElement) => void
   onTestLlm: (form: HTMLFormElement) => void
+  onRefreshKataGoAssets: () => void
+  onJumpToMove: (moveNumber: number) => void
 }): ReactElement {
   return (
     <div className="teacher-panel">
@@ -704,10 +802,12 @@ function TeacherPanel({
       {settingsOpen ? (
         <SettingsDrawer
           dashboard={dashboard}
+          katagoAssets={katagoAssets}
           busy={busy}
           llmTestMessage={llmTestMessage}
           onSave={onSaveSettings}
           onTest={onTestLlm}
+          onRefreshKataGoAssets={onRefreshKataGoAssets}
         />
       ) : null}
 
@@ -715,9 +815,14 @@ function TeacherPanel({
         {messages.map((message) => (
           <article key={message.id} className={`message message--${message.role}`}>
             <div className="message-meta">{message.role === 'teacher' ? '老师' : '学生'}</div>
-            {message.result?.structured ? <TeacherResultCard result={message.result.structured} /> : null}
+            {message.result ? (
+              <TeacherRunCard
+                result={message.result.structuredResult ?? message.result.structured ?? null}
+                toolLogs={message.result.toolLogs}
+                onJumpToMove={onJumpToMove}
+              />
+            ) : null}
             <div className="message-copy">{message.content}</div>
-            {message.result ? <ToolLogList result={message.result} /> : null}
           </article>
         ))}
         {busy === 'teacher' ? (
@@ -745,16 +850,20 @@ function TeacherPanel({
 
 function SettingsDrawer({
   dashboard,
+  katagoAssets,
   busy,
   llmTestMessage,
   onSave,
-  onTest
+  onTest,
+  onRefreshKataGoAssets
 }: {
   dashboard: DashboardData
+  katagoAssets: KataGoAssetStatus | null
   busy: string
   llmTestMessage: string
   onSave: (form: HTMLFormElement) => void
   onTest: (form: HTMLFormElement) => void
+  onRefreshKataGoAssets: () => void
 }): ReactElement {
   const modelPresets = dashboard.systemProfile.katagoModelPresets
   const selectedPreset = modelPresets.find((preset) => preset.id === dashboard.settings.katagoModelPreset) ?? modelPresets[0]
@@ -779,6 +888,7 @@ function SettingsDrawer({
         {selectedPreset ? <small>{selectedPreset.description}</small> : null}
         <small>{dashboard.systemProfile.katagoStatus}</small>
       </label>
+      <KataGoAssetsPanel status={katagoAssets} onRefresh={onRefreshKataGoAssets} />
       <label>
         LLM Base URL
         <input name="llmBaseUrl" defaultValue={dashboard.settings.llmBaseUrl} />

@@ -1,0 +1,59 @@
+.student-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.58);
+}
+.student-dialog {
+  width: min(520px, calc(100vw - 32px));
+  padding: 20px;
+  border: 1px solid var(--line-strong, #343c43);
+  border-radius: 14px;
+  background: #151a1f;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 0.42);
+}
+.student-dialog h2 { margin: 0 0 8px; }
+.student-dialog p { color: var(--text-muted, #9da7ae); }
+.student-player-choice,
+.student-mode-tabs,
+.student-dialog footer {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+.student-player-choice button,
+.student-mode-tabs button {
+  flex: 1;
+  min-height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong, #343c43);
+  background: #20262c;
+  color: inherit;
+}
+.student-player-choice button.is-active,
+.student-mode-tabs button.is-active {
+  border-color: var(--accent-gold, #d1ad62);
+  background: #2a2519;
+}
+.student-create-form { display: grid; gap: 10px; margin-top: 14px; }
+.student-dialog footer { justify-content: flex-end; }
+.student-rail-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line-soft, #242b31);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #1c2329, #151a1f);
+}
+.student-rail-head { display: grid; gap: 4px; }
+.student-rail-head span { color: var(--text-faint, #707b84); font-size: 11px; font-weight: 900; }
+.student-rail-head strong { font-size: 16px; }
+.student-rail-card p { margin: 0; color: var(--text-muted, #9da7ae); font-size: 12px; }
+.student-rail-card dl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0; }
+.student-rail-card dl div { padding: 8px; border-radius: 8px; background: #11161b; }
+.student-rail-card dt { color: var(--text-faint, #707b84); font-size: 11px; }
+.student-rail-card dd { margin: 2px 0 0; font-weight: 800; }
+.student-weakness-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.student-weakness-list span { padding: 4px 7px; border-radius: 999px; background: #222a31; color: var(--text-muted, #9da7ae); font-size: 11px; }

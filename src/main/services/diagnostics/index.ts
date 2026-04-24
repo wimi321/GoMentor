@@ -4,7 +4,12 @@ import { basename, join } from 'node:path'
 import { appHome, getSettings, hasLlmApiKey } from '@main/lib/store'
 import { resolveKataGoRuntime } from '../katagoRuntime'
 import { probeOpenAICompatibleProvider } from '../llm/openaiCompatibleProvider'
+import { inspectKataGoAssets } from '../katago/katagoAssets'
 import type { DiagnosticCheck, DiagnosticsReport, DiagnosticsOverall } from './types'
+
+function isReleaseRuntime(): boolean {
+  return !process.env.ELECTRON_RENDERER_URL
+}
 
 async function checkWritableHome(): Promise<DiagnosticCheck> {
   try {
@@ -34,14 +39,17 @@ async function checkWritableHome(): Promise<DiagnosticCheck> {
 
 async function checkKatagoBinary(): Promise<DiagnosticCheck> {
   const runtime = resolveKataGoRuntime(getSettings())
+  const required = isReleaseRuntime()
   if (!runtime.katagoBin) {
     return {
       id: 'katago-binary',
       title: 'KataGo 引擎',
-      status: 'fail',
-      required: true,
+      status: required ? 'fail' : 'warn',
+      required,
       detail: '未找到内置或本机 KataGo 引擎。',
-      action: '请确认安装包包含 data/katago/bin/<platform>-<arch>/katago。'
+      action: required
+        ? '请确认安装包包含 data/katago/bin/<platform>-<arch>/katago。'
+        : '开发环境可稍后运行 scripts/prepare_katago_assets.mjs 或使用系统 KataGo。'
     }
   }
   try {
@@ -52,8 +60,8 @@ async function checkKatagoBinary(): Promise<DiagnosticCheck> {
       return {
         id: 'katago-binary',
         title: 'KataGo 引擎',
-        status: 'fail',
-        required: true,
+        status: required ? 'fail' : 'warn',
+        required,
         detail: `找到 ${basename(runtime.katagoBin)}，但没有执行权限。`,
         action: 'macOS/Linux 下请确保内置 katago 文件有可执行权限。',
         technicalDetail: String(error)
@@ -64,29 +72,56 @@ async function checkKatagoBinary(): Promise<DiagnosticCheck> {
     id: 'katago-binary',
     title: 'KataGo 引擎',
     status: 'pass',
-    required: true,
+    required,
     detail: `已找到: ${basename(runtime.katagoBin)}`
   }
 }
 
 async function checkKatagoModel(): Promise<DiagnosticCheck> {
   const runtime = resolveKataGoRuntime(getSettings())
+  const required = isReleaseRuntime()
   if (!runtime.katagoModel) {
     return {
       id: 'katago-model',
       title: 'KataGo 默认模型',
-      status: 'fail',
-      required: true,
+      status: required ? 'fail' : 'warn',
+      required,
       detail: '未找到默认 KataGo 模型。',
-      action: 'P0 安装包应该内置 b18 默认模型；请确认 data/katago/models 中存在默认模型文件。'
+      action: required
+        ? 'P0 安装包应该内置 b18 默认模型；请确认 data/katago/models 中存在默认模型文件。'
+        : '开发环境可先保留 manifest，通过资源准备脚本或 CI release artifact 注入模型。'
     }
   }
   return {
     id: 'katago-model',
     title: 'KataGo 默认模型',
     status: 'pass',
-    required: true,
+    required,
     detail: `已找到: ${basename(runtime.katagoModel)}`
+  }
+}
+
+async function checkBundledKataGoAssets(): Promise<DiagnosticCheck> {
+  const status = await inspectKataGoAssets()
+  const required = isReleaseRuntime()
+  if (status.ready) {
+    return {
+      id: 'katago-assets',
+      title: '内置 KataGo 资源',
+      status: 'pass',
+      required,
+      detail: status.detail
+    }
+  }
+  return {
+    id: 'katago-assets',
+    title: '内置 KataGo 资源',
+    status: required ? 'fail' : 'warn',
+    required,
+    detail: status.detail,
+    action: required
+      ? '请重新安装完整安装包，或检查 data/katago 资源是否损坏。'
+      : '开发环境可通过 scripts/prepare_katago_assets.mjs 准备资源。'
   }
 }
 
@@ -143,6 +178,7 @@ function summarize(checks: DiagnosticCheck[]): Pick<DiagnosticsReport, 'overall'
 export async function collectDiagnostics(): Promise<DiagnosticsReport> {
   const checks = await Promise.all([
     checkWritableHome(),
+    checkBundledKataGoAssets(),
     checkKatagoBinary(),
     checkKatagoModel(),
     checkLlmProxy()

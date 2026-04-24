@@ -168,6 +168,10 @@ export function resolveStudentByName(displayName: string, createdFrom: StudentPr
   })
 }
 
+export function upsertManualStudent(displayName: string): StudentProfile {
+  return resolveStudentByName(displayName, 'manual')
+}
+
 export function resolveStudentByFoxNickname(nickname: string): StudentProfile {
   const name = nickname.trim() || '默认学生'
   const existing = findByAlias(name)

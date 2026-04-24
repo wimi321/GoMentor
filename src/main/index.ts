@@ -11,6 +11,8 @@ import { testLlmSettings } from './services/llm'
 import { analyzeGameQuick, analyzePosition } from './services/katago'
 import { collectDiagnostics } from './services/diagnostics'
 import { searchKnowledgeCards } from './services/knowledge/searchLocal'
+import { inspectKataGoAssets } from './services/katago/katagoAssets'
+import { bindFoxGamesToStudent, bindSgfGameToStudent, suggestStudentBindings } from './services/library/studentBinding'
 import {
   attachGameToStudent,
   listStudents,
@@ -104,7 +106,7 @@ app.whenReady().then(() => {
       filters: [{ name: 'SGF files', extensions: ['sgf'] }]
     })
     if (picked.canceled) {
-      return dashboard()
+      return { dashboard: await dashboard(), imported: [] }
     }
     const imported = picked.filePaths.map((filePath) => importSgfFile(filePath, 'upload', 'Local upload'))
     upsertGames(imported)
@@ -115,7 +117,7 @@ app.whenReady().then(() => {
         attachGameToStudent(game.id, student.studentId)
       }
     }
-    return dashboard()
+    return { dashboard: await dashboard(), imported }
   })
 
   ipcMain.handle('library:record', async (_event, gameId: string) => {
@@ -129,14 +131,20 @@ app.whenReady().then(() => {
   ipcMain.handle('fox:sync', async (_event, payload: FoxSyncRequest) => {
     const result = await syncFoxGames(payload)
     upsertGames(result.saved)
-    const student = resolveStudentByFoxNickname(result.nickname || payload.keyword)
-    for (const game of result.saved) {
-      attachGameToStudent(game.id, student.studentId)
-    }
-    return { dashboard: await dashboard(), result }
+    const student = await bindFoxGamesToStudent({
+      foxNickname: result.nickname || payload.keyword,
+      gameIds: result.saved.map((game) => game.id),
+      aliases: [result.nickname, payload.keyword].filter(Boolean)
+    })
+    return { dashboard: await dashboard(), result, student }
   })
 
   ipcMain.handle('diagnostics:get', async () => collectDiagnostics())
+  ipcMain.handle('katago-assets:inspect', async () => inspectKataGoAssets())
+  ipcMain.handle('student:list', async () => listStudents())
+  ipcMain.handle('student:suggest-bindings', async (_event, payload) => suggestStudentBindings(payload))
+  ipcMain.handle('student:bind-sgf-game', async (_event, payload) => bindSgfGameToStudent(payload))
+  ipcMain.handle('student:bind-fox-games', async (_event, payload) => bindFoxGamesToStudent(payload))
   ipcMain.handle('students:list', async () => listStudents())
   ipcMain.handle('students:resolve-fox', async (_event, nickname: string) => resolveStudentByFoxNickname(nickname))
   ipcMain.handle('students:attach-game', async (_event, payload: { gameId: string; studentId: string }) => attachGameToStudent(payload.gameId, payload.studentId))

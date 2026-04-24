@@ -1,0 +1,42 @@
+.teacher-run-card {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line-strong, #343c43);
+  border-radius: 14px;
+  padding: 14px;
+  background: linear-gradient(180deg, #1d242a, #151a1f);
+}
+.teacher-run-card--empty { color: var(--text-muted, #9da7ae); }
+.teacher-run-card header span { color: var(--accent-gold, #d1ad62); font-size: 11px; font-weight: 900; }
+.teacher-run-card h3 { margin: 5px 0 4px; font-size: 18px; }
+.teacher-run-card p { margin: 0; line-height: 1.65; }
+.teacher-section { display: grid; gap: 8px; }
+.teacher-section h4 { margin: 0; font-size: 13px; color: #efe8d8; }
+.teacher-section ul { margin: 0; padding-left: 18px; color: var(--text-main, #f2efe7); line-height: 1.7; }
+.teacher-key-moves { display: grid; gap: 8px; }
+.teacher-key-move {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #2d353c;
+  border-left: 4px solid #8f9ba8;
+  border-radius: 10px;
+  background: #12171c;
+  color: inherit;
+  text-align: left;
+}
+.teacher-key-move--mistake { border-left-color: #c47142; }
+.teacher-key-move--blunder { border-left-color: #d35246; }
+.teacher-key-move--inaccuracy { border-left-color: #d1ad62; }
+.teacher-key-move strong { font-size: 13px; }
+.teacher-key-move span { color: var(--accent-gold, #d1ad62); font-size: 12px; }
+.teacher-key-move small { color: var(--text-muted, #9da7ae); line-height: 1.5; }
+.teacher-section--drills { border-radius: 12px; padding: 10px; background: #19231c; border: 1px solid rgb(89 200 138 / 0.18); }
+.teacher-tool-log { border-top: 1px solid var(--line-strong, #343c43); padding-top: 10px; }
+.teacher-tool-log summary { cursor: pointer; color: var(--text-muted, #9da7ae); font-size: 12px; font-weight: 800; }
+.teacher-tool-log-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; margin-top: 8px; padding: 8px; border-radius: 8px; background: #10151a; }
+.teacher-tool-log-row span { font-weight: 800; }
+.teacher-tool-log-row em { color: var(--text-faint, #707b84); font-style: normal; }
+.teacher-tool-log-row p { grid-column: 1 / -1; color: var(--text-muted, #9da7ae); font-size: 12px; }
+.teacher-tool-log-row--error { outline: 1px solid #da6158; }

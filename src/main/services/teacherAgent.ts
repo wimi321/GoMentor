@@ -22,6 +22,7 @@ import { callMultimodalTeacher, callTeacherText } from './llm'
 import { getStudentProfile, readStudentForGame, updateStudentProfile } from './studentProfile'
 import { runReview } from './review'
 import { applyDetectedDefaults, detectSystemProfile } from './systemProfile'
+import { parseStructuredTeacherResult, structuredResultOutputInstruction } from './teacher/structuredResultParser'
 
 type TeacherIntent = 'current-move' | 'game-review' | 'batch-review' | 'training-plan' | 'open-ended'
 
@@ -254,7 +255,8 @@ function systemPrompt(level: CoachUserLevel): string {
     'KataGo 结构化数据永远是事实裁判；棋盘截图只用于视觉理解；知识库只用于教学解释。',
     '不要编造坐标、胜率、目差或不存在的变化。',
     levelLine[level],
-    '输出中文 Markdown，先给结论，再讲原因，最后给一个可执行训练动作。'
+    '输出中文，先给结论，再讲原因，最后给一个可执行训练动作。',
+    structuredResultOutputInstruction()
   ].join('\n')
 }
 
@@ -468,6 +470,25 @@ function structuredFreeformResult(
   }
 }
 
+function structuredFromTeacherText(
+  markdown: string,
+  taskType: StructuredTeacherResult['taskType'],
+  knowledge: KnowledgePacket[],
+  fallback: () => StructuredTeacherResult
+): StructuredTeacherResult {
+  const parsed = parseStructuredTeacherResult({
+    text: markdown,
+    taskType,
+    knowledgeCardIds: knowledge.map((card) => card.id)
+  }) as StructuredTeacherResult
+  const looksStructured = parsed.headline !== '老师分析完成' ||
+    parsed.keyMistakes.length > 0 ||
+    parsed.correctThinking.length > 0 ||
+    parsed.drills.length > 0 ||
+    parsed.profileUpdates.errorTypes.length > 0
+  return looksStructured ? parsed : fallback()
+}
+
 async function runCurrentMove(request: TeacherRunRequest, logs: TeacherToolLog[], id: string): Promise<TeacherRunResult> {
   if (!request.gameId) {
     throw new Error('当前手分析需要先选择棋谱。')
@@ -549,7 +570,13 @@ async function runCurrentMove(request: TeacherRunRequest, logs: TeacherToolLog[]
   finishTool(profileLog, 'done', `累计复盘 ${updatedProfile.gamesReviewed} 盘，记录 ${updatedProfile.commonMistakes.length} 类问题。`)
 
   const title = `第 ${moveNumber} 手分析`
-  const structured = structuredCurrentMoveResult(title, markdown, analysis, knowledge)
+  const structured = structuredFromTeacherText(
+    markdown,
+    'current-move',
+    knowledge,
+    () => structuredCurrentMoveResult(title, markdown, analysis, knowledge)
+  )
+  markdown = structured.markdown || markdown
   const reportPath = saveReport(id, title, markdown, { analysis, knowledge, studentProfile: updatedProfile, structured })
   return {
     id,
@@ -561,6 +588,7 @@ async function runCurrentMove(request: TeacherRunRequest, logs: TeacherToolLog[]
     knowledge,
     studentProfile: updatedProfile,
     structured,
+    structuredResult: structured,
     reportPath
   }
 }
@@ -674,7 +702,13 @@ async function runBatchReview(request: TeacherRunRequest, logs: TeacherToolLog[]
   }
 
   const title = `${studentName} 最近 ${games.length} 盘画像`
-  const structured = structuredIssueResult('recent-games', title, markdown, issues, knowledge, profileUpdate)
+  const structured = structuredFromTeacherText(
+    markdown,
+    'recent-games',
+    knowledge,
+    () => structuredIssueResult('recent-games', title, markdown, issues, knowledge, profileUpdate)
+  )
+  markdown = structured.markdown || markdown
   const reportPath = saveReport(id, title, markdown, { games, issues, knowledge, studentProfile: profileUpdate, structured })
   return {
     id,
@@ -685,6 +719,7 @@ async function runBatchReview(request: TeacherRunRequest, logs: TeacherToolLog[]
     knowledge,
     studentProfile: profileUpdate,
     structured,
+    structuredResult: structured,
     reportPath
   }
 }
@@ -778,7 +813,13 @@ async function runGameReview(request: TeacherRunRequest, logs: TeacherToolLog[],
   }
 
   const title = `${game.black} vs ${game.white} 整盘复盘`
-  const structured = structuredIssueResult('full-game', title, markdown, issues, knowledge, updatedProfile)
+  const structured = structuredFromTeacherText(
+    markdown,
+    'full-game',
+    knowledge,
+    () => structuredIssueResult('full-game', title, markdown, issues, knowledge, updatedProfile)
+  )
+  markdown = structured.markdown || markdown
   const reportPath = saveReport(id, title, markdown, { game, issues, knowledge, studentProfile: updatedProfile, structured })
   return {
     id,
@@ -789,6 +830,7 @@ async function runGameReview(request: TeacherRunRequest, logs: TeacherToolLog[],
     knowledge,
     studentProfile: updatedProfile,
     structured,
+    structuredResult: structured,
     reportPath
   }
 }
@@ -836,7 +878,13 @@ async function runTrainingPlan(request: TeacherRunRequest, logs: TeacherToolLog[
   }
 
   const title = `${studentName} 训练计划`
-  const structured = structuredFreeformResult(title, markdown, knowledge, profile)
+  const structured = structuredFromTeacherText(
+    markdown,
+    'freeform',
+    knowledge,
+    () => structuredFreeformResult(title, markdown, knowledge, profile)
+  )
+  markdown = structured.markdown || markdown
   const reportPath = saveReport(id, title, markdown, { studentProfile: profile, knowledge, structured })
   return {
     id,
@@ -847,6 +895,7 @@ async function runTrainingPlan(request: TeacherRunRequest, logs: TeacherToolLog[
     knowledge,
     studentProfile: profile,
     structured,
+    structuredResult: structured,
     reportPath
   }
 }
@@ -977,7 +1026,13 @@ async function runOpenEndedTask(request: TeacherRunRequest, logs: TeacherToolLog
   }
 
   const title = `${studentName} 开放任务`
-  const structured = structuredFreeformResult(title, markdown, knowledge, profile)
+  const structured = structuredFromTeacherText(
+    markdown,
+    'freeform',
+    knowledge,
+    () => structuredFreeformResult(title, markdown, knowledge, profile)
+  )
+  markdown = structured.markdown || markdown
   const reportPath = saveReport(id, title, markdown, { studentProfile: profile, currentGameContext: recordSummary, environment: environmentSummary, knowledge, webSnippets, availableTools: toolCatalogPayload(), structured })
   return {
     id,
@@ -988,6 +1043,7 @@ async function runOpenEndedTask(request: TeacherRunRequest, logs: TeacherToolLog
     knowledge,
     studentProfile: profile,
     structured,
+    structuredResult: structured,
     reportPath
   }
 }

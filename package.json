@@ -29,7 +29,10 @@
     "dist:win": "pnpm build && electron-builder --win --publish never",
     "dist:linux": "pnpm build && electron-builder --linux --publish never",
     "postinstall": "electron-builder install-app-deps",
-    "prepare:python": "python3 -m pip install -r scripts/requirements.txt"
+    "prepare:python": "python3 -m pip install -r scripts/requirements.txt",
+    "prepare:katago-assets": "node scripts/prepare_katago_assets.mjs",
+    "check:katago-assets": "node scripts/check_katago_assets.mjs --mode=dev",
+    "check:katago-assets:release": "node scripts/check_katago_assets.mjs --mode=release"
   },
   "dependencies": {
     "electron-store": "^10.0.1",

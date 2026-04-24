@@ -100,6 +100,30 @@ export interface FoxSyncResult {
   saved: LibraryGame[]
 }
 
+export interface LibraryImportResult {
+  dashboard: DashboardData
+  imported: LibraryGame[]
+}
+
+export interface FoxSyncResponse {
+  dashboard: DashboardData
+  result: FoxSyncResult
+  student?: StudentProfile
+}
+
+export interface KataGoAssetStatus {
+  platformKey: string
+  manifestFound: boolean
+  binaryPath: string
+  binaryFound: boolean
+  binaryExecutable: boolean
+  modelPath: string
+  modelFound: boolean
+  modelDisplayName: string
+  ready: boolean
+  detail: string
+}
+
 export interface ReviewRequest {
   gameId: string
   playerName: string
@@ -196,6 +220,13 @@ export interface StudentProfile {
   lastAnalyzedAt?: string
 }
 
+export interface StudentBindingSuggestion {
+  student: StudentProfile
+  confidence: 'high' | 'medium' | 'low'
+  reason: string
+  color?: StoneColor
+}
+
 export interface TeacherKeyMistake {
   moveNumber?: number
   color?: StoneColor
@@ -264,6 +295,7 @@ export interface TeacherRunResult {
   knowledge: KnowledgePacket[]
   studentProfile?: StudentProfile
   structured?: StructuredTeacherResult
+  structuredResult?: StructuredTeacherResult
   reportPath?: string
 }
 
