@@ -162,17 +162,23 @@ function checkKatagoAssets() {
   push('pass', 'katago:manifest', 'KataGo manifest is readable')
 
   const paths = []
+  const manifestPath = (path) => {
+    if (!path) return null
+    return path.startsWith('data/katago/') ? path : `data/katago/${path}`
+  }
   if (manifest.modelFileName) paths.push(`data/katago/models/${manifest.modelFileName}`)
-  if (manifest.defaultModel?.path) paths.push(manifest.defaultModel.path)
+  if (manifest.defaultModelFileName) paths.push(`data/katago/models/${manifest.defaultModelFileName}`)
+  if (manifest.modelPath) paths.push(manifestPath(manifest.modelPath))
+  if (manifest.defaultModel?.path) paths.push(manifestPath(manifest.defaultModel.path))
   const platformPaths = manifest.supportedPlatforms ?? manifest.platforms ?? {}
   if (Array.isArray(platformPaths)) {
     for (const item of platformPaths) {
-      if (item.binaryPath) paths.push(item.binaryPath)
+      if (item.binaryPath) paths.push(manifestPath(item.binaryPath))
     }
   } else {
     for (const value of Object.values(platformPaths)) {
-      if (typeof value === 'string') paths.push(value)
-      if (value?.binaryPath) paths.push(value.binaryPath)
+      if (typeof value === 'string') paths.push(manifestPath(value))
+      if (value?.binaryPath) paths.push(manifestPath(value.binaryPath))
     }
   }
 

@@ -8,6 +8,7 @@ release
 __pycache__
 *.pyc
 coverage
+release-evidence
 
 *.tsbuildinfo
 

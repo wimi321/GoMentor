@@ -21,7 +21,20 @@ function walk(dir) {
 }
 
 const files = walk(releaseDir)
-const artifacts = files.filter((file) => /\.(dmg|zip|exe|AppImage|deb|tar\.gz|yml)$/i.test(file))
+function isPackagedArtifact(file) {
+  const rel = file.replace(root + '/', '')
+  if (
+    rel.includes('.app/') ||
+    rel.includes('-unpacked/') ||
+    rel.includes('/mac/') ||
+    rel.includes('/mac-arm64/')
+  ) {
+    return false
+  }
+  return /\.(dmg|zip|exe|AppImage|deb|tar\.gz)$/i.test(file)
+}
+
+const artifacts = files.filter(isPackagedArtifact)
 const mac = artifacts.filter((file) => /\.(dmg|zip)$/i.test(file) && /mac|darwin|KataSensei/i.test(file))
 const win = artifacts.filter((file) => /\.(exe|zip)$/i.test(file) && /win|KataSensei/i.test(file))
 const tiny = artifacts.filter((file) => statSync(file).size < minSizeBytes)
