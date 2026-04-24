@@ -1,25 +1,67 @@
 :root {
-  --ks-bg-app: #090b0f;
-  --ks-bg-panel: #10151b;
-  --ks-bg-panel-2: #151b22;
-  --ks-bg-elevated: #1a222b;
-  --ks-border-soft: rgba(255, 255, 255, 0.075);
-  --ks-border-strong: rgba(255, 255, 255, 0.14);
+  /* App surfaces: a charcoal stack with warmer raised panels. */
+  --ks-bg-app: #080a0d;
+  --ks-bg-app-2: #0d1115;
+  --ks-bg-panel: #11171d;
+  --ks-bg-panel-2: #161e25;
+  --ks-bg-elevated: #1c2630;
+  --ks-bg-glass: rgb(18 24 30 / 0.78);
+
+  /* Lines and borders: soft by default, stronger only for focus/selection. */
+  --ks-border-hairline: rgba(255, 255, 255, 0.055);
+  --ks-border-soft: rgba(255, 255, 255, 0.085);
+  --ks-border-strong: rgba(255, 255, 255, 0.16);
+
+  /* Text hierarchy: warm primary text, cool secondary copy. */
   --ks-text-main: #f4efe7;
-  --ks-text-muted: #a9b2bb;
-  --ks-text-faint: #737f89;
-  --ks-gold: #d8b567;
-  --ks-gold-strong: #ebcf86;
-  --ks-green: #63d18c;
-  --ks-blue: #72b7e6;
-  --ks-red: #ed6b61;
-  --ks-orange: #db9862;
+  --ks-text-muted: #a8b2bb;
+  --ks-text-faint: #75818c;
+  --ks-text-inverse: #11161a;
+
+  /* Intent colors: restrained accents for teaching, analysis, and risk. */
+  --ks-gold: #d6b66e;
+  --ks-gold-strong: #efd38f;
+  --ks-green: #65d391;
+  --ks-teal: #5fd4cf;
+  --ks-blue: #76b8e8;
+  --ks-red: #e46f67;
+  --ks-orange: #d99a63;
   --ks-purple: #b68ee8;
+
+  /* Board palette: natural kaya-inspired wood, not saturated orange. */
+  --ks-board-light: #d8ad6b;
+  --ks-board-mid: #bf8747;
+  --ks-board-dark: #7c5229;
+  --ks-board-line: rgba(38, 22, 11, 0.74);
+
+  /* Layout rhythm. */
+  --ks-space-1: 4px;
+  --ks-space-2: 8px;
+  --ks-space-3: 12px;
+  --ks-space-4: 16px;
+  --ks-space-5: 20px;
+  --ks-space-6: 24px;
+
+  /* Radius scale: compact tools stay crisp, panels are gently rounded. */
+  --ks-radius-xs: 6px;
   --ks-radius-sm: 8px;
   --ks-radius-md: 12px;
   --ks-radius-lg: 18px;
-  --ks-shadow-soft: 0 16px 44px rgba(0, 0, 0, 0.32);
-  --ks-shadow-hard: 0 24px 70px rgba(0, 0, 0, 0.46);
+  --ks-radius-xl: 24px;
+
+  /* Elevation: soft desktop depth without floating-card clutter. */
+  --ks-shadow-soft: 0 18px 48px rgba(0, 0, 0, 0.34);
+  --ks-shadow-hard: 0 28px 80px rgba(0, 0, 0, 0.48);
+  --ks-shadow-inner: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+
+  /* Motion: short enough for analysis tools, visible enough for polish. */
+  --ks-motion-fast: 120ms ease;
+  --ks-motion-med: 180ms ease;
+
+  /* Layering. */
+  --ks-z-tooltip: 30;
+  --ks-z-modal: 60;
+
   --ks-font-ui: 'Avenir Next', 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif;
 }
 

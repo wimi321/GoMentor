@@ -26,6 +26,7 @@ import { KeyMoveNavigator, type KeyMoveSummary } from './features/board/KeyMoveN
 import { WinrateTimelineV2 } from './features/board/WinrateTimelineV2'
 import { parseBoardPoint, type RenderKeyMove } from './features/board/boardGeometry'
 import { DiagnosticsGate } from './features/diagnostics/DiagnosticsGate'
+import { UiGallery } from './features/gallery/UiGallery'
 import { BetaAcceptancePanel, type BetaAcceptanceItem } from './features/release/BetaAcceptancePanel'
 import { StudentBindingDialog } from './features/student/StudentBindingDialog'
 import { StudentRailCard } from './features/student/StudentRailCard'
@@ -162,7 +163,16 @@ function keyMoveMarksFromSummaries(
   })
 }
 
+function shouldOpenUiGallery(): boolean {
+  const search = new URLSearchParams(window.location.search)
+  return search.has('ui-gallery') || window.location.hash === '#/ui-gallery'
+}
+
 export function App(): ReactElement {
+  if (shouldOpenUiGallery()) {
+    return <UiGallery />
+  }
+
   const [dashboard, setDashboard] = useState<DashboardData>(emptyDashboard)
   const [selectedId, setSelectedId] = useState('')
   const [record, setRecord] = useState<GameRecord | null>(null)
@@ -804,6 +814,7 @@ function LibraryPanel({
         gameCount={currentStudent?.recentGameIds.length ?? 0}
         lastAnalyzedAt={currentStudent?.lastAnalyzedAt}
         weaknessStats={currentStudent?.weaknessStats}
+        trainingFocus={currentStudent?.trainingFocus}
         onAnalyzeRecent={onAnalyzeRecent}
       />
       <div className="library-list-head">
@@ -814,7 +825,7 @@ function LibraryPanel({
         {pageGames.map((game) => (
           <button key={game.id} className={`game-row ${selectedGame?.id === game.id ? 'is-active' : ''}`} onClick={() => onSelect(game.id)}>
             <span>{gameDisplayName(game)}</span>
-            <small>{game.date || '未知日期'} · {game.result || '未知结果'}</small>
+            <small>{game.date || '未知日期'} · {game.result || '未知结果'} · {game.source === 'fox' ? 'Fox' : 'SGF'}</small>
           </button>
         ))}
         {pageGames.length === 0 ? <div className="empty-list">没有匹配的棋谱</div> : null}

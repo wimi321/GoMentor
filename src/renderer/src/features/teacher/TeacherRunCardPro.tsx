@@ -31,7 +31,7 @@ function pickStructured(result: unknown): AnyRecord {
 }
 
 function pickSummary(structured: AnyRecord, markdown?: string): string {
-  return stringValue(structured.summary) || stringValue(structured.oneLineSummary) || stringValue(structured.title) || (markdown ?? '').split('\n').find((line) => line.trim())?.trim() || '老师正在整理这盘棋的重点。'
+  return stringValue(structured.headline) || stringValue(structured.summary) || stringValue(structured.oneLineSummary) || stringValue(structured.title) || (markdown ?? '').split('\n').find((line) => line.trim())?.trim() || '老师正在整理这盘棋的重点。'
 }
 
 function pickKeyMoves(structured: AnyRecord): AnyRecord[] {
@@ -58,13 +58,41 @@ function pickTraining(structured: AnyRecord): string[] {
   return text ? [text] : []
 }
 
+function pickStringList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => typeof item === 'string' ? item : stringValue(asRecord(item).text ?? asRecord(item).title ?? asRecord(item).summary)).filter(Boolean)
+  }
+  const text = stringValue(value)
+  return text ? [text] : []
+}
+
 function pickEvidence(structured: AnyRecord): string[] {
   const raw = structured.evidence ?? structured.katagoEvidence ?? structured.reasoningEvidence
   if (Array.isArray(raw)) {
     return raw.map((item) => typeof item === 'string' ? item : stringValue(asRecord(item).text ?? asRecord(item).label)).filter(Boolean).slice(0, 5)
   }
   const text = stringValue(raw)
-  return text ? [text] : []
+  if (text) {
+    return [text]
+  }
+  return pickKeyMoves(structured)
+    .map((move) => stringValue(move.evidence))
+    .filter(Boolean)
+    .slice(0, 4)
+}
+
+function pickRecommendations(structured: AnyRecord): string[] {
+  return pickStringList(structured.recommendations ?? structured.correctThinking ?? structured.suggestions ?? structured.nextThinking).slice(0, 5)
+}
+
+function pickFollowups(structured: AnyRecord): string[] {
+  return pickStringList(structured.followupQuestions ?? structured.followups ?? structured.askNext).slice(0, 4)
+}
+
+function pickErrorTypes(structured: AnyRecord, keyMoves: AnyRecord[]): string[] {
+  const explicit = pickStringList(structured.errorTypes ?? structured.mistakeTypes)
+  const fromMoves = keyMoves.map((move) => stringValue(move.errorType ?? move.type ?? move.severity)).filter(Boolean)
+  return Array.from(new Set([...explicit, ...fromMoves])).slice(0, 5)
 }
 
 function pickToolLogs(result: unknown): AnyRecord[] {
@@ -106,8 +134,12 @@ export function TeacherRunCardPro({
   const actionMoves = keyMoveActions(keyMoves)
   const training = pickTraining(structured)
   const evidence = pickEvidence(structured)
+  const recommendations = pickRecommendations(structured)
+  const followups = pickFollowups(structured)
+  const errorTypes = pickErrorTypes(structured, keyMoves)
   const toolLogs = pickToolLogs(result)
   const error = stringValue(asRecord(result).error ?? structured.error)
+  const detailSummary = stringValue(structured.summary)
 
   return (
     <article className={`ks-teacher-pro-card ${running ? 'ks-teacher-pro-card--running' : ''}`}>
@@ -121,12 +153,33 @@ export function TeacherRunCardPro({
 
       {error ? <div className="ks-teacher-pro-error">{error}</div> : null}
 
+      {!running ? (
+        <section className="ks-teacher-pro-summary">
+          <span>一句话结论</span>
+          <p>{detailSummary && detailSummary !== summary ? detailSummary : summary}</p>
+        </section>
+      ) : (
+        <section className="ks-teacher-pro-summary ks-teacher-pro-summary--loading">
+          <span>老师正在执行</span>
+          <p>正在看棋盘、查 KataGo 候选点、检索教学卡，并把结果整理成学生能执行的训练建议。</p>
+        </section>
+      )}
+
       {evidence.length > 0 ? (
         <section className="ks-teacher-pro-section">
           <h4>KataGo 证据</h4>
-          <ul className="ks-teacher-pro-list">
-            {evidence.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}
-          </ul>
+          <div className="ks-teacher-pro-evidence">
+            {evidence.map((item, index) => <div key={`${index}-${item}`}><span>{index + 1}</span><p>{item}</p></div>)}
+          </div>
+        </section>
+      ) : null}
+
+      {errorTypes.length > 0 ? (
+        <section className="ks-teacher-pro-section">
+          <h4>错误类型</h4>
+          <div className="ks-teacher-pro-tags">
+            {errorTypes.map((item) => <span key={item}>{item}</span>)}
+          </div>
         </section>
       ) : null}
 
@@ -157,6 +210,24 @@ export function TeacherRunCardPro({
           <ol className="ks-teacher-pro-training">
             {training.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}
           </ol>
+        </section>
+      ) : null}
+
+      {recommendations.length > 0 ? (
+        <section className="ks-teacher-pro-section">
+          <h4>推荐思路</h4>
+          <div className="ks-teacher-pro-recommendations">
+            {recommendations.map((item, index) => <span key={`${index}-${item}`}>{item}</span>)}
+          </div>
+        </section>
+      ) : null}
+
+      {followups.length > 0 ? (
+        <section className="ks-teacher-pro-section">
+          <h4>可继续追问</h4>
+          <div className="ks-teacher-pro-followups">
+            {followups.map((item) => <button key={item} type="button">{item}</button>)}
+          </div>
         </section>
       ) : null}
 

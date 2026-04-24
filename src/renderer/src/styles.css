@@ -3,25 +3,26 @@
 @import './features/teacher/teacher-pro.css';
 @import './features/board/sprint4-board.css';
 @import './features/teacher/sprint4-teacher.css';
+@import './features/gallery/ui-gallery.css';
 
 :root {
   color-scheme: dark;
   font-family: 'Avenir Next', 'PingFang SC', 'Noto Sans SC', sans-serif;
-  --surface-0: #0c0f12;
-  --surface-1: #11151a;
-  --surface-2: #171d22;
-  --surface-3: #20262c;
+  --surface-0: var(--ks-bg-app);
+  --surface-1: var(--ks-bg-panel);
+  --surface-2: var(--ks-bg-panel-2);
+  --surface-3: var(--ks-bg-elevated);
   --line-soft: #242b31;
   --line-strong: #343c43;
-  --text-main: #f2efe7;
-  --text-muted: #9da7ae;
-  --text-faint: #707b84;
-  --accent-gold: #d1ad62;
-  --accent-gold-strong: #e1c577;
-  --accent-green: #59c88a;
-  --accent-blue: #65a9d8;
-  --accent-red: #da6158;
-  --shadow-raised: 0 18px 40px rgb(0 0 0 / 0.28);
+  --text-main: var(--ks-text-main);
+  --text-muted: var(--ks-text-muted);
+  --text-faint: var(--ks-text-faint);
+  --accent-gold: var(--ks-gold);
+  --accent-gold-strong: var(--ks-gold-strong);
+  --accent-green: var(--ks-green);
+  --accent-blue: var(--ks-blue);
+  --accent-red: var(--ks-red);
+  --shadow-raised: var(--ks-shadow-soft);
   background: var(--surface-0);
   color: var(--text-main);
 }
@@ -90,7 +91,8 @@ textarea {
   height: 100vh;
   overflow: hidden;
   background:
-    linear-gradient(90deg, #11161a 0, #0b0e11 46%, #111418 100%),
+    radial-gradient(circle at 50% -12%, rgb(214 182 110 / 0.075), transparent 34%),
+    linear-gradient(90deg, #11161a 0, #090c10 46%, #11161a 100%),
     var(--surface-0);
 }
 
@@ -102,7 +104,7 @@ textarea {
 .teacher-column {
   min-height: 0;
   border-color: var(--line-soft);
-  background: color-mix(in srgb, var(--surface-2) 82%, black 18%);
+  background: color-mix(in srgb, var(--surface-2) 78%, black 22%);
 }
 
 .library-rail {
@@ -123,7 +125,8 @@ textarea {
   min-height: 56px;
   padding: 12px 14px;
   border-bottom: 1px solid var(--line-soft);
-  background: rgb(12 15 18 / 0.4);
+  background: rgb(12 15 18 / 0.54);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.025);
 }
 
 .rail-head strong,
@@ -345,10 +348,11 @@ label,
   display: grid;
   min-height: 120px;
   place-items: center;
-  border: 1px dashed var(--line-strong);
-  border-radius: 8px;
+  border: 1px dashed color-mix(in srgb, var(--line-strong) 80%, var(--accent-gold));
+  border-radius: var(--ks-radius-md);
   color: var(--text-muted);
   font-size: 12px;
+  background: rgb(255 255 255 / 0.02);
 }
 
 .game-row {
@@ -356,24 +360,30 @@ label,
   flex-direction: column;
   gap: 6px;
   width: 100%;
-  padding: 10px;
+  padding: 10px 11px;
   border: 1px solid transparent;
-  border-radius: 8px;
-  background: linear-gradient(180deg, #1a2026, #151a1f);
+  border-radius: var(--ks-radius-md);
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.035), rgb(255 255 255 / 0.012)),
+    #151b21;
   color: var(--text-main);
   text-align: left;
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.025);
+  transition: border-color var(--ks-motion-fast), background var(--ks-motion-fast), transform var(--ks-motion-fast);
 }
 
 .game-row.is-active {
   border-color: color-mix(in srgb, var(--accent-gold) 70%, var(--line-soft));
-  background: linear-gradient(180deg, #28271e, #1b211d);
-  box-shadow: inset 3px 0 0 var(--accent-gold), 0 10px 24px rgb(0 0 0 / 0.16);
+  background:
+    linear-gradient(90deg, rgb(214 182 110 / 0.16), transparent 48%),
+    linear-gradient(180deg, #23251f, #171f1c);
+  box-shadow: inset 3px 0 0 var(--accent-gold), 0 10px 24px rgb(0 0 0 / 0.18);
 }
 
 .game-row:hover:not(.is-active) {
   border-color: var(--line-strong);
   background: #1d242a;
+  transform: translateY(-1px);
 }
 
 .game-row span {
@@ -423,7 +433,8 @@ label,
   padding: 10px 22px 14px;
   overflow: hidden;
   background:
-    linear-gradient(180deg, #0e1114 0, #090b0e 100%),
+    radial-gradient(circle at 50% 8%, rgb(214 182 110 / 0.06), transparent 34%),
+    linear-gradient(180deg, #0e1216 0, #080a0d 100%),
     var(--surface-0);
 }
 
@@ -463,8 +474,8 @@ label,
   min-height: 40px;
   padding: 5px 8px;
   border: 1px solid var(--line-soft);
-  border-radius: 8px;
-  background: rgb(15 18 21 / 0.72);
+  border-radius: var(--ks-radius-md);
+  background: rgb(15 18 21 / 0.76);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.035);
 }
 
@@ -545,9 +556,12 @@ label,
   width: min(70vh, 70vw);
   aspect-ratio: 1;
   place-items: center;
-  border: 1px dashed var(--line-strong);
-  border-radius: 8px;
+  border: 1px dashed color-mix(in srgb, var(--line-strong) 78%, var(--accent-gold));
+  border-radius: var(--ks-radius-lg);
   color: var(--text-muted);
+  background:
+    radial-gradient(circle at 50% 45%, rgb(214 182 110 / 0.07), transparent 36%),
+    rgb(255 255 255 / 0.018);
 }
 
 .go-board {
@@ -950,7 +964,9 @@ label,
 }
 
 .teacher-panel {
-  background: linear-gradient(180deg, #171b20, #12161a);
+  background:
+    radial-gradient(circle at 50% 0%, rgb(118 184 232 / 0.055), transparent 30%),
+    linear-gradient(180deg, #171e25, #10151a);
 }
 
 .teacher-title {
@@ -1117,16 +1133,38 @@ label,
   padding: 12px;
   border-bottom: 1px solid var(--line-soft);
   overflow: auto;
-  background: linear-gradient(180deg, #11161b, #0f1317);
+  background:
+    radial-gradient(circle at 20% 0%, rgb(214 182 110 / 0.055), transparent 32%),
+    linear-gradient(180deg, #11171d, #0d1217);
+}
+
+.runtime-settings {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--ks-border-soft);
+  border-radius: var(--ks-radius-md);
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.035), rgb(255 255 255 / 0.012));
+}
+
+.runtime-settings header h2 {
+  margin: 2px 0 4px;
+  font-size: 18px;
+}
+
+.runtime-settings header p:not(.eyebrow) {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.55;
 }
 
 .runtime-card {
   display: grid;
   gap: 9px;
-  padding: 10px;
+  padding: 11px;
   border: 1px solid var(--line-soft);
-  border-radius: 8px;
-  background: #10151a;
+  border-radius: var(--ks-radius-md);
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.035), rgb(255 255 255 / 0.012)), #10151a;
 }
 
 .runtime-card header,

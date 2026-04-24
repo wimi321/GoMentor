@@ -4,15 +4,16 @@
   z-index: 50;
   display: grid;
   place-items: center;
-  background: rgb(0 0 0 / 0.58);
+  background: rgb(0 0 0 / 0.62);
+  backdrop-filter: blur(8px);
 }
 .student-dialog {
   width: min(520px, calc(100vw - 32px));
   padding: 20px;
   border: 1px solid var(--line-strong, #343c43);
-  border-radius: 14px;
-  background: #151a1f;
-  box-shadow: 0 24px 80px rgb(0 0 0 / 0.42);
+  border-radius: var(--ks-radius-lg, 18px);
+  background: linear-gradient(180deg, #1a222a, #10161c);
+  box-shadow: 0 28px 86px rgb(0 0 0 / 0.48), inset 0 1px 0 rgb(255 255 255 / 0.04);
 }
 .student-dialog h2 { margin: 0 0 8px; }
 .student-dialog p { color: var(--text-muted, #9da7ae); }
@@ -42,18 +43,46 @@
 .student-rail-card {
   display: grid;
   gap: 10px;
-  padding: 12px;
+  padding: 13px;
   border: 1px solid var(--line-soft, #242b31);
-  border-radius: 12px;
-  background: linear-gradient(180deg, #1c2329, #151a1f);
+  border-radius: var(--ks-radius-md, 12px);
+  background:
+    radial-gradient(circle at 15% 0%, rgb(214 182 110 / 0.09), transparent 42%),
+    linear-gradient(180deg, #1b242c, #121820);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.035);
 }
 .student-rail-head { display: grid; gap: 4px; }
 .student-rail-head span { color: var(--text-faint, #707b84); font-size: 11px; font-weight: 900; }
-.student-rail-head strong { font-size: 16px; }
+.student-rail-head strong { font-size: 18px; line-height: 1.15; }
 .student-rail-card p { margin: 0; color: var(--text-muted, #9da7ae); font-size: 12px; }
 .student-rail-card dl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0; }
-.student-rail-card dl div { padding: 8px; border-radius: 8px; background: #11161b; }
+.student-rail-card dl div { padding: 8px; border: 1px solid rgb(255 255 255 / 0.055); border-radius: 8px; background: #10161c; }
 .student-rail-card dt { color: var(--text-faint, #707b84); font-size: 11px; }
 .student-rail-card dd { margin: 2px 0 0; font-weight: 800; }
 .student-weakness-list { display: flex; flex-wrap: wrap; gap: 6px; }
-.student-weakness-list span { padding: 4px 7px; border-radius: 999px; background: #222a31; color: var(--text-muted, #9da7ae); font-size: 11px; }
+.student-weakness-list span { padding: 4px 7px; border: 1px solid rgb(214 182 110 / 0.14); border-radius: 999px; background: rgb(214 182 110 / 0.09); color: var(--ks-gold-strong, #ebcf86); font-size: 11px; font-weight: 800; }
+.student-training-focus {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid rgb(255 255 255 / 0.06);
+  border-radius: 10px;
+  background: rgb(0 0 0 / 0.14);
+}
+.student-training-focus small {
+  color: var(--text-faint, #707b84);
+  font-size: 11px;
+  font-weight: 900;
+}
+.student-training-focus ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 16px;
+  color: var(--text-muted, #9da7ae);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.student-training-focus p {
+  color: var(--text-faint, #707b84);
+}

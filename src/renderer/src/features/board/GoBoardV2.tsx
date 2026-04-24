@@ -91,7 +91,9 @@ function CandidateMark({
 }): ReactElement {
   const p = xy(candidate, boardSize)
   const className = `ks-candidate ks-candidate--${candidate.emphasis}`
-  const subLabel = candidate.scoreLabel ?? candidate.winrateLabel ?? candidate.visitsLabel ?? candidate.label
+  const subLabel = candidate.emphasis === 'quiet'
+    ? candidate.winrateLabel
+    : candidate.scoreLabel ?? candidate.winrateLabel ?? candidate.visitsLabel ?? candidate.label
   return (
     <g
       className={className}
@@ -102,10 +104,11 @@ function CandidateMark({
       }}
       onPointerLeave={() => onHover?.(null)}
     >
+      <circle className="ks-candidate-soft-glow" r="31" />
       <circle className="ks-candidate-ring" r="27" />
       <circle className="ks-candidate-disc" r="20" />
       <text className="ks-candidate-rank" y="-2">{candidate.rank}</text>
-      <text className="ks-candidate-sub" y="13">{subLabel}</text>
+      {subLabel ? <text className="ks-candidate-sub" y="13">{subLabel}</text> : null}
     </g>
   )
 }
@@ -157,34 +160,47 @@ export function GoBoardV2({ record, moveNumber, analysis = null, keyMoves = [], 
       <svg className="ks-go-board-v2" viewBox={`0 0 ${VIEWBOX} ${VIEWBOX}`} role="img" aria-label="围棋棋盘" onPointerDown={handlePointerDown}>
         <defs>
           <linearGradient id="ks-board-wood" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#d7a75f" />
-            <stop offset="0.38" stopColor="#c18a43" />
-            <stop offset="1" stopColor="#93612c" />
+            <stop offset="0" stopColor="var(--ks-board-light, #d8ad6b)" />
+            <stop offset="0.44" stopColor="var(--ks-board-mid, #bf8747)" />
+            <stop offset="1" stopColor="var(--ks-board-dark, #7c5229)" />
+          </linearGradient>
+          <linearGradient id="ks-board-edge" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#f0c987" />
+            <stop offset="0.12" stopColor="#ba7c39" />
+            <stop offset="0.86" stopColor="#6d431f" />
+            <stop offset="1" stopColor="#3f2615" />
           </linearGradient>
           <filter id="ks-board-shadow" x="-20%" y="-20%" width="140%" height="140%">
             <feDropShadow dx="0" dy="28" stdDeviation="22" floodColor="#000" floodOpacity="0.42" />
           </filter>
           <radialGradient id="ks-black-stone" cx="34%" cy="28%" r="72%">
-            <stop offset="0" stopColor="#52565a" />
-            <stop offset="0.2" stopColor="#23272b" />
-            <stop offset="0.72" stopColor="#050607" />
+            <stop offset="0" stopColor="#62676c" />
+            <stop offset="0.14" stopColor="#2f3439" />
+            <stop offset="0.58" stopColor="#080a0c" />
             <stop offset="1" stopColor="#000" />
           </radialGradient>
           <radialGradient id="ks-white-stone" cx="32%" cy="24%" r="75%">
             <stop offset="0" stopColor="#ffffff" />
-            <stop offset="0.38" stopColor="#eee8dc" />
-            <stop offset="0.82" stopColor="#b9b2a7" />
-            <stop offset="1" stopColor="#8f887f" />
+            <stop offset="0.34" stopColor="#f4efe7" />
+            <stop offset="0.78" stopColor="#cfc7ba" />
+            <stop offset="1" stopColor="#91897f" />
+          </radialGradient>
+          <radialGradient id="ks-stone-highlight" cx="34%" cy="22%" r="50%">
+            <stop offset="0" stopColor="rgba(255,255,255,.82)" />
+            <stop offset="0.5" stopColor="rgba(255,255,255,.18)" />
+            <stop offset="1" stopColor="rgba(255,255,255,0)" />
           </radialGradient>
           <pattern id="ks-board-grain" width="92" height="46" patternUnits="userSpaceOnUse">
             <path d="M0 8 C24 0 46 18 92 8" stroke="rgba(70,35,10,.14)" strokeWidth="2" fill="none" />
             <path d="M0 31 C30 44 58 23 92 36" stroke="rgba(255,232,165,.10)" strokeWidth="1.5" fill="none" />
+            <path d="M0 19 C18 15 38 24 58 17 S78 12 92 17" stroke="rgba(82,41,14,.08)" strokeWidth="1" fill="none" />
           </pattern>
         </defs>
 
         <rect className="ks-board-drop" x="20" y="20" width="880" height="880" rx="30" filter="url(#ks-board-shadow)" />
-        <rect className="ks-board-surface-v2" x="28" y="28" width="864" height="864" rx="26" />
-        <rect x="28" y="28" width="864" height="864" rx="26" fill="url(#ks-board-grain)" opacity="0.55" />
+        <rect className="ks-board-bevel" x="25" y="25" width="870" height="870" rx="28" />
+        <rect className="ks-board-surface-v2" x="34" y="34" width="852" height="852" rx="20" />
+        <rect x="34" y="34" width="852" height="852" rx="20" fill="url(#ks-board-grain)" opacity="0.68" />
 
         <g className="ks-grid-lines">
           {lines.map((index) => {
@@ -233,7 +249,9 @@ export function GoBoardV2({ record, moveNumber, analysis = null, keyMoves = [], 
             const isLast = stone.moveNumber === lastStone?.moveNumber
             return (
               <g key={stone.moveNumber} className={`ks-stone ks-stone--${stone.color}`} transform={`translate(${p.x} ${p.y})`}>
-                <circle r="22" />
+                <circle className="ks-stone-shadow" r="24" />
+                <circle className="ks-stone-body" r="22.2" />
+                <ellipse className="ks-stone-highlight" cx="-6.5" cy="-8.2" rx="8.6" ry="5.2" />
                 {isLast ? <circle className={`ks-last-move ks-last-move--${stone.color}`} r="8" /> : null}
               </g>
             )

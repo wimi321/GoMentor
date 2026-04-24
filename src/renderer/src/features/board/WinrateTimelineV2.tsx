@@ -58,6 +58,8 @@ function buildPoints(evaluations: KataGoMoveAnalysis[], totalMoves: number): Tim
 
 export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, loading = false, loadingLabel = '', onMove }: WinrateTimelineV2Props): ReactElement {
   const [dragging, setDragging] = useState(false)
+  const [hoveredMove, setHoveredMove] = useState<number | null>(null)
+  const [hoverLeft, setHoverLeft] = useState(0)
   const draggingRef = useRef(false)
   const points = useMemo(() => buildPoints(evaluations, totalMoves), [evaluations, totalMoves])
   const width = 980
@@ -72,6 +74,15 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
   const path = points.length > 1
     ? points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${x(point.moveNumber).toFixed(1)} ${y(point.winrate).toFixed(1)}`).join(' ')
     : ''
+  const areaPath = path && points.length > 1
+    ? `${path} L ${x(points[points.length - 1].moveNumber).toFixed(1)} ${height - padY} L ${x(points[0].moveNumber).toFixed(1)} ${height - padY} Z`
+    : ''
+  const hoverPoint = hoveredMove === null
+    ? null
+    : points.reduce<TimelinePoint | null>((nearest, point) => {
+      if (!nearest) return point
+      return Math.abs(point.moveNumber - hoveredMove) < Math.abs(nearest.moveNumber - hoveredMove) ? point : nearest
+    }, null)
 
   function moveFromEvent(event: React.PointerEvent<SVGSVGElement>): number {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -98,6 +109,11 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
   }
 
   function handlePointerMove(event: React.PointerEvent<SVGSVGElement>): void {
+    const move = moveFromEvent(event)
+    const rect = event.currentTarget.getBoundingClientRect()
+    const rawLeft = event.clientX - rect.left
+    setHoveredMove(move)
+    setHoverLeft(Math.min(Math.max(8, rawLeft + 10), Math.max(8, rect.width - 166)))
     if (draggingRef.current) {
       selectMove(event)
     }
@@ -125,6 +141,11 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerEnd}
         onPointerCancel={handlePointerEnd}
+        onPointerLeave={() => {
+          if (!draggingRef.current) {
+            setHoveredMove(null)
+          }
+        }}
         role="img"
         aria-label="胜率图"
       >
@@ -146,6 +167,7 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
           <line key={col} className="ks-timeline-grid ks-timeline-grid--vertical" x1={padX + col * plotW} y1={padY} x2={padX + col * plotW} y2={height - padY} />
         ))}
         <line className="ks-timeline-center" x1={padX} y1={y(0.5)} x2={width - padX} y2={y(0.5)} />
+        {areaPath ? <path className="ks-timeline-area" d={areaPath} /> : null}
         {path ? <path className="ks-timeline-line" d={path} /> : null}
         {points.map((point) => {
           const visibleLoss = typeof point.loss === 'number' && Math.abs(point.loss) >= 0.04
@@ -159,12 +181,24 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
           <circle key={`dot-${point.moveNumber}`} className={`ks-timeline-dot ks-timeline-dot--${point.severity}`} cx={x(point.moveNumber)} cy={y(point.winrate)} r="4.5" />
         ))}
         <line className="ks-timeline-current" x1={x(currentMoveNumber)} y1={padY} x2={x(currentMoveNumber)} y2={height - padY} />
+        {hoverPoint ? (
+          <g className="ks-timeline-hover">
+            <line className="ks-timeline-hover-line" x1={x(hoverPoint.moveNumber)} y1={padY} x2={x(hoverPoint.moveNumber)} y2={height - padY} />
+            <circle className="ks-timeline-hover-dot" cx={x(hoverPoint.moveNumber)} cy={y(hoverPoint.winrate)} r="5" />
+          </g>
+        ) : null}
         <g transform={`translate(${x(currentMoveNumber)} ${padY + 12})`}>
           <rect className="ks-timeline-current-label-bg" x="-21" y="-12" width="42" height="22" rx="11" />
           <text className="ks-timeline-current-label" y="4">{currentMoveNumber}</text>
         </g>
         {points.length === 0 ? <text className="ks-timeline-empty" x={width / 2} y={height / 2}>导入棋谱后生成胜率图</text> : null}
       </svg>
+      {hoverPoint ? (
+        <div className="ks-timeline-tooltip" style={{ left: `${Math.round(hoverLeft)}px` }}>
+          <strong>第 {hoverPoint.moveNumber} 手 · {Math.round(hoverPoint.winrate * 100)}%</strong>
+          <span>目差估计 {(hoverPoint.winrate * 20 - 10).toFixed(1)} · {hoverPoint.severity === 'blunder' ? '重大问题' : hoverPoint.severity === 'mistake' ? '问题手' : hoverPoint.severity === 'inaccuracy' ? '缓手' : '走势点'}</span>
+        </div>
+      ) : null}
     </div>
   )
 }

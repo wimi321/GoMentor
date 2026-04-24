@@ -7,10 +7,19 @@ export interface StudentRailCardProps {
   gameCount?: number
   lastAnalyzedAt?: string
   weaknessStats?: Record<string, number>
+  trainingFocus?: string[]
   onAnalyzeRecent?: () => void
 }
 
-export function StudentRailCard({ displayName, primaryFoxNickname, gameCount = 0, lastAnalyzedAt, weaknessStats = {}, onAnalyzeRecent }: StudentRailCardProps): ReactElement {
+export function StudentRailCard({
+  displayName,
+  primaryFoxNickname,
+  gameCount = 0,
+  lastAnalyzedAt,
+  weaknessStats = {},
+  trainingFocus = [],
+  onAnalyzeRecent
+}: StudentRailCardProps): ReactElement {
   const topWeakness = Object.entries(weaknessStats).sort((a, b) => b[1] - a[1]).slice(0, 3)
   return (
     <section className="student-rail-card">
@@ -25,6 +34,16 @@ export function StudentRailCard({ displayName, primaryFoxNickname, gameCount = 0
       </dl>
       <div className="student-weakness-list">
         {topWeakness.length > 0 ? topWeakness.map(([name, count]) => <span key={name}>{name} × {count}</span>) : <span>暂无稳定弱点</span>}
+      </div>
+      <div className="student-training-focus">
+        <small>训练重点</small>
+        {trainingFocus.length > 0 ? (
+          <ul>
+            {trainingFocus.slice(0, 3).map((item) => <li key={item}>{item}</li>)}
+          </ul>
+        ) : (
+          <p>完成一次分析后，老师会自动沉淀训练重点。</p>
+        )}
       </div>
       <button className="ghost-button" disabled={!onAnalyzeRecent || gameCount === 0} onClick={onAnalyzeRecent}>分析最近 10 局</button>
     </section>

@@ -50,8 +50,11 @@
 .beta-acceptance-panel {
   border: 1px solid var(--ks-line-soft, #242b31);
   border-radius: 14px;
-  background: linear-gradient(180deg, rgb(22 27 32 / 0.94), rgb(14 18 22 / 0.94));
+  background:
+    radial-gradient(circle at 15% 0%, rgb(95 212 207 / 0.055), transparent 36%),
+    linear-gradient(180deg, rgb(22 29 36 / 0.94), rgb(12 17 22 / 0.96));
   overflow: hidden;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.03);
 }
 
 .beta-acceptance-panel__head {
@@ -98,9 +101,9 @@
 }
 
 .beta-acceptance-panel__flags span[data-ready='false'] {
-  background: rgb(218 97 88 / 0.12);
-  border-color: rgb(218 97 88 / 0.2);
-  color: #ff9a93;
+  background: rgb(209 173 98 / 0.11);
+  border-color: rgb(209 173 98 / 0.2);
+  color: #e1c577;
 }
 
 .beta-check {
@@ -110,6 +113,7 @@
   align-items: start;
   padding: 9px 10px;
   border-radius: 12px;
+  border: 1px solid rgb(255 255 255 / 0.045);
   background: rgb(255 255 255 / 0.03);
 }
 
