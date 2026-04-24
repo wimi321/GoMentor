@@ -1,0 +1,100 @@
+.release-readiness {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--ks-line, #2d353c);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgb(28 34 40 / 0.88), rgb(18 23 28 / 0.88));
+}
+
+.release-readiness__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.release-readiness__head strong {
+  color: var(--ks-text-main, #f2efe7);
+  font-size: 13px;
+}
+
+.release-readiness__head p,
+.release-readiness__item p {
+  margin: 3px 0 0;
+  color: var(--ks-text-muted, #9da7ae);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.release-readiness__badge {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.04);
+  color: var(--ks-text-muted, #9da7ae);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.release-readiness--ready .release-readiness__badge {
+  color: #80d6a1;
+}
+
+.release-readiness--warning .release-readiness__badge {
+  color: #e1c577;
+}
+
+.release-readiness--blocked .release-readiness__badge {
+  color: #ff9c97;
+}
+
+.release-readiness__items {
+  display: grid;
+  gap: 8px;
+}
+
+.release-readiness__item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 9px;
+  padding: 9px;
+  border: 1px solid rgb(255 255 255 / 0.055);
+  border-radius: 10px;
+  background: rgb(10 14 18 / 0.42);
+}
+
+.release-readiness__item strong {
+  color: var(--ks-text-main, #f2efe7);
+  font-size: 12px;
+}
+
+.release-readiness__item em {
+  color: var(--ks-text-muted, #9da7ae);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.release-readiness__dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 999px;
+  background: #7a838c;
+}
+
+.release-readiness__item--ready .release-readiness__dot {
+  background: #59c88a;
+  box-shadow: 0 0 12px rgb(89 200 138 / 0.38);
+}
+
+.release-readiness__item--warning .release-readiness__dot {
+  background: #d1ad62;
+}
+
+.release-readiness__item--blocked .release-readiness__dot {
+  background: #da6158;
+}

@@ -34,7 +34,10 @@
     "check:katago-assets": "node scripts/check_katago_assets.mjs --mode=dev",
     "check:katago-assets:release": "node scripts/check_katago_assets.mjs --mode=release",
     "check:p0-beta": "node scripts/p0_beta_acceptance.mjs",
-    "check:artifacts": "node scripts/package_artifact_smoke.mjs --mode=dev"
+    "check:artifacts": "node scripts/package_artifact_smoke.mjs --mode=dev",
+    "rc:check": "node scripts/p0_release_candidate_check.mjs --mode=dev",
+    "rc:artifacts": "node scripts/verify_release_artifacts.mjs --mode=dev",
+    "rc:evidence": "node scripts/collect_release_evidence.mjs --mode=dev"
   },
   "dependencies": {
     "electron-store": "^10.0.1",

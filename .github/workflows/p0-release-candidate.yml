@@ -1,0 +1,92 @@
+name: P0 Release Candidate
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+  push:
+    branches:
+      - feature/p0-productization
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Readiness mode"
+        required: true
+        default: "dev"
+        type: choice
+        options:
+          - dev
+          - release
+
+concurrency:
+  group: p0-rc-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  readiness:
+    name: P0 RC readiness (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Project check
+        run: pnpm check
+
+      - name: KataGo assets check
+        run: node scripts/check_katago_assets.mjs --mode=${{ inputs.mode || 'dev' }}
+
+      - name: P0 beta acceptance
+        run: node scripts/p0_beta_acceptance.mjs
+
+      - name: Package artifact smoke
+        run: node scripts/package_artifact_smoke.mjs --mode=dev
+
+      - name: P0 release candidate check
+        run: node scripts/p0_release_candidate_check.mjs --mode=${{ inputs.mode || 'dev' }}
+
+      - name: Verify release artifacts
+        run: node scripts/verify_release_artifacts.mjs --mode=dev
+
+      - name: Collect release evidence
+        if: always()
+        run: node scripts/collect_release_evidence.mjs --mode=dev
+
+      - name: Upload release evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-evidence-${{ matrix.os }}
+          path: release-evidence/**
+          if-no-files-found: ignore
