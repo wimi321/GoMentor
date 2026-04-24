@@ -17,6 +17,7 @@ import type {
   ReviewResult,
   StudentBindingSuggestion,
   StudentProfile,
+  ReleaseReadinessResult,
   TeacherRunRequest,
   TeacherRunResult
 } from '@main/lib/types'
@@ -51,6 +52,7 @@ const api = {
   searchKnowledge: (payload: KnowledgeSearchQuery): Promise<KnowledgeSearchResult[]> => ipcRenderer.invoke('knowledge:search', payload),
   runTeacherTask: (payload: TeacherRunRequest): Promise<TeacherRunResult> => ipcRenderer.invoke('teacher:run', payload),
   testLlmSettings: (payload: LlmSettingsTestRequest): Promise<LlmSettingsTestResult> => ipcRenderer.invoke('llm:test', payload),
+  getReleaseReadiness: (): Promise<ReleaseReadinessResult> => ipcRenderer.invoke('release:readiness'),
   openPath: (filePath: string): Promise<void> => ipcRenderer.invoke('path:open', filePath)
 }
 

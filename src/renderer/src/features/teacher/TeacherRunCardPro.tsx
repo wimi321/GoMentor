@@ -1,11 +1,14 @@
 import type { ReactElement } from 'react'
 import { useMemo, useState } from 'react'
+import { TeacherKeyMoveActions, type TeacherKeyMoveActionItem } from './TeacherKeyMoveActions'
 import './teacher-pro.css'
 
 interface TeacherRunCardProProps {
   result?: unknown
   markdown?: string
   running?: boolean
+  onJumpToMove?: (moveNumber: number) => void
+  onAnalyzeMove?: (moveNumber: number) => void
 }
 
 type AnyRecord = Record<string, unknown>
@@ -33,6 +36,17 @@ function pickSummary(structured: AnyRecord, markdown?: string): string {
 
 function pickKeyMoves(structured: AnyRecord): AnyRecord[] {
   return arrayValue(structured.keyMoves ?? structured.keyMistakes ?? structured.turningPoints).map(asRecord).slice(0, 8)
+}
+
+function numberValue(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+  return undefined
 }
 
 function pickTraining(structured: AnyRecord): string[] {
@@ -63,11 +77,33 @@ function moveTitle(move: AnyRecord, index: number): string {
   return title || `关键手 ${moveNumber ? `第 ${String(moveNumber)} 手` : index + 1}`
 }
 
-export function TeacherRunCardPro({ result, markdown = '', running = false }: TeacherRunCardProProps): ReactElement {
+function keyMoveActions(moves: AnyRecord[]): TeacherKeyMoveActionItem[] {
+  return moves.flatMap((move, index) => {
+    const moveNumber = numberValue(move.moveNumber ?? move.n ?? move.moveNo ?? move.turn)
+    if (moveNumber === undefined) {
+      return []
+    }
+    return [{
+      moveNumber,
+      title: moveTitle(move, index),
+      summary: stringValue(move.summary ?? move.reason ?? move.explanation ?? move.problem),
+      severity: stringValue(move.severity ?? move.errorType ?? move.type)
+    }]
+  })
+}
+
+export function TeacherRunCardPro({
+  result,
+  markdown = '',
+  running = false,
+  onJumpToMove,
+  onAnalyzeMove
+}: TeacherRunCardProProps): ReactElement {
   const [toolsOpen, setToolsOpen] = useState(false)
   const structured = useMemo(() => pickStructured(result), [result])
   const summary = pickSummary(structured, markdown)
   const keyMoves = pickKeyMoves(structured)
+  const actionMoves = keyMoveActions(keyMoves)
   const training = pickTraining(structured)
   const evidence = pickEvidence(structured)
   const toolLogs = pickToolLogs(result)
@@ -111,6 +147,7 @@ export function TeacherRunCardPro({ result, markdown = '', running = false }: Te
               </div>
             ))}
           </div>
+          <TeacherKeyMoveActions moves={actionMoves} onJumpToMove={onJumpToMove} onAnalyzeMove={onAnalyzeMove} />
         </section>
       ) : null}
 

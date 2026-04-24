@@ -13,6 +13,7 @@ import type {
   StoneColor,
   StudentBindingSuggestion,
   StudentProfile,
+  ReleaseReadinessResult,
   TeacherRunResult
 } from '@main/lib/types'
 import lizzieBlackStoneUrl from './assets/lizzie/black.png'
@@ -21,8 +22,11 @@ import lizzieWhiteStoneUrl from './assets/lizzie/white.png'
 import logoUrl from '../../../assets/logo.svg'
 import { BoardInsightPanel } from './features/board/BoardInsightPanel'
 import { GoBoardV2 } from './features/board/GoBoardV2'
+import { KeyMoveNavigator, type KeyMoveSummary } from './features/board/KeyMoveNavigator'
 import { WinrateTimelineV2 } from './features/board/WinrateTimelineV2'
+import { parseBoardPoint, type RenderKeyMove } from './features/board/boardGeometry'
 import { DiagnosticsGate } from './features/diagnostics/DiagnosticsGate'
+import { BetaAcceptancePanel, type BetaAcceptanceItem } from './features/release/BetaAcceptancePanel'
 import { StudentBindingDialog } from './features/student/StudentBindingDialog'
 import { StudentRailCard } from './features/student/StudentRailCard'
 import { KataGoAssetsPanel } from './features/settings/KataGoAssetsPanel'
@@ -107,6 +111,57 @@ function analysisHasCandidates(analysis: KataGoMoveAnalysis | undefined | null):
   return Boolean(analysis && (analysis.before.topMoves.length > 0 || analysis.after.topMoves.length > 0))
 }
 
+function keyMoveSummariesFromEvaluations(evaluations: EvaluationByMove): KeyMoveSummary[] {
+  return Object.values(evaluations)
+    .flatMap((item) => {
+      const severity = evaluationSeverity(item)
+      if (severity === 'quiet') {
+        return []
+      }
+      const best = item.before.topMoves[0] ?? item.after.topMoves[0]
+      const playedMove = item.playedMove?.move ?? item.currentMove?.gtp
+      const loss = item.playedMove?.winrateLoss ?? 0
+      const scoreLoss = item.playedMove?.scoreLoss ?? 0
+      return [{
+        moveNumber: item.moveNumber,
+        color: item.currentMove?.color,
+        label: best && playedMove ? `${playedMove} -> ${best.move}` : playedMove ?? `第 ${item.moveNumber} 手`,
+        gtp: playedMove,
+        reason: `胜率损失 ${loss.toFixed(1)}%，目差损失 ${scoreLoss.toFixed(1)}。`,
+        winrateDrop: loss / 100,
+        scoreLoss,
+        severity
+      } satisfies KeyMoveSummary]
+    })
+    .sort((left, right) => {
+      const leftLoss = Math.abs(left.winrateDrop ?? 0)
+      const rightLoss = Math.abs(right.winrateDrop ?? 0)
+      return rightLoss - leftLoss || left.moveNumber - right.moveNumber
+    })
+    .slice(0, 8)
+}
+
+function keyMoveMarksFromSummaries(
+  summaries: KeyMoveSummary[],
+  evaluations: EvaluationByMove,
+  boardSize: number
+): RenderKeyMove[] {
+  return summaries.flatMap((summary) => {
+    const item = evaluations[summary.moveNumber]
+    const point = parseBoardPoint(item?.currentMove ?? item?.playedMove?.move ?? summary.gtp, boardSize)
+    if (!point) {
+      return []
+    }
+    const severity = !summary.severity || summary.severity === 'quiet' ? 'turning-point' : summary.severity
+    return [{
+      ...point,
+      moveNumber: summary.moveNumber,
+      severity,
+      label: String(summary.moveNumber)
+    } satisfies RenderKeyMove]
+  })
+}
+
 export function App(): ReactElement {
   const [dashboard, setDashboard] = useState<DashboardData>(emptyDashboard)
   const [selectedId, setSelectedId] = useState('')
@@ -144,6 +199,11 @@ export function App(): ReactElement {
   const selectedGame = useMemo(
     () => dashboard.games.find((game) => game.id === selectedId) ?? dashboard.games[0],
     [dashboard.games, selectedId]
+  )
+  const keyMoveSummaries = useMemo(() => keyMoveSummariesFromEvaluations(evaluations), [evaluations])
+  const boardKeyMoveMarks = useMemo(
+    () => keyMoveMarksFromSummaries(keyMoveSummaries, evaluations, record?.boardSize ?? 19),
+    [keyMoveSummaries, evaluations, record?.boardSize]
   )
 
   useEffect(() => {
@@ -400,28 +460,31 @@ export function App(): ReactElement {
     setAnalysis(evaluations[next] ?? null)
   }
 
-  async function runCurrentMoveAnalysis(): Promise<void> {
-    if (!record || !selectedGame) {
+  async function runMoveAnalysisAt(targetMoveNumber: number): Promise<void> {
+    if (!record || !selectedGame || busy !== '') {
       return
     }
+    const targetMove = Math.max(0, Math.min(record.moves.length, Math.round(targetMoveNumber)))
+    setMoveNumber(targetMove)
+    setAnalysis(evaluations[targetMove] ?? null)
     setBusy('teacher')
     setError('')
-    const ask = `分析第 ${moveNumber} 手`
+    const ask = `分析第 ${targetMove} 手`
     appendMessage({ role: 'student', content: ask })
     try {
       const nextAnalysis = await window.katasensei.analyzePosition({
         gameId: selectedGame.id,
-        moveNumber,
+        moveNumber: targetMove,
         maxVisits: 520
       })
       setAnalysis(nextAnalysis)
       rememberEvaluation(nextAnalysis)
-      const boardImageDataUrl = await renderBoardPng(record, moveNumber, nextAnalysis)
+      const boardImageDataUrl = await renderBoardPng(record, targetMove, nextAnalysis)
       const result = await window.katasensei.runTeacherTask({
         mode: 'current-move',
         prompt: ask,
         gameId: selectedGame.id,
-        moveNumber,
+        moveNumber: targetMove,
         playerName,
         boardImageDataUrl,
         prefetchedAnalysis: nextAnalysis
@@ -435,6 +498,10 @@ export function App(): ReactElement {
     } finally {
       setBusy('')
     }
+  }
+
+  async function runCurrentMoveAnalysis(): Promise<void> {
+    await runMoveAnalysisAt(moveNumber)
   }
 
   async function runTeacherQuickTask(text: string): Promise<void> {
@@ -585,11 +652,19 @@ export function App(): ReactElement {
               <div className="board-table board-table--v2">
                 <BoardMatchBar record={record} moveNumber={moveNumber} analysis={analysis} />
                 {record.boardSize >= 2 ? (
-                  <GoBoardV2 record={record} moveNumber={moveNumber} analysis={analysis} />
+                  <GoBoardV2 record={record} moveNumber={moveNumber} analysis={analysis} keyMoves={boardKeyMoveMarks} />
                 ) : (
                   <GoBoard record={record} moveNumber={moveNumber} analysis={analysis} />
                 )}
-                <BoardInsightPanel analysis={analysis} moveNumber={moveNumber} loading={busy === 'teacher' || graphBusy} />
+                <div className="board-insight-stack">
+                  <BoardInsightPanel analysis={analysis} moveNumber={moveNumber} loading={busy === 'teacher' || graphBusy} />
+                  <KeyMoveNavigator
+                    moves={keyMoveSummaries}
+                    currentMoveNumber={moveNumber}
+                    onJump={jumpToMove}
+                    onAnalyzeMove={(targetMove) => void runMoveAnalysisAt(targetMove)}
+                  />
+                </div>
               </div>
             ) : (
               <div className="empty-board">导入 SGF 后开始复盘</div>
@@ -638,6 +713,7 @@ export function App(): ReactElement {
             onTestLlm={(form) => void testLlmSettings(form)}
             onRefreshKataGoAssets={() => void refreshKataGoAssets()}
             onJumpToMove={jumpToMove}
+            onAnalyzeMove={(targetMove) => void runMoveAnalysisAt(targetMove)}
           />
         </aside>
       </div>
@@ -784,7 +860,8 @@ function TeacherPanel({
   onSaveSettings,
   onTestLlm,
   onRefreshKataGoAssets,
-  onJumpToMove
+  onJumpToMove,
+  onAnalyzeMove
 }: {
   messages: ChatMessage[]
   prompt: string
@@ -802,6 +879,7 @@ function TeacherPanel({
   onTestLlm: (form: HTMLFormElement) => void
   onRefreshKataGoAssets: () => void
   onJumpToMove: (moveNumber: number) => void
+  onAnalyzeMove: (moveNumber: number) => void
 }): ReactElement {
   return (
     <div className="teacher-panel">
@@ -838,7 +916,12 @@ function TeacherPanel({
             <div className="message-meta">{message.role === 'teacher' ? '老师' : '学生'}</div>
             {message.result ? (
               (message.result.structuredResult ?? message.result.structured) ? (
-                <TeacherRunCardPro result={message.result} markdown={message.content} />
+                <TeacherRunCardPro
+                  result={message.result}
+                  markdown={message.content}
+                  onJumpToMove={onJumpToMove}
+                  onAnalyzeMove={onAnalyzeMove}
+                />
               ) : (
                 <>
                   <TeacherRunCard result={null} toolLogs={message.result.toolLogs} onJumpToMove={onJumpToMove} />
@@ -889,8 +972,63 @@ function SettingsDrawer({
   onTest: (form: HTMLFormElement) => void
   onRefreshKataGoAssets: () => void
 }): ReactElement {
+  const [releaseReadiness, setReleaseReadiness] = useState<ReleaseReadinessResult | null>(null)
+  const [releaseReadinessError, setReleaseReadinessError] = useState('')
   const modelPresets = dashboard.systemProfile.katagoModelPresets
   const selectedPreset = modelPresets.find((preset) => preset.id === dashboard.settings.katagoModelPreset) ?? modelPresets[0]
+  const betaItems = useMemo<BetaAcceptanceItem[]>(() => {
+    if (releaseReadiness) {
+      return releaseReadiness.items.map((item) => ({
+        id: item.id,
+        label: item.label,
+        status: item.status,
+        detail: item.detail
+      }))
+    }
+    return [
+      {
+        id: 'katago-assets',
+        label: 'KataGo 内置资源',
+        status: katagoAssets?.ready ? 'pass' : katagoAssets?.manifestFound ? 'warn' : 'fail',
+        detail: katagoAssets?.detail ?? dashboard.systemProfile.katagoStatus
+      },
+      {
+        id: 'llm-provider',
+        label: 'Claude 兼容代理',
+        status: dashboard.systemProfile.hasLlmApiKey ? 'pass' : 'warn',
+        detail: dashboard.systemProfile.hasLlmApiKey ? `模型 ${dashboard.settings.llmModel}` : '未配置 API Key，老师多模态讲解不可用'
+      },
+      {
+        id: 'knowledge',
+        label: '本地围棋知识库',
+        status: 'pass',
+        detail: 'P0 教学卡随应用打包'
+      },
+      {
+        id: 'teacher-ui',
+        label: '老师智能体 UI',
+        status: 'pass',
+        detail: '关键手、工具日志、结构化结果卡已接入'
+      }
+    ]
+  }, [dashboard.settings.llmModel, dashboard.systemProfile.hasLlmApiKey, dashboard.systemProfile.katagoStatus, katagoAssets, releaseReadiness])
+
+  async function refreshReleaseReadiness(): Promise<void> {
+    try {
+      setReleaseReadinessError('')
+      if (!window.katasensei.getReleaseReadiness) {
+        return
+      }
+      setReleaseReadiness(await window.katasensei.getReleaseReadiness())
+    } catch (cause) {
+      setReleaseReadinessError(`Beta 验收状态读取失败: ${String(cause)}`)
+    }
+  }
+
+  useEffect(() => {
+    void refreshReleaseReadiness()
+  }, [])
+
   return (
     <form
       key={`${dashboard.settings.katagoModelPreset}|${dashboard.settings.llmBaseUrl}|${dashboard.settings.llmModel}`}
@@ -913,6 +1051,14 @@ function SettingsDrawer({
         <small>{dashboard.systemProfile.katagoStatus}</small>
       </label>
       <KataGoAssetsPanel status={katagoAssets} onRefresh={onRefreshKataGoAssets} />
+      <BetaAcceptancePanel
+        items={betaItems}
+        onRunChecks={() => {
+          void refreshReleaseReadiness()
+          onRefreshKataGoAssets()
+        }}
+      />
+      {releaseReadinessError ? <div className="test-message">{releaseReadinessError}</div> : null}
       <label>
         LLM Base URL
         <input name="llmBaseUrl" defaultValue={dashboard.settings.llmBaseUrl} />

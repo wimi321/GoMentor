@@ -1,6 +1,8 @@
 @import './styles/design-tokens.css';
 @import './features/board/board-v2.css';
 @import './features/teacher/teacher-pro.css';
+@import './features/board/sprint4-board.css';
+@import './features/teacher/sprint4-teacher.css';
 
 :root {
   color-scheme: dark;
@@ -442,6 +444,14 @@ label,
 
 .board-table--v2 .ks-board-insight {
   width: min(760px, 100%);
+}
+
+.board-insight-stack {
+  display: grid;
+  width: min(760px, 100%);
+  max-height: 210px;
+  gap: 8px;
+  overflow: auto;
 }
 
 .board-matchbar {

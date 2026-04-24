@@ -1,7 +1,8 @@
 import type { ReactElement } from 'react'
-import { useMemo } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { KataGoMoveAnalysis } from '@main/lib/types'
 import { getAnalysisMoveNumber, getAnalysisWinrate, classifyMoveLoss, normalizeWinrate } from './boardGeometry'
+import { moveFromPointer } from './timelineInteraction'
 import './board-v2.css'
 
 interface TimelinePoint {
@@ -56,6 +57,8 @@ function buildPoints(evaluations: KataGoMoveAnalysis[], totalMoves: number): Tim
 }
 
 export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, loading = false, loadingLabel = '', onMove }: WinrateTimelineV2Props): ReactElement {
+  const [dragging, setDragging] = useState(false)
+  const draggingRef = useRef(false)
   const points = useMemo(() => buildPoints(evaluations, totalMoves), [evaluations, totalMoves])
   const width = 980
   const height = 154
@@ -70,15 +73,43 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
     ? points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${x(point.moveNumber).toFixed(1)} ${y(point.winrate).toFixed(1)}`).join(' ')
     : ''
 
-  function handleClick(event: React.PointerEvent<SVGSVGElement>): void {
+  function moveFromEvent(event: React.PointerEvent<SVGSVGElement>): number {
+    const rect = event.currentTarget.getBoundingClientRect()
+    return moveFromPointer({
+      clientX: event.clientX,
+      rect: {
+        left: rect.left + (padX / width) * rect.width,
+        width: (plotW / width) * rect.width
+      },
+      totalMoves
+    })
+  }
+
+  function selectMove(event: React.PointerEvent<SVGSVGElement>): void {
     if (!onMove) return
-    const svg = event.currentTarget
-    const point = svg.createSVGPoint()
-    point.x = event.clientX
-    point.y = event.clientY
-    const cursor = point.matrixTransform(svg.getScreenCTM()?.inverse())
-    const next = Math.round(((cursor.x - padX) / plotW) * safeTotal)
-    onMove(Math.max(0, Math.min(safeTotal, next)))
+    onMove(moveFromEvent(event))
+  }
+
+  function handlePointerDown(event: React.PointerEvent<SVGSVGElement>): void {
+    event.currentTarget.setPointerCapture(event.pointerId)
+    draggingRef.current = true
+    setDragging(true)
+    selectMove(event)
+  }
+
+  function handlePointerMove(event: React.PointerEvent<SVGSVGElement>): void {
+    if (draggingRef.current) {
+      selectMove(event)
+    }
+  }
+
+  function handlePointerEnd(event: React.PointerEvent<SVGSVGElement>): void {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    draggingRef.current = false
+    setDragging(false)
+    selectMove(event)
   }
 
   return (
@@ -87,7 +118,16 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
         <span>胜率走势</span>
         <small>{loading ? (loadingLabel || '分析中') : `${points.length}/${totalMoves || 0} 局面`}</small>
       </div>
-      <svg className="ks-timeline-canvas" viewBox={`0 0 ${width} ${height}`} onPointerDown={handleClick} role="img" aria-label="胜率图">
+      <svg
+        className={`ks-timeline-canvas ${dragging ? 'is-dragging' : ''}`}
+        viewBox={`0 0 ${width} ${height}`}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerEnd}
+        onPointerCancel={handlePointerEnd}
+        role="img"
+        aria-label="胜率图"
+      >
         <defs>
           <linearGradient id="ks-timeline-bg" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" stopColor="#171d24" />

@@ -13,6 +13,7 @@ import { collectDiagnostics } from './services/diagnostics'
 import { searchKnowledgeCards } from './services/knowledge/searchLocal'
 import { inspectKataGoAssets } from './services/katago/katagoAssets'
 import { bindFoxGamesToStudent, bindSgfGameToStudent, suggestStudentBindings } from './services/library/studentBinding'
+import { inspectReleaseReadiness } from './services/release/readiness'
 import {
   attachGameToStudent,
   listStudents,
@@ -165,6 +166,7 @@ app.whenReady().then(() => {
   )
   ipcMain.handle('teacher:run', async (_event, payload: TeacherRunRequest) => runTeacherTask(payload))
   ipcMain.handle('llm:test', async (_event, payload: LlmSettingsTestRequest) => testLlmSettings(payload))
+  ipcMain.handle('release:readiness', async () => inspectReleaseReadiness())
   ipcMain.handle('path:open', async (_event, filePath: string) => shell.showItemInFolder(assertManagedPath(filePath)))
 
   createWindow().catch((error) => {

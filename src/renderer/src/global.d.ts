@@ -16,6 +16,7 @@ import type {
   ReviewResult,
   StudentBindingSuggestion,
   StudentProfile,
+  ReleaseReadinessResult,
   TeacherRunRequest,
   TeacherRunResult
 } from '@main/lib/types'
@@ -48,6 +49,7 @@ declare global {
       searchKnowledge: (payload: KnowledgeSearchQuery) => Promise<KnowledgeSearchResult[]>
       runTeacherTask: (payload: TeacherRunRequest) => Promise<TeacherRunResult>
       testLlmSettings: (payload: LlmSettingsTestRequest) => Promise<LlmSettingsTestResult>
+      getReleaseReadiness: () => Promise<ReleaseReadinessResult>
       openPath: (filePath: string) => Promise<void>
     }
   }

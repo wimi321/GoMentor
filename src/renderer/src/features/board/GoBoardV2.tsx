@@ -2,7 +2,6 @@ import type { PointerEvent, ReactElement } from 'react'
 import { useMemo, useState } from 'react'
 import type { GameRecord, KataGoMoveAnalysis } from '@main/lib/types'
 import {
-  boardPointLabel,
   getBoardSize,
   renderCandidates,
   renderStones,
@@ -10,6 +9,7 @@ import {
   type RenderCandidate,
   type RenderKeyMove
 } from './boardGeometry'
+import { CandidateTooltip, type CandidateTooltipMove, type CandidateTooltipPosition } from './CandidateTooltip'
 import './board-v2.css'
 
 interface GoBoardV2Props {
@@ -31,6 +31,15 @@ const STAR_CONFIG: Record<number, number[]> = {
   9: [2, 4, 6]
 }
 
+type HoveredCandidate = {
+  candidate: CandidateTooltipMove
+  position: CandidateTooltipPosition
+} | null
+
+function valueOf(record: unknown, key: string): unknown {
+  return typeof record === 'object' && record !== null ? (record as Record<string, unknown>)[key] : undefined
+}
+
 function xy(point: BoardPoint, boardSize: number): { x: number; y: number } {
   const cell = INNER / (boardSize - 1)
   return {
@@ -48,7 +57,38 @@ function starPoints(boardSize: number): BoardPoint[] {
   return anchors.flatMap((x) => anchors.map((y) => ({ x, y })))
 }
 
-function CandidateMark({ candidate, boardSize, onHover }: { candidate: RenderCandidate; boardSize: number; onHover?: (candidate: RenderCandidate | null) => void }): ReactElement {
+function toTooltipMove(candidate: RenderCandidate): CandidateTooltipMove {
+  return {
+    order: candidate.rank,
+    move: String(valueOf(candidate.raw, 'move') ?? candidate.label),
+    gtp: String(valueOf(candidate.raw, 'gtp') ?? valueOf(candidate.raw, 'move') ?? candidate.label),
+    winrate: valueOf(candidate.raw, 'winrate') as number | undefined,
+    scoreLead: valueOf(candidate.raw, 'scoreLead') as number | undefined,
+    visits: valueOf(candidate.raw, 'visits') as number | undefined,
+    prior: valueOf(candidate.raw, 'prior') as number | undefined,
+    note: candidate.rank === 1 ? 'KataGo 当前首选。' : undefined
+  }
+}
+
+function tooltipPosition(point: { x: number; y: number }, svg: SVGSVGElement): CandidateTooltipPosition {
+  const rect = svg.getBoundingClientRect()
+  const x = (point.x / VIEWBOX) * rect.width + 14
+  const y = (point.y / VIEWBOX) * rect.height - 14
+  return {
+    x: Math.min(Math.max(8, x), Math.max(8, rect.width - 250)),
+    y: Math.min(Math.max(8, y), Math.max(8, rect.height - 132))
+  }
+}
+
+function CandidateMark({
+  candidate,
+  boardSize,
+  onHover
+}: {
+  candidate: RenderCandidate
+  boardSize: number
+  onHover?: (candidate: RenderCandidate | null, position?: CandidateTooltipPosition) => void
+}): ReactElement {
   const p = xy(candidate, boardSize)
   const className = `ks-candidate ks-candidate--${candidate.emphasis}`
   const subLabel = candidate.scoreLabel ?? candidate.winrateLabel ?? candidate.visitsLabel ?? candidate.label
@@ -56,7 +96,10 @@ function CandidateMark({ candidate, boardSize, onHover }: { candidate: RenderCan
     <g
       className={className}
       transform={`translate(${p.x} ${p.y})`}
-      onPointerEnter={() => onHover?.(candidate)}
+      onPointerEnter={(event) => {
+        const svg = event.currentTarget.ownerSVGElement
+        onHover?.(candidate, svg ? tooltipPosition(p, svg) : { x: p.x, y: p.y })
+      }}
       onPointerLeave={() => onHover?.(null)}
     >
       <circle className="ks-candidate-ring" r="27" />
@@ -78,7 +121,7 @@ function KeyMoveMark({ mark, boardSize }: { mark: RenderKeyMove; boardSize: numb
 }
 
 export function GoBoardV2({ record, moveNumber, analysis = null, keyMoves = [], compact = false, onPointClick, onCandidateHover }: GoBoardV2Props): ReactElement {
-  const [hoveredCandidate, setHoveredCandidate] = useState<RenderCandidate | null>(null)
+  const [hoveredCandidate, setHoveredCandidate] = useState<HoveredCandidate>(null)
   const boardSize = getBoardSize(record)
   const stones = useMemo(() => renderStones(record, moveNumber), [record, moveNumber])
   const candidates = useMemo(() => renderCandidates(analysis, boardSize), [analysis, boardSize])
@@ -87,8 +130,8 @@ export function GoBoardV2({ record, moveNumber, analysis = null, keyMoves = [], 
   const lines = Array.from({ length: boardSize }, (_, index) => index)
   const activeCandidate = hoveredCandidate
 
-  function handleCandidateHover(candidate: RenderCandidate | null): void {
-    setHoveredCandidate(candidate)
+  function handleCandidateHover(candidate: RenderCandidate | null, position?: CandidateTooltipPosition): void {
+    setHoveredCandidate(candidate && position ? { candidate: toTooltipMove(candidate), position } : null)
     onCandidateHover?.(candidate)
   }
 
@@ -204,12 +247,10 @@ export function GoBoardV2({ record, moveNumber, analysis = null, keyMoves = [], 
         </g>
       </svg>
 
-      {activeCandidate ? (
-        <div className="ks-board-tooltip" role="status">
-          <strong>推荐 {activeCandidate.rank}: {activeCandidate.label}</strong>
-          <span>{[activeCandidate.winrateLabel, activeCandidate.scoreLabel ? `目差 ${activeCandidate.scoreLabel}` : '', activeCandidate.visitsLabel ? `${activeCandidate.visitsLabel} visits` : ''].filter(Boolean).join(' · ')}</span>
-        </div>
-      ) : null}
+      <CandidateTooltip
+        candidate={activeCandidate?.candidate ?? null}
+        position={activeCandidate?.position ?? null}
+      />
     </div>
   )
 }

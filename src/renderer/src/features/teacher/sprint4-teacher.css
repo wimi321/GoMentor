@@ -1,0 +1,107 @@
+.teacher-keymove-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.teacher-keymove-actions__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 10px;
+  border: 1px solid var(--ks-line-soft, #242b31);
+  border-radius: 12px;
+  background: rgb(255 255 255 / 0.03);
+}
+
+.teacher-keymove-actions__row strong,
+.teacher-keymove-actions__row small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.teacher-keymove-actions__row small {
+  margin-top: 3px;
+  color: var(--ks-text-muted, #9da7ae);
+}
+
+.teacher-keymove-actions__buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.teacher-keymove-actions__buttons button,
+.beta-acceptance-panel button {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--ks-line-strong, #343c43);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.05);
+  color: var(--ks-text-main, #f2efe7);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.beta-acceptance-panel {
+  border: 1px solid var(--ks-line-soft, #242b31);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgb(22 27 32 / 0.94), rgb(14 18 22 / 0.94));
+  overflow: hidden;
+}
+
+.beta-acceptance-panel__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border-bottom: 1px solid var(--ks-line-soft, #242b31);
+}
+
+.beta-acceptance-panel__head small {
+  display: block;
+  margin-top: 4px;
+  color: var(--ks-text-muted, #9da7ae);
+}
+
+.beta-acceptance-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+}
+
+.beta-check {
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 9px 10px;
+  border-radius: 12px;
+  background: rgb(255 255 255 / 0.03);
+}
+
+.beta-check > span {
+  padding: 2px 7px;
+  border-radius: 999px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.beta-check--pass > span { background: rgb(89 200 138 / 0.16); color: #78dca0; }
+.beta-check--warn > span { background: rgb(209 173 98 / 0.16); color: #e1c577; }
+.beta-check--fail > span { background: rgb(218 97 88 / 0.16); color: #ff9a93; }
+.beta-check--unknown > span { background: rgb(140 150 160 / 0.16); color: #b8c1ca; }
+
+.beta-check small {
+  display: block;
+  margin-top: 3px;
+  color: var(--ks-text-muted, #9da7ae);
+  line-height: 1.45;
+}

@@ -124,6 +124,20 @@ export interface KataGoAssetStatus {
   detail: string
 }
 
+export type ReleaseReadinessStatus = 'pass' | 'warn' | 'fail' | 'unknown'
+
+export interface ReleaseReadinessItem {
+  id: string
+  label: string
+  status: ReleaseReadinessStatus
+  detail?: string
+}
+
+export interface ReleaseReadinessResult {
+  status: ReleaseReadinessStatus
+  items: ReleaseReadinessItem[]
+}
+
 export interface ReviewRequest {
   gameId: string
   playerName: string

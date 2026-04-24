@@ -32,7 +32,9 @@
     "prepare:python": "python3 -m pip install -r scripts/requirements.txt",
     "prepare:katago-assets": "node scripts/prepare_katago_assets.mjs",
     "check:katago-assets": "node scripts/check_katago_assets.mjs --mode=dev",
-    "check:katago-assets:release": "node scripts/check_katago_assets.mjs --mode=release"
+    "check:katago-assets:release": "node scripts/check_katago_assets.mjs --mode=release",
+    "check:p0-beta": "node scripts/p0_beta_acceptance.mjs",
+    "check:artifacts": "node scripts/package_artifact_smoke.mjs --mode=dev"
   },
   "dependencies": {
     "electron-store": "^10.0.1",
