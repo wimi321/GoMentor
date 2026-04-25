@@ -36,6 +36,7 @@
     "check:p0-beta": "node scripts/p0_beta_acceptance.mjs",
     "check:artifacts": "node scripts/package_artifact_smoke.mjs --mode=dev",
     "smoke:teacher-llm": "pnpm build && node scripts/teacher_llm_smoke.mjs",
+    "smoke:teacher-llm:real": "pnpm build && node scripts/teacher_llm_real_smoke.mjs",
     "rc:check": "node scripts/p0_release_candidate_check.mjs --mode=dev",
     "rc:artifacts": "node scripts/verify_release_artifacts.mjs --mode=dev",
     "rc:evidence": "node scripts/collect_release_evidence.mjs --mode=dev"

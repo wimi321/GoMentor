@@ -37,6 +37,7 @@ async function importProviderForTest() {
   const provider = await import(`${moduleUrl}?t=${Date.now()}`)
   return {
     postOpenAICompatibleChat: provider.postOpenAICompatibleChat,
+    probeOpenAICompatibleProvider: provider.probeOpenAICompatibleProvider,
     cleanup: () => rm(root, { recursive: true, force: true })
   }
 }
@@ -112,6 +113,39 @@ test('retries OpenAI-compatible parameter variants until the proxy accepts one',
   }
 })
 
+test('probe sends a valid PNG image payload to the multimodal provider', async () => {
+  const { probeOpenAICompatibleProvider, cleanup } = await importProviderForTest()
+  const requests = []
+  try {
+    await withMockChatServer((body) => {
+      requests.push(body)
+      return {
+        payload: {
+          choices: [{ finish_reason: 'stop', message: { content: 'OK' } }],
+          usage: { prompt_tokens: 8, completion_tokens: 1, total_tokens: 9 }
+        }
+      }
+    }, async (baseUrl) => {
+      const result = await probeOpenAICompatibleProvider(settings(baseUrl))
+      assert.equal(result.ok, true)
+      assert.equal(result.supportsImage, true)
+    })
+
+    const imagePart = requests[0].messages
+      .flatMap((message) => Array.isArray(message.content) ? message.content : [])
+      .find((part) => part.type === 'image_url')
+    assert.ok(imagePart, 'probe should include an image part')
+    const imageUrl = imagePart.image_url.url
+    assert.ok(imageUrl.startsWith('data:image/png;base64,'))
+    const bytes = Buffer.from(imageUrl.replace('data:image/png;base64,', ''), 'base64')
+    assert.equal(bytes.subarray(0, 8).toString('hex'), '89504e470d0a1a0a')
+    assert.equal(bytes.readUInt32BE(16), 64)
+    assert.equal(bytes.readUInt32BE(20), 64)
+  } finally {
+    await cleanup()
+  }
+})
+
 test('asks once more for final text after a stop response spends tokens but returns empty content', async () => {
   const { postOpenAICompatibleChat, cleanup } = await importProviderForTest()
   const requests = []
@@ -144,6 +178,44 @@ test('asks once more for final text after a stop response spends tokens but retu
 
     assert.ok(requests.length > 1)
     assert.ok(hasFinalTextReminder(requests.at(-1)))
+  } finally {
+    await cleanup()
+  }
+})
+
+test('falls back to streaming when a reasoning model returns empty non-stream content', async () => {
+  const { postOpenAICompatibleChat, cleanup } = await importProviderForTest()
+  const requests = []
+  try {
+    await withMockChatServer((body) => {
+      requests.push(body)
+      if (body.stream) {
+        return {
+          payload: [
+            'data: {"choices":[{"delta":{"content":"流式"},"finish_reason":null}]}',
+            'data: {"choices":[{"delta":{"content":"讲解"},"finish_reason":null}]}',
+            'data: [DONE]',
+            ''
+          ].join('\n\n')
+        }
+      }
+      return {
+        payload: {
+          choices: [{ finish_reason: 'stop', message: { content: '', reasoning_content: null, tool_calls: [] } }],
+          usage: {
+            prompt_tokens: 180,
+            completion_tokens: 44,
+            total_tokens: 224,
+            completion_tokens_details: { reasoning_tokens: 37 }
+          }
+        }
+      }
+    }, async (baseUrl) => {
+      const text = await postOpenAICompatibleChat(settings(baseUrl), [{ role: 'user', content: '讲解当前手' }], 512)
+      assert.equal(text, '流式讲解')
+    })
+
+    assert.ok(requests.some((body) => body.stream === true))
   } finally {
     await cleanup()
   }

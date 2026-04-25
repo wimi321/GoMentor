@@ -57,7 +57,7 @@ async function startMockLlmServer(port) {
       const body = raw ? JSON.parse(raw) : {}
       requests.push(body)
       const allText = (body.messages ?? []).map(textFromMessage).join('\n')
-      const isProbe = allText.includes('请只回答 OK')
+      const isProbe = allText.includes('请只回答 OK') || allText.includes('只输出 OK')
       const content = isProbe ? 'OK' : JSON.stringify({
         taskType: 'current-move',
         headline: '本手要先抢全局最大点',
@@ -292,7 +292,10 @@ async function main() {
     assert.ok(result.reportPath, 'Teacher runtime should persist a report')
     await stat(result.reportPath)
 
-    const probeRequest = mock.requests.find((body) => (body.messages ?? []).some((message) => textFromMessage(message).includes('请只回答 OK')))
+    const probeRequest = mock.requests.find((body) => (body.messages ?? []).some((message) => {
+      const text = textFromMessage(message)
+      return text.includes('请只回答 OK') || text.includes('只输出 OK')
+    }))
     const teacherRequest = mock.requests.find((body) => (body.messages ?? []).some((message) => textFromMessage(message).includes('katagoFacts')))
     assert.ok(probeRequest, 'Mock LLM should receive probe request')
     assert.ok(teacherRequest, 'Mock LLM should receive teacher request with KataGo facts')

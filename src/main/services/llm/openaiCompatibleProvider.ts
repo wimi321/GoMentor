@@ -5,12 +5,13 @@ import {
   formatUsage,
   hasToolCall,
   responseShapeDiagnostics,
+  type ChatChoice,
   type ChatResponse
 } from '../llmResponse'
 import type { ChatInput, ChatMessage, ChatResult, LlmProvider, ProviderProbeResult, ProviderSettings } from './provider'
 
 const tinyPng =
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/luzK4wAAAABJRU5ErkJggg=='
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAeklEQVR42u3SMQ0AIAwAwcrBAQ7wLwEHTMxtsEFv+vmTi7Fm3rOza6Pz/GsQQAABBBBAAAEEEEAAAQQQQAABBBBAAAEEEEAAAQQQQAABBBBAAAEEEEAAAQQQQAABBBBAAAEEEEAAAQQQQAABBBBAAAEEEEAAAQQQ8EELinI6hhXFUGQAAAAASUVORK5CYII='
 
 function endpoint(settings: ProviderSettings): string {
   return `${settings.llmBaseUrl.replace(/\/$/, '')}/chat/completions`
@@ -57,15 +58,6 @@ function retryableParameterError(status: number, text: string): boolean {
   return status === 400 && /max_completion_tokens|max_tokens|temperature|reasoning_effort|modalities|unsupported|unknown parameter|unrecognized/i.test(text)
 }
 
-function shouldTryNextVariantAfterEmpty(json: ChatResponse): boolean {
-  const reason = finishReason(json).toLowerCase()
-  if (reason === 'content_filter' || hasToolCall(json)) {
-    return false
-  }
-  const used = completionTokenCount(json.usage)
-  return used !== null && used > 0
-}
-
 function shouldRetryBudgetAfterEmpty(json: ChatResponse, budget: number): boolean {
   const reason = finishReason(json).toLowerCase()
   if (/length|max.?tokens/.test(reason)) {
@@ -89,12 +81,21 @@ function shouldRetryFinalTextAfterEmpty(json: ChatResponse): boolean {
 
 function messagesWithFinalTextReminder(messages: ChatMessage[]): ChatMessage[] {
   return [
+    {
+      role: 'system',
+      content: [
+        '重要：本接口只接收最终可展示文本。',
+        '必须把答案写入普通 message.content。',
+        '不要只返回 reasoning_content、tool_calls、空 content 或隐藏推理。'
+      ].join('\n')
+    },
     ...messages,
     {
       role: 'user',
       content: [
         '上一次请求没有返回可展示给学生的最终文本。',
-        '请直接输出最终中文讲解，不要只返回 reasoning、tool_calls、空 content 或调试信息。',
+        '请直接输出最终中文讲解，并确保最终文本出现在普通 content 字段中。',
+        '不要只返回 reasoning、tool_calls、空 content 或调试信息。',
         '如果需要结构化结果，请仍然按系统要求输出完整结果。'
       ].join('\n')
     }
@@ -157,9 +158,6 @@ async function attemptOpenAICompatibleChat(
       }
       lastEmptyResponse = json
       lastError = `empty response: finish_reason=${finishReason(json)} ${formatUsage(json.usage)}`
-      if (index < bodies.length - 1 && shouldTryNextVariantAfterEmpty(json)) {
-        continue
-      }
       if (budget < budgets[budgets.length - 1] && shouldRetryBudgetAfterEmpty(json, budget)) {
         break
       }
@@ -170,6 +168,89 @@ async function attemptOpenAICompatibleChat(
     return { kind: 'empty', json: lastEmptyResponse }
   }
   return { kind: 'error', error: new Error(`LLM 没有返回文本内容。${lastError}`) }
+}
+
+function streamDeltaText(json: ChatResponse): string {
+  const choice = json.choices?.[0] as (ChatChoice & {
+    delta?: {
+      content?: unknown
+      text?: unknown
+      output_text?: unknown
+    }
+  }) | undefined
+  const delta = choice?.delta
+  for (const value of [delta?.content, delta?.text, delta?.output_text, choice?.text, choice?.message?.content, json.output_text]) {
+    if (typeof value === 'string' && value.trim()) {
+      return value
+    }
+  }
+  return ''
+}
+
+async function readStreamText(response: Response): Promise<string> {
+  if (!response.body) {
+    return ''
+  }
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let text = ''
+  for (;;) {
+    const { value, done } = await reader.read()
+    if (done) {
+      break
+    }
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split(/\r?\n/)
+    buffer = lines.pop() ?? ''
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed.startsWith('data:')) {
+        continue
+      }
+      const payload = trimmed.replace(/^data:\s*/, '')
+      if (!payload || payload === '[DONE]') {
+        continue
+      }
+      try {
+        text += streamDeltaText(JSON.parse(payload) as ChatResponse)
+      } catch {
+        // Ignore malformed SSE keepalive chunks from compatible proxies.
+      }
+    }
+  }
+  return text.trim()
+}
+
+async function attemptOpenAICompatibleStream(
+  settings: ProviderSettings,
+  messages: ChatMessage[],
+  maxTokens = 4096
+): Promise<ChatAttemptResult> {
+  let lastError = ''
+  const bodies = requestBodies(settings.llmModel, messages, maxTokens)
+  for (const body of bodies) {
+    const response = await fetch(endpoint(settings), {
+      method: 'POST',
+      headers: headers(settings),
+      body: JSON.stringify({ ...body, stream: true }),
+      signal: AbortSignal.timeout(180_000)
+    })
+    if (!response.ok) {
+      const text = await response.text().catch(() => '')
+      if (retryableParameterError(response.status, text)) {
+        lastError = `${response.status} ${text.slice(0, 240)}`
+        continue
+      }
+      return { kind: 'error', error: new Error(`LLM 流式请求失败: ${response.status} ${text.slice(0, 240)}`) }
+    }
+    const text = await readStreamText(response)
+    if (text) {
+      return { kind: 'text', text }
+    }
+    lastError = 'stream completed without visible content'
+  }
+  return { kind: 'error', error: new Error(`LLM 流式请求没有返回文本内容。${lastError}`) }
 }
 
 export async function postOpenAICompatibleChat(
@@ -186,12 +267,21 @@ export async function postOpenAICompatibleChat(
   }
 
   if (shouldRetryFinalTextAfterEmpty(firstAttempt.json)) {
-    const finalTextAttempt = await attemptOpenAICompatibleChat(settings, messagesWithFinalTextReminder(messages), maxTokens)
+    const finalTextMessages = messagesWithFinalTextReminder(messages)
+    const finalTextAttempt = await attemptOpenAICompatibleChat(settings, finalTextMessages, maxTokens)
     if (finalTextAttempt.kind === 'text') {
       return finalTextAttempt.text
     }
     if (finalTextAttempt.kind === 'error') {
+      const streamAttempt = await attemptOpenAICompatibleStream(settings, finalTextMessages, maxTokens)
+      if (streamAttempt.kind === 'text') {
+        return streamAttempt.text
+      }
       throw finalTextAttempt.error
+    }
+    const streamAttempt = await attemptOpenAICompatibleStream(settings, finalTextMessages, maxTokens)
+    if (streamAttempt.kind === 'text') {
+      return streamAttempt.text
     }
     throw emptyResponseError(finalTextAttempt.json, settings.llmModel)
   }
@@ -210,13 +300,21 @@ export async function probeOpenAICompatibleProvider(settings: ProviderSettings):
   try {
     const text = await postOpenAICompatibleChat(settings, [
       {
+        role: 'system',
+        content: [
+          '你正在执行多模态连接测试。',
+          '必须在最终可见 content 中只输出 OK 两个字母。',
+          '不要调用工具，不要输出解释，不要只写隐藏推理。'
+        ].join('\n')
+      },
+      {
         role: 'user',
         content: [
-          { type: 'text', text: '请只回答 OK，确认你能读取图片输入。' },
+          { type: 'text', text: '请读取这张测试图片，并在最终答案中只输出 OK。' },
           { type: 'image_url', image_url: { url: tinyPng } }
         ]
       }
-    ], 512)
+    ], 2048)
     return {
       ok: /ok/i.test(text),
       message: /ok/i.test(text) ? 'Claude 兼容代理连接成功，图片输入可用。' : `代理有返回，但未按预期回答: ${text}`,
