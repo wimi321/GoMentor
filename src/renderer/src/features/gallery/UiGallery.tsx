@@ -97,10 +97,9 @@ export function UiGallery(): ReactElement {
           </div>
           <div className="teacher-panel teacher-agent-editor ui-gallery__agent-shell">
             <header className="teacher-editor-head">
-              <div className="teacher-agent-mark" aria-hidden="true">KS</div>
               <div className="teacher-editor-title">
-                <span>KataSensei Agent</span>
-                <strong>围棋老师智能体</strong>
+                <span>KataSensei AI Editor</span>
+                <strong>对话式围棋分析线程</strong>
                 <div className="teacher-editor-meta">
                   <em>gpt-5.4</em>
                   <em>KataGo ready</em>
@@ -120,14 +119,12 @@ export function UiGallery(): ReactElement {
             </div>
             <div className="message-list agent-thread">
               <article className="message message--student agent-turn agent-turn--student">
-                <div className="agent-turn__rail"><span>你</span></div>
                 <div className="agent-turn__body">
-                  <header className="agent-turn__head"><strong>Prompt</strong><small>turn input</small></header>
+                  <header className="agent-turn__head"><strong>你</strong><small>turn input</small></header>
                   <div className="message-copy">分析第 24 手，告诉我为什么 KataGo 推荐 Q10，并给一周训练建议。</div>
                 </div>
               </article>
               <article className="message message--teacher agent-turn agent-turn--teacher">
-                <div className="agent-turn__rail"><span>AI</span></div>
                 <div className="agent-turn__body">
                   <header className="agent-turn__head"><strong>KataSensei</strong><small>turn complete · item stream</small></header>
                   <TeacherRunCardPro
@@ -139,7 +136,6 @@ export function UiGallery(): ReactElement {
                 </div>
               </article>
               <div className="message message--teacher message--running agent-turn agent-turn--teacher agent-turn--running">
-                <div className="agent-turn__rail"><span>AI</span></div>
                 <div className="agent-turn__body">
                   <header className="agent-turn__head"><strong>KataSensei</strong><small>turn running · item stream</small></header>
                   <TeacherRunCardPro running markdown="正在读取棋盘、调用 KataGo、检索教学卡并组织讲解..." />

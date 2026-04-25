@@ -22,12 +22,16 @@ test('GoBoardV2 renders polished stone and candidate layers', () => {
   assert.match(board, /ks-stone-highlight/)
   assert.match(board, /ks-board-bevel/)
   assert.match(board, /ks-candidate-soft-glow/)
+  assert.match(board, /ks-candidate-winrate/)
+  assert.match(board, /ks-candidate-visits/)
+  assert.match(board, /ks-candidate-score/)
 })
 
-test('WinrateTimelineV2 exposes hover tooltip and area rendering', () => {
+test('WinrateTimelineV2 exposes hover tooltip and score line rendering', () => {
   const timeline = read('src/renderer/src/features/board/WinrateTimelineV2.tsx')
   assert.match(timeline, /ks-timeline-tooltip/)
-  assert.match(timeline, /ks-timeline-area/)
+  assert.match(timeline, /ks-timeline-line--score/)
+  assert.match(timeline, /extractScoreLead/)
   assert.match(timeline, /hoveredMove/)
 })
 
@@ -41,6 +45,8 @@ test('TeacherRunCardPro renders structured product modules', () => {
   assert.match(app, /teacher-agent-editor/)
   assert.match(app, /teacher-commandbar/)
   assert.match(app, /agent-turn/)
+  assert.match(app, /KataSensei AI Editor/)
+  assert.match(app, /搜索野狐棋谱/)
   const composer = read('src/renderer/src/features/teacher/TeacherComposerPro.tsx')
   assert.match(composer, /Agent Prompt/)
   assert.match(composer, /ks-composer-pro__chrome/)

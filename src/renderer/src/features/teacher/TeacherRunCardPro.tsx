@@ -140,12 +140,13 @@ export function TeacherRunCardPro({
   const toolLogs = pickToolLogs(result)
   const error = stringValue(asRecord(result).error ?? structured.error)
   const detailSummary = stringValue(structured.summary)
+  const responseSummary = detailSummary && detailSummary !== summary ? detailSummary : summary
 
   return (
-    <article className={`ks-teacher-pro-card ${running ? 'ks-teacher-pro-card--running' : ''}`}>
+    <article className={`ks-teacher-pro-card ks-agent-response ${running ? 'ks-teacher-pro-card--running' : ''}`}>
       <header className="ks-teacher-pro-card__header">
         <div>
-          <span className="ks-teacher-pro-card__eyebrow">AI 围棋老师</span>
+          <span className="ks-teacher-pro-card__eyebrow">assistant response</span>
           <h3>{running ? '正在分析棋局…' : summary}</h3>
         </div>
         <span className="ks-teacher-pro-card__status">{running ? '执行中' : error ? '需处理' : '完成'}</span>
@@ -156,36 +157,36 @@ export function TeacherRunCardPro({
       {!running ? (
         <section className="ks-teacher-pro-summary">
           <span>一句话结论</span>
-          <p>{detailSummary && detailSummary !== summary ? detailSummary : summary}</p>
+          <p>{responseSummary}</p>
         </section>
       ) : (
         <section className="ks-teacher-pro-summary ks-teacher-pro-summary--loading">
-          <span>老师正在执行</span>
+          <span>agent is working</span>
           <p>正在看棋盘、查 KataGo 候选点、检索教学卡，并把结果整理成学生能执行的训练建议。</p>
         </section>
       )}
 
       {evidence.length > 0 ? (
-        <section className="ks-teacher-pro-section">
-          <h4>KataGo 证据</h4>
+        <details className="ks-teacher-pro-section ks-agent-item">
+          <summary><span>KataGo 证据</span><em>{evidence.length}</em></summary>
           <div className="ks-teacher-pro-evidence">
             {evidence.map((item, index) => <div key={`${index}-${item}`}><span>{index + 1}</span><p>{item}</p></div>)}
           </div>
-        </section>
+        </details>
       ) : null}
 
       {errorTypes.length > 0 ? (
-        <section className="ks-teacher-pro-section">
-          <h4>错误类型</h4>
+        <details className="ks-teacher-pro-section ks-agent-item">
+          <summary><span>错误类型</span><em>{errorTypes.length}</em></summary>
           <div className="ks-teacher-pro-tags">
             {errorTypes.map((item) => <span key={item}>{item}</span>)}
           </div>
-        </section>
+        </details>
       ) : null}
 
       {keyMoves.length > 0 ? (
-        <section className="ks-teacher-pro-section">
-          <h4>关键问题手</h4>
+        <details className="ks-teacher-pro-section ks-agent-item" open>
+          <summary><span>关键问题手</span><em>{keyMoves.length}</em></summary>
           <div className="ks-keymove-card-list">
             {keyMoves.map((move, index) => (
               <div key={index} className="ks-keymove-card">
@@ -201,34 +202,34 @@ export function TeacherRunCardPro({
             ))}
           </div>
           <TeacherKeyMoveActions moves={actionMoves} onJumpToMove={onJumpToMove} onAnalyzeMove={onAnalyzeMove} />
-        </section>
+        </details>
       ) : null}
 
       {training.length > 0 ? (
-        <section className="ks-teacher-pro-section">
-          <h4>训练建议</h4>
+        <details className="ks-teacher-pro-section ks-agent-item">
+          <summary><span>训练建议</span><em>{training.length}</em></summary>
           <ol className="ks-teacher-pro-training">
             {training.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}
           </ol>
-        </section>
+        </details>
       ) : null}
 
       {recommendations.length > 0 ? (
-        <section className="ks-teacher-pro-section">
-          <h4>推荐思路</h4>
+        <details className="ks-teacher-pro-section ks-agent-item">
+          <summary><span>推荐思路</span><em>{recommendations.length}</em></summary>
           <div className="ks-teacher-pro-recommendations">
             {recommendations.map((item, index) => <span key={`${index}-${item}`}>{item}</span>)}
           </div>
-        </section>
+        </details>
       ) : null}
 
       {followups.length > 0 ? (
-        <section className="ks-teacher-pro-section">
-          <h4>可继续追问</h4>
+        <details className="ks-teacher-pro-section ks-agent-item">
+          <summary><span>可继续追问</span><em>{followups.length}</em></summary>
           <div className="ks-teacher-pro-followups">
             {followups.map((item) => <button key={item} type="button">{item}</button>)}
           </div>
-        </section>
+        </details>
       ) : null}
 
       {markdown && keyMoves.length === 0 && training.length === 0 ? (

@@ -897,9 +897,9 @@ function LibraryPanel({
           onSync()
         }}
       >
-        <input value={foxKeyword} onChange={(event) => onFoxKeyword(event.target.value)} placeholder="输入野狐昵称 / UID" />
-        <button className="primary-button" type="submit" disabled={!foxKeyword.trim() || busy !== ''}>
-          {busy === 'fox' ? '同步中' : '同步'}
+        <input value={foxKeyword} onChange={(event) => onFoxKeyword(event.target.value)} placeholder="输入野狐昵称" />
+        <button className="primary-button fox-search-button" type="submit" disabled={!foxKeyword.trim() || busy !== ''}>
+          {busy === 'fox' ? '搜索中' : '搜索野狐棋谱'}
         </button>
       </form>
       <button className="ghost-button library-upload-button" onClick={onImport} disabled={busy !== ''}>
@@ -1178,10 +1178,9 @@ function TeacherPanel({
   return (
     <div className="teacher-panel teacher-agent-editor">
       <header className="teacher-editor-head">
-        <div className="teacher-agent-mark" aria-hidden="true">KS</div>
         <div className="teacher-editor-title">
-          <span>KataSensei Agent</span>
-          <strong>围棋老师智能体</strong>
+          <span>KataSensei AI Editor</span>
+          <strong>对话式围棋分析线程</strong>
           <div className="teacher-editor-meta">
             <em>{modelName}</em>
             <em>{katagoLabel}</em>
@@ -1204,12 +1203,9 @@ function TeacherPanel({
       <div className="message-list agent-thread">
         {messages.map((message) => (
           <article key={message.id} className={`message message--${message.role} agent-turn agent-turn--${message.role}`}>
-            <div className="agent-turn__rail">
-              <span>{message.role === 'teacher' ? 'AI' : '你'}</span>
-            </div>
             <div className="agent-turn__body">
               <header className="agent-turn__head">
-                <strong>{message.role === 'teacher' ? 'KataSensei' : 'Prompt'}</strong>
+                <strong>{message.role === 'teacher' ? 'KataSensei' : '你'}</strong>
                 <small>{message.result ? 'turn complete · item stream' : message.role === 'teacher' ? 'assistant note' : 'turn input'}</small>
               </header>
             {message.result ? (
@@ -1234,9 +1230,6 @@ function TeacherPanel({
         ))}
         {hasRunningTask ? (
           <div className="message message--teacher message--running agent-turn agent-turn--teacher agent-turn--running">
-            <div className="agent-turn__rail">
-              <span>AI</span>
-            </div>
             <div className="agent-turn__body">
               <header className="agent-turn__head">
                 <strong>KataSensei</strong>

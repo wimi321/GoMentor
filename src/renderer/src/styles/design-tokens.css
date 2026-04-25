@@ -1,32 +1,32 @@
 :root {
-  /* App surfaces: a charcoal stack with warmer raised panels. */
-  --ks-bg-app: #080a0d;
-  --ks-bg-app-2: #0d1115;
-  --ks-bg-panel: #11171d;
-  --ks-bg-panel-2: #161e25;
-  --ks-bg-elevated: #1c2630;
-  --ks-bg-glass: rgb(18 24 30 / 0.78);
+  /* App surfaces: warm paper and porcelain panels for the approved light theme. */
+  --ks-bg-app: #eee7d8;
+  --ks-bg-app-2: #f6f0e6;
+  --ks-bg-panel: #fbf7ef;
+  --ks-bg-panel-2: #f3ecdf;
+  --ks-bg-elevated: #fffdf7;
+  --ks-bg-glass: rgb(255 252 245 / 0.82);
 
-  /* Lines and borders: soft by default, stronger only for focus/selection. */
-  --ks-border-hairline: rgba(255, 255, 255, 0.055);
-  --ks-border-soft: rgba(255, 255, 255, 0.085);
-  --ks-border-strong: rgba(255, 255, 255, 0.16);
+  /* Lines and borders: graphite ink at low opacity, stronger only for focus/selection. */
+  --ks-border-hairline: rgba(55, 49, 39, 0.075);
+  --ks-border-soft: rgba(55, 49, 39, 0.12);
+  --ks-border-strong: rgba(55, 49, 39, 0.2);
 
-  /* Text hierarchy: warm primary text, cool secondary copy. */
-  --ks-text-main: #f4efe7;
-  --ks-text-muted: #a8b2bb;
-  --ks-text-faint: #75818c;
-  --ks-text-inverse: #11161a;
+  /* Text hierarchy: graphite primary text with warm muted secondary copy. */
+  --ks-text-main: #29251f;
+  --ks-text-muted: #756d60;
+  --ks-text-faint: #9c9384;
+  --ks-text-inverse: #fffaf0;
 
   /* Intent colors: restrained accents for teaching, analysis, and risk. */
-  --ks-gold: #d6b66e;
-  --ks-gold-strong: #efd38f;
-  --ks-green: #65d391;
-  --ks-teal: #5fd4cf;
-  --ks-blue: #76b8e8;
-  --ks-red: #e46f67;
-  --ks-orange: #d99a63;
-  --ks-purple: #b68ee8;
+  --ks-gold: #b99651;
+  --ks-gold-strong: #c9a45b;
+  --ks-green: #4f936a;
+  --ks-teal: #4f9b91;
+  --ks-blue: #557f9d;
+  --ks-red: #c9655f;
+  --ks-orange: #b97545;
+  --ks-purple: #8975aa;
 
   /* Board palette: natural kaya-inspired wood, not saturated orange. */
   --ks-board-light: #d8ad6b;
@@ -49,10 +49,10 @@
   --ks-radius-lg: 18px;
   --ks-radius-xl: 24px;
 
-  /* Elevation: soft desktop depth without floating-card clutter. */
-  --ks-shadow-soft: 0 18px 48px rgba(0, 0, 0, 0.34);
-  --ks-shadow-hard: 0 28px 80px rgba(0, 0, 0, 0.48);
-  --ks-shadow-inner: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  /* Elevation: paper-like depth, never glossy or web-card heavy. */
+  --ks-shadow-soft: 0 18px 48px rgba(75, 57, 31, 0.12);
+  --ks-shadow-hard: 0 28px 80px rgba(70, 49, 25, 0.2);
+  --ks-shadow-inner: inset 0 1px 0 rgba(255, 255, 255, 0.72);
 
   /* Motion: short enough for analysis tools, visible enough for polish. */
   --ks-motion-fast: 120ms ease;
@@ -68,8 +68,8 @@
 .ks-surface-card {
   border: 1px solid var(--ks-border-soft);
   border-radius: var(--ks-radius-md);
-  background: linear-gradient(180deg, rgba(27, 35, 44, 0.94), rgba(15, 20, 26, 0.94));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), var(--ks-shadow-soft);
+  background: linear-gradient(180deg, rgba(255, 252, 244, 0.96), rgba(246, 240, 229, 0.96));
+  box-shadow: var(--ks-shadow-inner), var(--ks-shadow-soft);
 }
 
 .ks-mini-label {

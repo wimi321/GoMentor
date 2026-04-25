@@ -8,6 +8,7 @@ import './board-v2.css'
 interface TimelinePoint {
   moveNumber: number
   winrate: number
+  scoreLead?: number
   loss?: number
   severity?: 'blunder' | 'mistake' | 'inaccuracy' | 'turning-point'
 }
@@ -38,6 +39,19 @@ function extractLoss(item: unknown): number | undefined {
   return undefined
 }
 
+function extractScoreLead(item: unknown): number | undefined {
+  const raw =
+    valueOf(valueOf(item, 'after'), 'scoreLead') ??
+    valueOf(valueOf(item, 'after'), 'scoreMean') ??
+    valueOf(valueOf(item, 'after'), 'score') ??
+    valueOf(item, 'scoreLead') ??
+    valueOf(item, 'scoreMean')
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return raw
+  }
+  return undefined
+}
+
 function buildPoints(evaluations: KataGoMoveAnalysis[], totalMoves: number): TimelinePoint[] {
   return evaluations.flatMap((item) => {
     const moveNumber = getAnalysisMoveNumber(item)
@@ -49,6 +63,7 @@ function buildPoints(evaluations: KataGoMoveAnalysis[], totalMoves: number): Tim
     return [{
       moveNumber,
       winrate,
+      scoreLead: extractScoreLead(item),
       loss,
       severity: loss === undefined ? undefined : classifyMoveLoss(loss)
     }]
@@ -71,11 +86,16 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
   const safeTotal = Math.max(1, totalMoves)
   const x = (move: number) => padX + (Math.max(0, Math.min(safeTotal, move)) / safeTotal) * plotW
   const y = (winrate: number) => padY + (1 - winrate) * plotH
+  const scoreScale = Math.max(5, Math.ceil(Math.max(0, ...points.map((point) => Math.abs(point.scoreLead ?? 0))) / 5) * 5)
+  const yScore = (scoreLead: number) => padY + plotH / 2 - Math.max(-scoreScale, Math.min(scoreScale, scoreLead)) * (plotH / 2 - 5) / scoreScale
   const path = points.length > 1
     ? points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${x(point.moveNumber).toFixed(1)} ${y(point.winrate).toFixed(1)}`).join(' ')
     : ''
-  const areaPath = path && points.length > 1
-    ? `${path} L ${x(points[points.length - 1].moveNumber).toFixed(1)} ${height - padY} L ${x(points[0].moveNumber).toFixed(1)} ${height - padY} Z`
+  const scorePath = points.filter((point) => typeof point.scoreLead === 'number').length > 1
+    ? points
+      .filter((point): point is TimelinePoint & { scoreLead: number } => typeof point.scoreLead === 'number')
+      .map((point, index) => `${index === 0 ? 'M' : 'L'} ${x(point.moveNumber).toFixed(1)} ${yScore(point.scoreLead).toFixed(1)}`)
+      .join(' ')
     : ''
   const hoverPoint = hoveredMove === null
     ? null
@@ -132,7 +152,7 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
     <div className="ks-timeline-v2">
       <div className="ks-timeline-head">
         <span>胜率走势</span>
-        <small>{loading ? (loadingLabel || '分析中') : `${points.length}/${totalMoves || 0} 局面`}</small>
+        <small>{loading ? (loadingLabel || '分析中') : `胜率 / 目差 · ${points.length}/${totalMoves || 0} 局面`}</small>
       </div>
       <svg
         className={`ks-timeline-canvas ${dragging ? 'is-dragging' : ''}`}
@@ -154,10 +174,6 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
             <stop offset="0" stopColor="#171d24" />
             <stop offset="1" stopColor="#0d1116" />
           </linearGradient>
-          <linearGradient id="ks-timeline-area" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="rgba(235,207,134,.32)" />
-            <stop offset="1" stopColor="rgba(235,207,134,0)" />
-          </linearGradient>
         </defs>
         <rect x="6" y="6" width={width - 12} height={height - 12} rx="14" fill="url(#ks-timeline-bg)" />
         {[0.25, 0.5, 0.75].map((row) => (
@@ -167,8 +183,8 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
           <line key={col} className="ks-timeline-grid ks-timeline-grid--vertical" x1={padX + col * plotW} y1={padY} x2={padX + col * plotW} y2={height - padY} />
         ))}
         <line className="ks-timeline-center" x1={padX} y1={y(0.5)} x2={width - padX} y2={y(0.5)} />
-        {areaPath ? <path className="ks-timeline-area" d={areaPath} /> : null}
-        {path ? <path className="ks-timeline-line" d={path} /> : null}
+        {path ? <path className="ks-timeline-line ks-timeline-line--winrate" d={path} /> : null}
+        {scorePath ? <path className="ks-timeline-line ks-timeline-line--score" d={scorePath} /> : null}
         {points.map((point) => {
           const visibleLoss = typeof point.loss === 'number' && Math.abs(point.loss) >= 0.04
           return visibleLoss ? (
@@ -196,7 +212,7 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
       {hoverPoint ? (
         <div className="ks-timeline-tooltip" style={{ left: `${Math.round(hoverLeft)}px` }}>
           <strong>第 {hoverPoint.moveNumber} 手 · {Math.round(hoverPoint.winrate * 100)}%</strong>
-          <span>目差估计 {(hoverPoint.winrate * 20 - 10).toFixed(1)} · {hoverPoint.severity === 'blunder' ? '重大问题' : hoverPoint.severity === 'mistake' ? '问题手' : hoverPoint.severity === 'inaccuracy' ? '缓手' : '走势点'}</span>
+          <span>目差 {typeof hoverPoint.scoreLead === 'number' ? hoverPoint.scoreLead.toFixed(1) : '—'} · {hoverPoint.severity === 'blunder' ? '重大问题' : hoverPoint.severity === 'mistake' ? '问题手' : hoverPoint.severity === 'inaccuracy' ? '缓手' : '走势点'}</span>
         </div>
       ) : null}
     </div>

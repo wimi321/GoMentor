@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import type { GameRecord, KataGoMoveAnalysis } from '@main/lib/types'
 import {
   getBoardSize,
+  normalizeWinrate,
   renderCandidates,
   renderStones,
   type BoardPoint,
@@ -70,6 +71,32 @@ function toTooltipMove(candidate: RenderCandidate): CandidateTooltipMove {
   }
 }
 
+function formatCandidateWinrate(candidate: RenderCandidate): string {
+  const normalized = normalizeWinrate(valueOf(candidate.raw, 'winrate'))
+  if (normalized === null) {
+    return candidate.winrateLabel?.replace('%', '') ?? '—'
+  }
+  return (normalized * 100).toFixed(1)
+}
+
+function formatCandidateVisits(candidate: RenderCandidate): string {
+  const visits = valueOf(candidate.raw, 'visits')
+  if (typeof visits !== 'number' || !Number.isFinite(visits)) {
+    return candidate.visitsLabel ?? '—'
+  }
+  if (visits >= 10000) {
+    return `${(visits / 10000).toFixed(visits >= 100000 ? 0 : 1)}w`
+  }
+  if (visits >= 1000) {
+    return `${(visits / 1000).toFixed(visits >= 10000 ? 0 : 1)}k`
+  }
+  return String(Math.round(visits))
+}
+
+function formatCandidateScore(candidate: RenderCandidate): string {
+  return candidate.scoreLabel ?? '0.0'
+}
+
 function tooltipPosition(point: { x: number; y: number }, svg: SVGSVGElement): CandidateTooltipPosition {
   const rect = svg.getBoundingClientRect()
   const x = (point.x / VIEWBOX) * rect.width + 14
@@ -90,10 +117,10 @@ function CandidateMark({
   onHover?: (candidate: RenderCandidate | null, position?: CandidateTooltipPosition) => void
 }): ReactElement {
   const p = xy(candidate, boardSize)
-  const className = `ks-candidate ks-candidate--${candidate.emphasis}`
-  const subLabel = candidate.emphasis === 'quiet'
-    ? candidate.winrateLabel
-    : candidate.scoreLabel ?? candidate.winrateLabel ?? candidate.visitsLabel ?? candidate.label
+  const className = `ks-candidate ks-candidate--${candidate.emphasis} ks-candidate--rank-${candidate.rank}`
+  const winrate = formatCandidateWinrate(candidate)
+  const visits = formatCandidateVisits(candidate)
+  const score = formatCandidateScore(candidate)
   return (
     <g
       className={className}
@@ -104,11 +131,14 @@ function CandidateMark({
       }}
       onPointerLeave={() => onHover?.(null)}
     >
-      <circle className="ks-candidate-soft-glow" r="31" />
-      <circle className="ks-candidate-ring" r="27" />
-      <circle className="ks-candidate-disc" r="20" />
-      <text className="ks-candidate-rank" y="-2">{candidate.rank}</text>
-      {subLabel ? <text className="ks-candidate-sub" y="13">{subLabel}</text> : null}
+      <circle className="ks-candidate-soft-glow" r="27" />
+      <circle className="ks-candidate-ring" r="25.5" />
+      <circle className="ks-candidate-disc" r="23.5" />
+      <circle className="ks-candidate-rank-badge" cx="18" cy="-19" r="9.2" />
+      <text className="ks-candidate-rank" x="18" y="-19">{candidate.rank}</text>
+      <text className="ks-candidate-winrate" y="-7">{winrate}</text>
+      <text className="ks-candidate-visits" y="5.5">{visits}</text>
+      <text className="ks-candidate-score" y="17">{score}</text>
     </g>
   )
 }
