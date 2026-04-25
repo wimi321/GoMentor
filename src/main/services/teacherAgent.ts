@@ -315,6 +315,12 @@ function currentMovePayload(
     userPrompt: request.prompt,
     gameId: analysis.gameId,
     moveNumber: analysis.moveNumber,
+    katagoPerspective: {
+      rawWinrate: 'BLACK',
+      rawScoreLead: 'BLACK',
+      displayedCandidateValues: 'current_player_to_move',
+      problemMoveBasis: 'best_before_move_value_minus_played_move_value_from_current_player_perspective'
+    },
     katagoFacts: analysis,
     studentProfile: profile,
     knowledgePacket: knowledge,
@@ -386,8 +392,18 @@ function firstMarkdownLine(markdown: string, fallback: string): string {
     .find(Boolean) ?? fallback
 }
 
-function formatCandidateForPrompt(candidate: KataGoMoveAnalysis['before']['topMoves'][number]): string {
-  return `${candidate.move}（胜率 ${candidate.winrate.toFixed(1)}%，目差 ${candidate.scoreLead.toFixed(1)}，搜索 ${candidate.visits}）`
+function playerWinrateForPrompt(blackWinrate: number, color: 'B' | 'W' | undefined): number {
+  return color === 'W' ? 100 - blackWinrate : blackWinrate
+}
+
+function playerScoreForPrompt(scoreLead: number, color: 'B' | 'W' | undefined): number {
+  return color === 'W' ? -scoreLead : scoreLead
+}
+
+function formatCandidateForPrompt(candidate: KataGoMoveAnalysis['before']['topMoves'][number], color?: 'B' | 'W'): string {
+  const winrate = playerWinrateForPrompt(candidate.winrate, color)
+  const scoreLead = playerScoreForPrompt(candidate.scoreLead, color)
+  return `${candidate.move}（当前方胜率 ${winrate.toFixed(1)}%，当前方目差 ${scoreLead.toFixed(1)}，搜索 ${candidate.visits}）`
 }
 
 function severityFromJudgement(judgement: KataGoMoveAnalysis['judgement']): 'inaccuracy' | 'mistake' | 'blunder' {
@@ -427,8 +443,8 @@ function structuredCurrentMoveResult(
     summary: firstMarkdownLine(markdown, best ? `KataGo 当前首选 ${best.move}。` : '当前局面已完成分析。'),
     keyMistakes: mistake,
     correctThinking: [
-      best ? `先比较 1 选 ${formatCandidateForPrompt(best)}。` : '先确认当前局面的最大价值点。',
-      analysis.before.topMoves[1] ? `再看 2 选 ${formatCandidateForPrompt(analysis.before.topMoves[1])}，理解不同方案的代价。` : '把实战手和候选点放在同一张棋盘上比较。'
+      best ? `先比较 1 选 ${formatCandidateForPrompt(best, analysis.currentMove?.color)}。` : '先确认当前局面的最大价值点。',
+      analysis.before.topMoves[1] ? `再看 2 选 ${formatCandidateForPrompt(analysis.before.topMoves[1], analysis.currentMove?.color)}，理解不同方案的代价。` : '把实战手和候选点放在同一张棋盘上比较。'
     ],
     drills: knowledge.slice(0, 3).map((card) => `${card.title}: ${card.summary}`),
     followupQuestions: [

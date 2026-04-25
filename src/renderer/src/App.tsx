@@ -139,7 +139,7 @@ function boardCandidateMoves(analysis: KataGoMoveAnalysis | null): KataGoCandida
   if (!analysis) {
     return []
   }
-  return analysis.after.topMoves.length > 0 ? analysis.after.topMoves : analysis.before.topMoves
+  return analysis.before.topMoves.length > 0 ? analysis.before.topMoves : analysis.after.topMoves
 }
 
 function analysisHasCandidates(analysis: KataGoMoveAnalysis | undefined | null): boolean {

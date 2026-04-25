@@ -71,8 +71,8 @@ function toTooltipMove(candidate: RenderCandidate): CandidateTooltipMove {
     order: candidate.rank,
     move: String(valueOf(candidate.raw, 'move') ?? candidate.label),
     gtp: String(valueOf(candidate.raw, 'gtp') ?? valueOf(candidate.raw, 'move') ?? candidate.label),
-    winrate: valueOf(candidate.raw, 'winrate') as number | undefined,
-    scoreLead: valueOf(candidate.raw, 'scoreLead') as number | undefined,
+    winrate: candidate.winrateValue ?? valueOf(candidate.raw, 'winrate') as number | undefined,
+    scoreLead: candidate.scoreValue ?? valueOf(candidate.raw, 'scoreLead') as number | undefined,
     visits: valueOf(candidate.raw, 'visits') as number | undefined,
     prior: valueOf(candidate.raw, 'prior') as number | undefined,
     pv: Array.isArray(rawPv) ? rawPv.map(String).slice(0, 14) : undefined,
@@ -81,9 +81,12 @@ function toTooltipMove(candidate: RenderCandidate): CandidateTooltipMove {
 }
 
 function formatCandidateWinrate(candidate: RenderCandidate): string {
+  if (candidate.winrateLabel) {
+    return candidate.winrateLabel
+  }
   const normalized = normalizeWinrate(valueOf(candidate.raw, 'winrate'))
   if (normalized === null) {
-    return candidate.winrateLabel ?? '—'
+    return '—'
   }
   return `${(normalized * 100).toFixed(1)}%`
 }

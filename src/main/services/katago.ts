@@ -86,18 +86,58 @@ function judgement(winrateLoss: number, scoreLoss: number): KataGoMoveAnalysis['
   return 'good_move'
 }
 
+function moveKey(move: string | undefined): string {
+  return (move ?? '').trim().toUpperCase()
+}
+
+function playerWinrate(blackWinrate: number, color: GameMove['color']): number {
+  return color === 'B' ? blackWinrate : 100 - blackWinrate
+}
+
+function playerScoreLead(scoreLead: number, color: GameMove['color']): number {
+  return color === 'B' ? scoreLead : -scoreLead
+}
+
+function findPlayedCandidate(
+  currentMove: GameMove | undefined,
+  topMoves: KataGoCandidate[]
+): { candidate?: KataGoCandidate; rank?: number } {
+  if (!currentMove) {
+    return {}
+  }
+  const index = topMoves.findIndex((candidate) => moveKey(candidate.move) === moveKey(currentMove.gtp))
+  return index >= 0 ? { candidate: topMoves[index], rank: index + 1 } : {}
+}
+
+function playedMoveValue(
+  currentMove: GameMove | undefined,
+  topMoves: KataGoCandidate[],
+  afterRoot: { winrate: number; scoreLead: number }
+): { winrate: number; scoreLead: number; playerWinrate?: number; playerScoreLead?: number; visits?: number; rank?: number } {
+  const { candidate, rank } = findPlayedCandidate(currentMove, topMoves)
+  const winrate = candidate?.winrate ?? afterRoot.winrate
+  const scoreLead = candidate?.scoreLead ?? afterRoot.scoreLead
+  return {
+    winrate,
+    scoreLead,
+    playerWinrate: currentMove ? playerWinrate(winrate, currentMove.color) : undefined,
+    playerScoreLead: currentMove ? playerScoreLead(scoreLead, currentMove.color) : undefined,
+    visits: candidate?.visits,
+    rank
+  }
+}
+
 function playedLoss(
   currentMove: GameMove | undefined,
   best: KataGoCandidate | undefined,
-  afterRoot: { winrate: number; scoreLead: number }
+  actual: { winrate: number; scoreLead: number }
 ): { winrateLoss: number; scoreLoss: number } {
   if (!currentMove || !best) {
     return { winrateLoss: 0, scoreLoss: 0 }
   }
-  const sign = currentMove.color === 'B' ? 1 : -1
   return {
-    winrateLoss: Math.max(0, (best.winrate - afterRoot.winrate) * sign),
-    scoreLoss: Math.max(0, (best.scoreLead - afterRoot.scoreLead) * sign)
+    winrateLoss: Math.max(0, playerWinrate(best.winrate, currentMove.color) - playerWinrate(actual.winrate, currentMove.color)),
+    scoreLoss: Math.max(0, playerScoreLead(best.scoreLead, currentMove.color) - playerScoreLead(actual.scoreLead, currentMove.color))
   }
 }
 
@@ -292,10 +332,8 @@ function buildMoveAnalysis(
   const topMoves = candidates(beforeResponse)
   const afterTopMoves = candidates(afterResponse)
   const best = topMoves[0]
-  const playedCandidate = currentMove
-    ? topMoves.find((candidate) => candidate.move.toUpperCase() === currentMove.gtp.toUpperCase())
-    : undefined
-  const { winrateLoss, scoreLoss } = playedLoss(currentMove, best, afterRoot)
+  const actual = playedMoveValue(currentMove, topMoves, afterRoot)
+  const { winrateLoss, scoreLoss } = playedLoss(currentMove, best, actual)
 
   return {
     gameId,
@@ -313,10 +351,12 @@ function buildMoveAnalysis(
     playedMove: currentMove
       ? {
           move: currentMove.gtp,
-          winrate: afterRoot.winrate,
-          scoreLead: afterRoot.scoreLead,
-          visits: playedCandidate?.visits,
-          rank: playedCandidate ? topMoves.indexOf(playedCandidate) + 1 : undefined,
+          winrate: actual.winrate,
+          scoreLead: actual.scoreLead,
+          playerWinrate: actual.playerWinrate,
+          playerScoreLead: actual.playerScoreLead,
+          visits: actual.visits,
+          rank: actual.rank,
           winrateLoss,
           scoreLoss
         }
@@ -426,8 +466,9 @@ export async function analyzeGameQuick(
     const beforeTopMoves = topMovesByPosition.get(moveNumber - 1) ?? []
     const afterTopMoves = topMovesByPosition.get(moveNumber) ?? []
     const currentMove = moves[moveNumber - 1]
-    const winrateSwing = Math.abs(after.winrate - before.winrate)
-    const scoreSwing = Math.abs(after.scoreLead - before.scoreLead)
+    const best = beforeTopMoves[0]
+    const actual = playedMoveValue(currentMove, beforeTopMoves, after)
+    const { winrateLoss, scoreLoss } = playedLoss(currentMove, best, actual)
     return {
       gameId,
       moveNumber,
@@ -443,12 +484,16 @@ export async function analyzeGameQuick(
       },
       playedMove: {
         move: currentMove.gtp,
-        winrate: after.winrate,
-        scoreLead: after.scoreLead,
-        winrateLoss: winrateSwing,
-        scoreLoss: scoreSwing
+        winrate: actual.winrate,
+        scoreLead: actual.scoreLead,
+        playerWinrate: actual.playerWinrate,
+        playerScoreLead: actual.playerScoreLead,
+        visits: actual.visits,
+        rank: actual.rank,
+        winrateLoss,
+        scoreLoss
       },
-      judgement: judgement(winrateSwing, scoreSwing)
+      judgement: judgement(winrateLoss, scoreLoss)
     }
   }
 

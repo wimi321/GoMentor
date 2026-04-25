@@ -243,6 +243,8 @@ export interface KataGoMoveAnalysis {
     move: string
     winrate: number
     scoreLead: number
+    playerWinrate?: number
+    playerScoreLead?: number
     visits?: number
     rank?: number
     winrateLoss: number

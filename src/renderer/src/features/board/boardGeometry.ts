@@ -15,7 +15,9 @@ export interface RenderStone extends BoardPoint {
 export interface RenderCandidate extends BoardPoint {
   rank: number
   label: string
+  winrateValue?: number
   winrateLabel?: string
+  scoreValue?: number
   scoreLabel?: string
   visitsLabel?: string
   emphasis: 'primary' | 'secondary' | 'quiet'
@@ -34,7 +36,9 @@ export interface RenderPlayedMove extends BoardPoint {
   label: string
   move: string
   color: StoneColor
+  winrateValue?: number
   winrateLabel?: string
+  scoreValue?: number
   scoreLabel?: string
   visitsLabel?: string
   rank?: number
@@ -81,6 +85,31 @@ export function formatScore(value: unknown): string | undefined {
   }
   const rounded = Math.abs(value) >= 10 ? value.toFixed(0) : value.toFixed(1)
   return `${value > 0 ? '+' : ''}${rounded}`
+}
+
+function numericValue(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function winratePercent(value: unknown): number | undefined {
+  const normalized = normalizeWinrate(value)
+  return normalized === null ? undefined : normalized * 100
+}
+
+function playerWinrateValue(value: unknown, color: StoneColor): number | undefined {
+  const percent = winratePercent(value)
+  if (typeof percent !== 'number') {
+    return undefined
+  }
+  return color === 'B' ? percent : 100 - percent
+}
+
+function playerScoreValue(value: unknown, color: StoneColor): number | undefined {
+  const score = numericValue(value)
+  if (typeof score !== 'number') {
+    return undefined
+  }
+  return color === 'B' ? score : -score
 }
 
 export function parseBoardPoint(input: unknown, boardSize = 19): BoardPoint | null {
@@ -188,12 +217,16 @@ export function renderCandidates(analysis: KataGoMoveAnalysis | null | undefined
   if (!analysis) {
     return []
   }
-  const topMoves =
-    Array.isArray(valueOf(valueOf(analysis, 'before'), 'topMoves'))
-      ? valueOf(valueOf(analysis, 'before'), 'topMoves') as unknown[]
-      : Array.isArray(valueOf(valueOf(analysis, 'after'), 'topMoves'))
-        ? valueOf(valueOf(analysis, 'after'), 'topMoves') as unknown[]
-        : []
+  const beforeMoves = Array.isArray(valueOf(valueOf(analysis, 'before'), 'topMoves'))
+    ? valueOf(valueOf(analysis, 'before'), 'topMoves') as unknown[]
+    : []
+  const afterMoves = Array.isArray(valueOf(valueOf(analysis, 'after'), 'topMoves'))
+    ? valueOf(valueOf(analysis, 'after'), 'topMoves') as unknown[]
+    : []
+  const isBeforePosition = beforeMoves.length > 0
+  const topMoves = isBeforePosition ? beforeMoves : afterMoves
+  const currentColor = analysis.currentMove ? moveToColor(analysis.currentMove) : 'B'
+  const displayColor = isBeforePosition ? currentColor : oppositeColor(currentColor)
 
   return topMoves.slice(0, 6).flatMap((candidate, index) => {
     const point = candidateToPoint(candidate, boardSize)
@@ -202,12 +235,16 @@ export function renderCandidates(analysis: KataGoMoveAnalysis | null | undefined
     }
     const visits = getCandidateVisits(candidate)
     const visitsLabel = typeof visits === 'number' ? `${visits}` : undefined
+    const winrateValue = playerWinrateValue(getCandidateWinrate(candidate), displayColor)
+    const scoreValue = playerScoreValue(getCandidateScore(candidate), displayColor)
     return [{
       ...point,
       rank: index + 1,
       label: boardPointLabel(point, boardSize),
-      winrateLabel: formatWinrate(getCandidateWinrate(candidate)),
-      scoreLabel: formatScore(getCandidateScore(candidate)),
+      winrateValue,
+      winrateLabel: formatWinrate(winrateValue),
+      scoreValue,
+      scoreLabel: formatScore(scoreValue),
       visitsLabel,
       emphasis: index === 0 ? 'primary' : index <= 2 ? 'secondary' : 'quiet',
       raw: candidate
@@ -251,13 +288,20 @@ export function renderPlayedMove(analysis: KataGoMoveAnalysis | null | undefined
   const candidateIndex = beforeMoves.findIndex((candidate) => String(valueOf(candidate, 'move') ?? '').toUpperCase() === playedMove)
   const matchedCandidate = candidateIndex >= 0 ? beforeMoves[candidateIndex] : null
   const visits = valueOf(analysis.playedMove, 'visits') ?? getCandidateVisits(matchedCandidate)
+  const color = moveToColor(analysis.currentMove)
+  const winrateValue = numericValue(valueOf(analysis.playedMove, 'playerWinrate'))
+    ?? playerWinrateValue(valueOf(matchedCandidate, 'winrate') ?? valueOf(analysis.playedMove, 'winrate'), color)
+  const scoreValue = numericValue(valueOf(analysis.playedMove, 'playerScoreLead'))
+    ?? playerScoreValue(valueOf(matchedCandidate, 'scoreLead') ?? valueOf(analysis.playedMove, 'scoreLead'), color)
   return {
     ...point,
     label: boardPointLabel(point, boardSize),
     move: playedMove || boardPointLabel(point, boardSize),
-    color: moveToColor(analysis.currentMove),
-    winrateLabel: formatWinrate(valueOf(analysis.playedMove, 'winrate')),
-    scoreLabel: formatScore(valueOf(analysis.playedMove, 'scoreLead')),
+    color,
+    winrateValue,
+    winrateLabel: formatWinrate(winrateValue),
+    scoreValue,
+    scoreLabel: formatScore(scoreValue),
     visitsLabel: typeof visits === 'number' && visits > 0 ? `${Math.round(visits)}` : undefined,
     rank: typeof valueOf(analysis.playedMove, 'rank') === 'number'
       ? valueOf(analysis.playedMove, 'rank') as number
