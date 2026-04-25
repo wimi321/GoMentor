@@ -15,6 +15,8 @@ import type {
   StudentBindingSuggestion,
   StudentProfile,
   ReleaseReadinessResult,
+  TeacherRunRequest,
+  TeacherRunProgress,
   TeacherRunResult
 } from '@main/lib/types'
 import lizzieBlackStoneUrl from './assets/lizzie/black.png'
@@ -77,7 +79,9 @@ type ChatMessage = {
   id: string
   role: 'student' | 'teacher'
   content: string
+  status?: 'running' | 'completed' | 'error'
   result?: TeacherRunResult
+  toolLogs?: TeacherRunResult['toolLogs']
 }
 
 type EvaluationByMove = Record<number, KataGoMoveAnalysis>
@@ -607,8 +611,86 @@ export function App(): ReactElement {
     }
   }
 
-  function appendMessage(message: Omit<ChatMessage, 'id'>): void {
-    setMessages((current) => [...current, { ...message, id: crypto.randomUUID() }])
+  function appendMessage(message: Omit<ChatMessage, 'id'>): string {
+    const id = crypto.randomUUID()
+    setMessages((current) => [...current, { ...message, id }])
+    return id
+  }
+
+  function updateMessage(messageId: string, updater: (message: ChatMessage) => ChatMessage): void {
+    setMessages((current) => current.map((message) => (message.id === messageId ? updater(message) : message)))
+  }
+
+  function mergeTeacherProgress(messageId: string, progress: TeacherRunProgress): void {
+    updateMessage(messageId, (message) => {
+      if (message.role !== 'teacher') {
+        return message
+      }
+      if (progress.stage === 'assistant-delta') {
+        return {
+          ...message,
+          status: 'running',
+          content: `${message.content}${progress.markdownDelta ?? ''}`
+        }
+      }
+      if (progress.stage === 'done' && progress.result) {
+        return {
+          ...message,
+          status: 'completed',
+          content: progress.result.markdown,
+          result: progress.result,
+          toolLogs: progress.result.toolLogs
+        }
+      }
+      if (progress.stage === 'error') {
+        return {
+          ...message,
+          status: 'error',
+          content: message.content || `任务失败：${progress.error ?? '未知错误'}`,
+          toolLogs: progress.toolLogs ?? message.toolLogs
+        }
+      }
+      return {
+        ...message,
+        status: message.status ?? 'running',
+        toolLogs: progress.toolLogs ?? message.toolLogs
+      }
+    })
+  }
+
+  async function runTeacherTaskWithStream(
+    request: Omit<TeacherRunRequest, 'runId'>,
+    assistantMessageId: string
+  ): Promise<TeacherRunResult> {
+    const runId = crypto.randomUUID()
+    const dispose = window.katasensei.onTeacherRunProgress((progress) => {
+      if (progress.runId === runId) {
+        mergeTeacherProgress(assistantMessageId, progress)
+      }
+    })
+    try {
+      const result = await window.katasensei.runTeacherTask({
+        ...request,
+        runId
+      })
+      updateMessage(assistantMessageId, (message) => ({
+        ...message,
+        status: 'completed',
+        content: result.markdown,
+        result,
+        toolLogs: result.toolLogs
+      }))
+      return result
+    } catch (cause) {
+      updateMessage(assistantMessageId, (message) => ({
+        ...message,
+        status: 'error',
+        content: message.content || `任务失败：${String(cause)}`
+      }))
+      throw cause
+    } finally {
+      dispose()
+    }
   }
 
   function rememberEvaluation(nextAnalysis: KataGoMoveAnalysis): void {
@@ -855,6 +937,7 @@ export function App(): ReactElement {
     setError('')
     const ask = `分析第 ${targetMove} 手`
     appendMessage({ role: 'student', content: ask })
+    const assistantMessageId = appendMessage({ role: 'teacher', content: '', status: 'running', toolLogs: [] })
     try {
       const nextAnalysis = await window.katasensei.analyzePosition({
         gameId: selectedGame.id,
@@ -864,7 +947,7 @@ export function App(): ReactElement {
       setAnalysis(nextAnalysis)
       rememberEvaluation(nextAnalysis)
       const boardImageDataUrl = await renderBoardPng(record, targetMove, nextAnalysis)
-      const result = await window.katasensei.runTeacherTask({
+      const result = await runTeacherTaskWithStream({
         mode: 'current-move',
         prompt: ask,
         gameId: selectedGame.id,
@@ -872,13 +955,16 @@ export function App(): ReactElement {
         playerName,
         boardImageDataUrl,
         prefetchedAnalysis: nextAnalysis
-      })
+      }, assistantMessageId)
       const finalAnalysis = result.analysis ?? nextAnalysis
       setAnalysis(finalAnalysis)
       rememberEvaluation(finalAnalysis)
-      appendMessage({ role: 'teacher', content: result.markdown, result })
     } catch (cause) {
-      appendMessage({ role: 'teacher', content: `任务失败：${String(cause)}` })
+      updateMessage(assistantMessageId, (message) => ({
+        ...message,
+        status: 'error',
+        content: message.content || `任务失败：${String(cause)}`
+      }))
     } finally {
       setBusy('')
     }
@@ -895,21 +981,25 @@ export function App(): ReactElement {
     setBusy('teacher')
     setError('')
     appendMessage({ role: 'student', content: text })
+    const assistantMessageId = appendMessage({ role: 'teacher', content: '', status: 'running', toolLogs: [] })
     try {
-      const result = await window.katasensei.runTeacherTask({
+      const result = await runTeacherTaskWithStream({
         mode: 'freeform',
         prompt: text,
         gameId: selectedGame?.id,
         moveNumber,
         playerName
-      })
+      }, assistantMessageId)
       if (result.analysis) {
         setAnalysis(result.analysis)
         rememberEvaluation(result.analysis)
       }
-      appendMessage({ role: 'teacher', content: result.markdown, result })
     } catch (cause) {
-      appendMessage({ role: 'teacher', content: `任务失败：${String(cause)}` })
+      updateMessage(assistantMessageId, (message) => ({
+        ...message,
+        status: 'error',
+        content: message.content || `任务失败：${String(cause)}`
+      }))
     } finally {
       setBusy('')
     }
@@ -954,6 +1044,7 @@ export function App(): ReactElement {
     }
     setPrompt('')
     appendMessage({ role: 'student', content: text })
+    const assistantMessageId = appendMessage({ role: 'teacher', content: '', status: 'running', toolLogs: [] })
     setBusy('teacher')
     try {
       const wantsCurrentMove = /当前手|这手|这一手|本手/.test(text)
@@ -966,7 +1057,7 @@ export function App(): ReactElement {
         setAnalysis(nextAnalysis)
         rememberEvaluation(nextAnalysis)
         const boardImageDataUrl = await renderBoardPng(record, moveNumber, nextAnalysis)
-        const result = await window.katasensei.runTeacherTask({
+        const result = await runTeacherTaskWithStream({
           mode: 'current-move',
           prompt: text,
           gameId: selectedGame.id,
@@ -974,24 +1065,26 @@ export function App(): ReactElement {
           playerName,
           boardImageDataUrl,
           prefetchedAnalysis: nextAnalysis
-        })
+        }, assistantMessageId)
         if (result.analysis) {
           setAnalysis(result.analysis)
           rememberEvaluation(result.analysis)
         }
-        appendMessage({ role: 'teacher', content: result.markdown, result })
       } else {
-        const result = await window.katasensei.runTeacherTask({
+        await runTeacherTaskWithStream({
           mode: 'freeform',
           prompt: text,
           gameId: selectedGame?.id,
           moveNumber,
           playerName
-        })
-        appendMessage({ role: 'teacher', content: result.markdown, result })
+        }, assistantMessageId)
       }
     } catch (cause) {
-      appendMessage({ role: 'teacher', content: `任务失败：${String(cause)}` })
+      updateMessage(assistantMessageId, (message) => ({
+        ...message,
+        status: 'error',
+        content: message.content || `任务失败：${String(cause)}`
+      }))
     } finally {
       setBusy('')
     }
@@ -1521,11 +1614,36 @@ function TeacherInlineResponse({
   onAnalyzeMove: (moveNumber: number) => void
 }): ReactElement {
   const keyMoves = teacherResultKeyMoves(message.result)
-  const toolLogs = message.result?.toolLogs ?? []
+  const toolLogs = message.toolLogs ?? message.result?.toolLogs ?? []
+  const isRunning = message.status === 'running'
+  const isTeacher = message.role === 'teacher'
   return (
     <>
+      {isTeacher && toolLogs.length > 0 ? (
+        <details className="codex-tool-trace" open={isRunning || undefined}>
+          <summary>工具调用 · {toolLogs.length}</summary>
+          <div>
+            {toolLogs.map((log) => (
+              <p key={log.id} className={`codex-tool-trace__row codex-tool-trace__row--${log.status}`}>
+                <strong>{log.label || log.name}</strong>
+                <span>{log.detail || log.status}</span>
+              </p>
+            ))}
+          </div>
+        </details>
+      ) : null}
       <div className={`message-copy ${message.role === 'teacher' ? 'message-copy--assistant' : 'message-copy--user'}`}>
-        {message.role === 'teacher' ? <ChatMarkdown text={message.content} /> : message.content}
+        {isTeacher && !message.content && isRunning ? (
+          <div className="codex-working">
+            <span />
+            <p>正在读取棋盘、KataGo 候选点和你的问题。</p>
+          </div>
+        ) : isTeacher ? (
+          <>
+            <ChatMarkdown text={message.content} />
+            {isRunning ? <span className="streaming-cursor" aria-label="正在输出" /> : null}
+          </>
+        ) : message.content}
       </div>
       {keyMoves.length > 0 ? (
         <div className="codex-keymove-strip" aria-label="关键手跳转">
@@ -1540,19 +1658,6 @@ function TeacherInlineResponse({
             展开这一手
           </button>
         </div>
-      ) : null}
-      {toolLogs.length > 0 ? (
-        <details className="codex-tool-trace">
-          <summary>工具调用 · {toolLogs.length}</summary>
-          <div>
-            {toolLogs.map((log) => (
-              <p key={log.id} className={`codex-tool-trace__row codex-tool-trace__row--${log.status}`}>
-                <strong>{log.label || log.name}</strong>
-                <span>{log.detail || log.status}</span>
-              </p>
-            ))}
-          </div>
-        </details>
       ) : null}
     </>
   )
@@ -1593,6 +1698,11 @@ function TeacherPanel({
   const katagoLabel = katagoAssets?.ready || dashboard.systemProfile.katagoReady ? 'KataGo ready' : 'KataGo missing'
   const llmLabel = dashboard.systemProfile.hasLlmApiKey ? 'Vision LLM ready' : 'LLM setup needed'
   const hasRunningTask = busy === 'teacher'
+  const hasRunningMessage = messages.some((message) => message.role === 'teacher' && message.status === 'running')
+  const threadBottomRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    threadBottomRef.current?.scrollIntoView({ block: 'end' })
+  }, [messages, busy, error])
   return (
     <div className="teacher-panel teacher-agent-editor">
       <header className="teacher-editor-head">
@@ -1617,7 +1727,7 @@ function TeacherPanel({
             <div className="agent-turn__body">
               <header className="agent-turn__head">
                 <strong>{message.role === 'teacher' ? 'KataSensei' : 'User'}</strong>
-                <small>{message.result ? 'completed' : message.role === 'teacher' ? 'assistant' : 'prompt'}</small>
+                <small>{message.status ?? (message.result ? 'completed' : message.role === 'teacher' ? 'assistant' : 'prompt')}</small>
               </header>
               <TeacherInlineResponse
                 message={message}
@@ -1627,7 +1737,7 @@ function TeacherPanel({
             </div>
           </article>
         ))}
-        {hasRunningTask ? (
+        {hasRunningTask && !hasRunningMessage ? (
           <div className="message message--teacher message--running agent-turn agent-turn--teacher agent-turn--running">
             <div className="agent-turn__body">
               <header className="agent-turn__head">
@@ -1641,6 +1751,7 @@ function TeacherPanel({
             </div>
           </div>
         ) : null}
+        <div ref={threadBottomRef} className="agent-thread__bottom" />
       </div>
 
       {error ? <div className="error-line">{error}</div> : null}

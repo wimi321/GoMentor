@@ -1654,6 +1654,26 @@ label,
   margin: 0;
 }
 
+.streaming-cursor {
+  display: inline-block;
+  width: 7px;
+  height: 15px;
+  margin-left: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ks-text-main) 72%, transparent);
+  vertical-align: -2px;
+  animation: streaming-cursor-blink 1s steps(2, start) infinite;
+}
+
+@keyframes streaming-cursor-blink {
+  0%, 45% {
+    opacity: 1;
+  }
+  46%, 100% {
+    opacity: 0.16;
+  }
+}
+
 @keyframes codex-working-pulse {
   0%, 100% {
     box-shadow: 0 0 0 0 rgb(214 182 110 / 0.28);
@@ -1717,11 +1737,17 @@ label,
 }
 
 .codex-tool-trace {
-  margin-top: 10px;
+  margin: 0 0 10px;
   border: 1px solid var(--ks-border-soft);
   border-radius: 10px;
   background: rgb(255 255 255 / 0.025);
   overflow: hidden;
+}
+
+.agent-thread__bottom {
+  width: 1px;
+  height: 1px;
+  flex: 0 0 1px;
 }
 
 .codex-tool-trace summary {

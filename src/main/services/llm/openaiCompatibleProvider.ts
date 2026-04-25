@@ -8,7 +8,7 @@ import {
   type ChatChoice,
   type ChatResponse
 } from '../llmResponse'
-import type { ChatInput, ChatMessage, ChatResult, LlmProvider, ProviderProbeResult, ProviderSettings } from './provider'
+import type { ChatDelta, ChatInput, ChatMessage, ChatResult, LlmProvider, ProviderProbeResult, ProviderSettings } from './provider'
 
 const tinyPng =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAeklEQVR42u3SMQ0AIAwAwcrBAQ7wLwEHTMxtsEFv+vmTi7Fm3rOza6Pz/GsQQAABBBBAAAEEEEAAAQQQQAABBBBAAAEEEEAAAQQQQAABBBBAAAEEEEAAAQQQQAABBBBAAAEEEEAAAQQQQAABBBBAAAEEEEAAAQQQ8EELinI6hhXFUGQAAAAASUVORK5CYII='
@@ -180,14 +180,14 @@ function streamDeltaText(json: ChatResponse): string {
   }) | undefined
   const delta = choice?.delta
   for (const value of [delta?.content, delta?.text, delta?.output_text, choice?.text, choice?.message?.content, json.output_text]) {
-    if (typeof value === 'string' && value.trim()) {
+    if (typeof value === 'string' && value !== '') {
       return value
     }
   }
   return ''
 }
 
-async function readStreamText(response: Response): Promise<string> {
+async function readStreamText(response: Response, onDelta?: (delta: string) => void): Promise<string> {
   if (!response.body) {
     return ''
   }
@@ -213,7 +213,11 @@ async function readStreamText(response: Response): Promise<string> {
         continue
       }
       try {
-        text += streamDeltaText(JSON.parse(payload) as ChatResponse)
+        const delta = streamDeltaText(JSON.parse(payload) as ChatResponse)
+        if (delta) {
+          text += delta
+          onDelta?.(delta)
+        }
       } catch {
         // Ignore malformed SSE keepalive chunks from compatible proxies.
       }
@@ -225,7 +229,8 @@ async function readStreamText(response: Response): Promise<string> {
 async function attemptOpenAICompatibleStream(
   settings: ProviderSettings,
   messages: ChatMessage[],
-  maxTokens = 4096
+  maxTokens = 4096,
+  onDelta?: (delta: string) => void
 ): Promise<ChatAttemptResult> {
   let lastError = ''
   const bodies = requestBodies(settings.llmModel, messages, maxTokens)
@@ -244,13 +249,60 @@ async function attemptOpenAICompatibleStream(
       }
       return { kind: 'error', error: new Error(`LLM 流式请求失败: ${response.status} ${text.slice(0, 240)}`) }
     }
-    const text = await readStreamText(response)
+    const text = await readStreamText(response, onDelta)
     if (text) {
       return { kind: 'text', text }
     }
     lastError = 'stream completed without visible content'
   }
   return { kind: 'error', error: new Error(`LLM 流式请求没有返回文本内容。${lastError}`) }
+}
+
+export async function streamOpenAICompatibleChat(
+  settings: ProviderSettings,
+  messages: ChatMessage[],
+  maxTokens = 4096,
+  onDelta?: (delta: string) => void
+): Promise<string> {
+  const streamAttempt = await attemptOpenAICompatibleStream(settings, messages, maxTokens, onDelta)
+  if (streamAttempt.kind === 'text') {
+    return streamAttempt.text
+  }
+
+  const firstAttempt = await attemptOpenAICompatibleChat(settings, messages, maxTokens)
+  if (firstAttempt.kind === 'text') {
+    onDelta?.(firstAttempt.text)
+    return firstAttempt.text
+  }
+  if (firstAttempt.kind === 'error') {
+    throw firstAttempt.error
+  }
+
+  const emptyJson = firstAttempt.kind === 'empty' ? firstAttempt.json : null
+  if (emptyJson && shouldRetryFinalTextAfterEmpty(emptyJson)) {
+    const finalTextMessages = messagesWithFinalTextReminder(messages)
+    const finalStreamAttempt = await attemptOpenAICompatibleStream(settings, finalTextMessages, maxTokens, onDelta)
+    if (finalStreamAttempt.kind === 'text') {
+      return finalStreamAttempt.text
+    }
+    const finalTextAttempt = await attemptOpenAICompatibleChat(settings, finalTextMessages, maxTokens)
+    if (finalTextAttempt.kind === 'text') {
+      onDelta?.(finalTextAttempt.text)
+      return finalTextAttempt.text
+    }
+    if (finalTextAttempt.kind === 'error') {
+      throw finalTextAttempt.error
+    }
+    throw emptyResponseError(finalTextAttempt.json, settings.llmModel)
+  }
+
+  if (firstAttempt.kind === 'empty') {
+    throw emptyResponseError(firstAttempt.json, settings.llmModel)
+  }
+  if (streamAttempt.kind === 'error') {
+    throw streamAttempt.error
+  }
+  throw new Error('LLM 流式请求没有返回文本内容。')
 }
 
 export async function postOpenAICompatibleChat(
@@ -335,9 +387,54 @@ export async function chatOpenAICompatible(input: ChatInput): Promise<ChatResult
   return { text }
 }
 
+export async function* streamChatOpenAICompatible(input: ChatInput): AsyncIterable<ChatDelta> {
+  const queue: ChatDelta[] = []
+  let wake: (() => void) | null = null
+  let finished = false
+  let failure: unknown = null
+  const notify = (): void => {
+    wake?.()
+    wake = null
+  }
+  const task = streamOpenAICompatibleChat(input.settings, input.messages, input.maxTokens ?? 4096, (delta) => {
+    queue.push({ text: delta })
+    notify()
+  }).then(
+    () => {
+      queue.push({ text: '', done: true })
+      finished = true
+      notify()
+    },
+    (error) => {
+      failure = error
+      finished = true
+      notify()
+    }
+  )
+
+  while (!finished || queue.length > 0) {
+    const next = queue.shift()
+    if (next) {
+      yield next
+      continue
+    }
+    if (failure) {
+      throw failure
+    }
+    await new Promise<void>((resolve) => {
+      wake = resolve
+    })
+  }
+  await task
+  if (failure) {
+    throw failure
+  }
+}
+
 export const openAICompatibleProvider: LlmProvider = {
   id: 'openai-compatible',
   label: 'OpenAI-compatible multimodal proxy',
   probe: probeOpenAICompatibleProvider,
-  chat: chatOpenAICompatible
+  chat: chatOpenAICompatible,
+  streamChat: streamChatOpenAICompatible
 }

@@ -315,6 +315,7 @@ export interface StructuredTeacherResult {
 }
 
 export interface TeacherRunRequest {
+  runId?: string
   mode?: TeacherRunMode
   prompt: string
   gameId?: string
@@ -322,6 +323,19 @@ export interface TeacherRunRequest {
   playerName?: string
   boardImageDataUrl?: string
   prefetchedAnalysis?: KataGoMoveAnalysis
+}
+
+export type TeacherRunProgressStage = 'queued' | 'tool' | 'assistant-start' | 'assistant-delta' | 'done' | 'error'
+
+export interface TeacherRunProgress {
+  runId: string
+  stage: TeacherRunProgressStage
+  message?: string
+  markdownDelta?: string
+  markdown?: string
+  toolLogs?: TeacherToolLog[]
+  result?: TeacherRunResult
+  error?: string
 }
 
 export interface AnalyzePositionRequest {

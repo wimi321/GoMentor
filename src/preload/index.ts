@@ -22,6 +22,7 @@ import type {
   StudentProfile,
   ReleaseReadinessResult,
   TeacherRunRequest,
+  TeacherRunProgress,
   TeacherRunResult
 } from '@main/lib/types'
 import type { DiagnosticsReport } from '@main/services/diagnostics/types'
@@ -72,6 +73,11 @@ const api = {
   addStudentAlias: (payload: { studentId: string; alias: string }): Promise<StudentProfile> => ipcRenderer.invoke('students:alias', payload),
   searchKnowledge: (payload: KnowledgeSearchQuery): Promise<KnowledgeSearchResult[]> => ipcRenderer.invoke('knowledge:search', payload),
   runTeacherTask: (payload: TeacherRunRequest): Promise<TeacherRunResult> => ipcRenderer.invoke('teacher:run', payload),
+  onTeacherRunProgress: (handler: (payload: TeacherRunProgress) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: TeacherRunProgress): void => handler(payload)
+    ipcRenderer.on('teacher:run-progress', listener)
+    return () => ipcRenderer.removeListener('teacher:run-progress', listener)
+  },
   testLlmSettings: (payload: LlmSettingsTestRequest): Promise<LlmSettingsTestResult> => ipcRenderer.invoke('llm:test', payload),
   getReleaseReadiness: (): Promise<ReleaseReadinessResult> => ipcRenderer.invoke('release:readiness'),
   openPath: (filePath: string): Promise<void> => ipcRenderer.invoke('path:open', filePath),

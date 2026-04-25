@@ -1,7 +1,9 @@
 import type { AppSettings, LlmSettingsTestRequest, LlmSettingsTestResult } from '@main/lib/types'
 import { getSettings } from '@main/lib/store'
-import { postOpenAICompatibleChat, probeOpenAICompatibleProvider } from './llm/openaiCompatibleProvider'
+import { postOpenAICompatibleChat, probeOpenAICompatibleProvider, streamOpenAICompatibleChat } from './llm/openaiCompatibleProvider'
 import type { ChatMessage, ProviderSettings } from './llm/provider'
+
+type LlmDeltaHandler = (delta: string) => void
 
 function requireProviderSettings(settings: AppSettings): ProviderSettings {
   if (!settings.llmBaseUrl.trim() || !settings.llmApiKey.trim() || !settings.llmModel.trim()) {
@@ -18,7 +20,8 @@ export async function callMultimodalTeacher(
   settings: AppSettings,
   systemPrompt: string,
   textPayload: string,
-  imageDataUrl: string
+  imageDataUrl: string,
+  onDelta?: LlmDeltaHandler
 ): Promise<string> {
   const messages: ChatMessage[] = [
     {
@@ -33,13 +36,17 @@ export async function callMultimodalTeacher(
       ]
     }
   ]
-  return postOpenAICompatibleChat(requireProviderSettings(settings), messages, 4096)
+  const providerSettings = requireProviderSettings(settings)
+  return onDelta
+    ? streamOpenAICompatibleChat(providerSettings, messages, 4096, onDelta)
+    : postOpenAICompatibleChat(providerSettings, messages, 4096)
 }
 
 export async function callTeacherText(
   settings: AppSettings,
   systemPrompt: string,
-  textPayload: string
+  textPayload: string,
+  onDelta?: LlmDeltaHandler
 ): Promise<string> {
   const messages: ChatMessage[] = [
     {
@@ -51,7 +58,10 @@ export async function callTeacherText(
       content: textPayload
     }
   ]
-  return postOpenAICompatibleChat(requireProviderSettings(settings), messages, 4096)
+  const providerSettings = requireProviderSettings(settings)
+  return onDelta
+    ? streamOpenAICompatibleChat(providerSettings, messages, 4096, onDelta)
+    : postOpenAICompatibleChat(providerSettings, messages, 4096)
 }
 
 export async function testLlmSettings(payload: LlmSettingsTestRequest): Promise<LlmSettingsTestResult> {

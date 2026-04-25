@@ -37,6 +37,7 @@ async function importProviderForTest() {
   const provider = await import(`${moduleUrl}?t=${Date.now()}`)
   return {
     postOpenAICompatibleChat: provider.postOpenAICompatibleChat,
+    streamOpenAICompatibleChat: provider.streamOpenAICompatibleChat,
     probeOpenAICompatibleProvider: provider.probeOpenAICompatibleProvider,
     cleanup: () => rm(root, { recursive: true, force: true })
   }
@@ -216,6 +217,31 @@ test('falls back to streaming when a reasoning model returns empty non-stream co
     })
 
     assert.ok(requests.some((body) => body.stream === true))
+  } finally {
+    await cleanup()
+  }
+})
+
+test('streamOpenAICompatibleChat emits visible deltas as they arrive', async () => {
+  const { streamOpenAICompatibleChat, cleanup } = await importProviderForTest()
+  const chunks = []
+  try {
+    await withMockChatServer((body) => {
+      assert.equal(body.stream, true)
+      return {
+        payload: [
+          'data: {"choices":[{"delta":{"content":"第一段"},"finish_reason":null}]}',
+          'data: {"choices":[{"delta":{"content":"，继续"},"finish_reason":null}]}',
+          'data: [DONE]',
+          ''
+        ].join('\n\n')
+      }
+    }, async (baseUrl) => {
+      const text = await streamOpenAICompatibleChat(settings(baseUrl), [{ role: 'user', content: '讲解当前手' }], 512, (delta) => chunks.push(delta))
+      assert.equal(text, '第一段，继续')
+    })
+
+    assert.deepEqual(chunks, ['第一段', '，继续'])
   } finally {
     await cleanup()
   }

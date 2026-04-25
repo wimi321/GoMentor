@@ -21,6 +21,7 @@ import type {
   StudentProfile,
   ReleaseReadinessResult,
   TeacherRunRequest,
+  TeacherRunProgress,
   TeacherRunResult
 } from '@main/lib/types'
 import type { DiagnosticsReport } from '@main/services/diagnostics/types'
@@ -65,6 +66,7 @@ declare global {
       addStudentAlias: (payload: { studentId: string; alias: string }) => Promise<StudentProfile>
       searchKnowledge: (payload: KnowledgeSearchQuery) => Promise<KnowledgeSearchResult[]>
       runTeacherTask: (payload: TeacherRunRequest) => Promise<TeacherRunResult>
+      onTeacherRunProgress: (handler: (payload: TeacherRunProgress) => void) => () => void
       testLlmSettings: (payload: LlmSettingsTestRequest) => Promise<LlmSettingsTestResult>
       getReleaseReadiness: () => Promise<ReleaseReadinessResult>
       openPath: (filePath: string) => Promise<void>

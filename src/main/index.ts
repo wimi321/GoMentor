@@ -274,7 +274,11 @@ app.whenReady().then(() => {
     })
   )
   ipcMain.handle('katago:benchmark', async (_event, payload: KataGoBenchmarkRequest | undefined) => benchmarkKataGo(payload ?? {}))
-  ipcMain.handle('teacher:run', async (_event, payload: TeacherRunRequest) => runTeacherTask(payload))
+  ipcMain.handle('teacher:run', async (event, payload: TeacherRunRequest) =>
+    runTeacherTask(payload, (progress) => {
+      event.sender.send('teacher:run-progress', progress)
+    })
+  )
   ipcMain.handle('llm:test', async (_event, payload: LlmSettingsTestRequest) => testLlmSettings(payload))
   ipcMain.handle('release:readiness', async () => inspectReleaseReadiness())
   ipcMain.handle('path:open', async (_event, filePath: string) => shell.showItemInFolder(assertManagedPath(filePath)))

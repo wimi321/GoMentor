@@ -12,6 +12,7 @@ import type {
   StructuredTeacherResult,
   StudentProfile,
   TeacherRunRequest,
+  TeacherRunProgress,
   TeacherRunResult,
   TeacherToolLog
 } from '@main/lib/types'
@@ -25,6 +26,12 @@ import { applyDetectedDefaults, detectSystemProfile } from './systemProfile'
 import { parseStructuredTeacherResult } from './teacher/structuredResultParser'
 
 type TeacherIntent = 'current-move' | 'game-review' | 'batch-review' | 'training-plan' | 'open-ended'
+type TeacherProgressEmitter = (progress: TeacherRunProgress) => void
+
+interface TeacherRunContext {
+  runId: string
+  emit?: TeacherProgressEmitter
+}
 
 interface TeacherToolDefinition {
   name: string
@@ -124,6 +131,32 @@ function finishTool(log: TeacherToolLog, status: TeacherToolLog['status'], detai
     log.detail = detail
   }
   log.endedAt = new Date().toISOString()
+}
+
+function cloneToolLogs(logs: TeacherToolLog[]): TeacherToolLog[] {
+  return logs.map((log) => ({ ...log }))
+}
+
+function emitProgress(context: TeacherRunContext | undefined, progress: Omit<TeacherRunProgress, 'runId'>): void {
+  context?.emit?.({
+    runId: context.runId,
+    ...progress
+  })
+}
+
+function emitToolState(context: TeacherRunContext | undefined, logs: TeacherToolLog[], message: string): void {
+  emitProgress(context, {
+    stage: 'tool',
+    message,
+    toolLogs: cloneToolLogs(logs)
+  })
+}
+
+function emitAssistantDelta(context: TeacherRunContext | undefined, delta: string): void {
+  emitProgress(context, {
+    stage: 'assistant-delta',
+    markdownDelta: delta
+  })
 }
 
 function classifyIntent(request: TeacherRunRequest): TeacherIntent {
@@ -509,7 +542,7 @@ function structuredFromTeacherText(
   }
 }
 
-async function runCurrentMove(request: TeacherRunRequest, logs: TeacherToolLog[], id: string): Promise<TeacherRunResult> {
+async function runCurrentMove(request: TeacherRunRequest, logs: TeacherToolLog[], id: string, context?: TeacherRunContext): Promise<TeacherRunResult> {
   if (!request.gameId) {
     throw new Error('当前手分析需要先选择棋谱。')
   }
@@ -522,8 +555,10 @@ async function runCurrentMove(request: TeacherRunRequest, logs: TeacherToolLog[]
 
   const boardLog = startTool(logs, 'board.captureTeachingImage', '棋盘截图', request.boardImageDataUrl ? '已收到前端生成的教学棋盘 PNG。' : '未收到棋盘截图。')
   finishTool(boardLog, request.boardImageDataUrl ? 'done' : 'error')
+  emitToolState(context, logs, '已确认棋盘截图和当前手上下文。')
 
   const analysisLog = startTool(logs, 'katago.analyzePosition', 'KataGo 当前局面', `分析第 ${moveNumber} 手前后局面。`)
+  emitToolState(context, logs, '正在读取 KataGo 当前局面分析。')
   const analysis = request.prefetchedAnalysis ?? await analyzePosition(request.gameId, moveNumber)
   finishTool(
     analysisLog,
@@ -532,6 +567,7 @@ async function runCurrentMove(request: TeacherRunRequest, logs: TeacherToolLog[]
       ? `复用前端预分析结果，推荐 ${analysis.before.topMoves[0]?.move ?? '未知'}。`
       : `推荐 ${analysis.before.topMoves[0]?.move ?? '未知'}，实战损失约 ${(analysis.playedMove?.winrateLoss ?? 0).toFixed(1)}%。`
   )
+  emitToolState(context, logs, 'KataGo 证据已就绪，开始找教学概念。')
 
   const knowledgeLog = startTool(logs, 'knowledge.searchLocal', '本地知识库', '按阶段、区域、学生水平和 KataGo 损失检索 YiGo 知识库。')
   const knowledge = searchKnowledge({
@@ -546,10 +582,13 @@ async function runCurrentMove(request: TeacherRunRequest, logs: TeacherToolLog[]
     maxResults: 4
   })
   finishTool(knowledgeLog, 'done', `选中 ${knowledge.length} 条知识卡片。`)
+  emitToolState(context, logs, '本地知识卡片已选好，准备交给老师组织讲解。')
 
   const webSnippets = await maybeSearchWeb(request.prompt, logs)
+  emitToolState(context, logs, '上下文收集完成，开始流式生成讲解。')
 
   const llmLog = startTool(logs, 'llm.multimodalTeacher', '多模态老师', '发送棋盘截图、KataGo JSON 和知识包给多模态模型。')
+  emitProgress(context, { stage: 'assistant-start', message: '开始流式生成当前手讲解。', toolLogs: cloneToolLogs(logs) })
   let markdown = ''
   if (!request.boardImageDataUrl) {
     markdown = '当前手分析需要棋盘截图。请重新点击“分析当前手”，让前端生成教学棋盘 PNG。'
@@ -560,7 +599,8 @@ async function runCurrentMove(request: TeacherRunRequest, logs: TeacherToolLog[]
         getSettings(),
         systemPrompt(profile.userLevel),
         currentMovePayload(request, analysis, knowledge, profile) + (webSnippets.length ? `\n\n外部资料标题:\n${webSnippets.join('\n')}` : ''),
-        request.boardImageDataUrl
+        request.boardImageDataUrl,
+        (delta) => emitAssistantDelta(context, delta)
       )
       finishTool(llmLog, 'done', '老师讲解已生成。')
     } catch (error) {
@@ -568,6 +608,7 @@ async function runCurrentMove(request: TeacherRunRequest, logs: TeacherToolLog[]
       finishTool(llmLog, 'error', markdown)
     }
   }
+  emitToolState(context, logs, llmLog.status === 'done' ? '老师讲解已生成。' : '老师讲解没有完成，保留当前错误说明。')
 
   const updatedProfile = updateStudentProfile(studentName, {
     reviewedGames: 1,
@@ -588,6 +629,7 @@ async function runCurrentMove(request: TeacherRunRequest, logs: TeacherToolLog[]
 
   const profileLog = startTool(logs, 'studentProfile.write', '学生画像', `更新 ${studentName} 的长期画像。`)
   finishTool(profileLog, 'done', `累计复盘 ${updatedProfile.gamesReviewed} 盘，记录 ${updatedProfile.commonMistakes.length} 类问题。`)
+  emitToolState(context, logs, '讲解已写入棋手画像和复盘报告。')
 
   const title = `第 ${moveNumber} 手分析`
   const structured = structuredFromTeacherText(
@@ -626,7 +668,7 @@ function extractIssues(artifact: ReviewArtifact | undefined, game: LibraryGame):
   }))
 }
 
-async function runBatchReview(request: TeacherRunRequest, logs: TeacherToolLog[], id: string): Promise<TeacherRunResult> {
+async function runBatchReview(request: TeacherRunRequest, logs: TeacherToolLog[], id: string, context?: TeacherRunContext): Promise<TeacherRunResult> {
   const count = inferCount(request.prompt)
   const selectedGame = request.gameId ? getGames().find((item) => item.id === request.gameId) : undefined
   const studentName = detectStudentName(request, selectedGame)
@@ -634,9 +676,11 @@ async function runBatchReview(request: TeacherRunRequest, logs: TeacherToolLog[]
   const findLog = startTool(logs, 'library.findGames', '筛选棋谱', `查找 ${studentName} 最近 ${count} 盘棋。`)
   const games = findGamesForStudent(studentName, count)
   finishTool(findLog, games.length > 0 ? 'done' : 'error', `找到 ${games.length} 盘棋。`)
+  emitToolState(context, logs, `已找到 ${games.length} 盘候选棋谱。`)
 
   const issues: BatchIssue[] = []
   const batchLog = startTool(logs, 'katago.analyzeGameBatch', '批量 KataGo', `顺序分析 ${games.length} 盘棋，提取关键问题手。`)
+  emitToolState(context, logs, '开始批量扫描关键问题手。')
   for (const game of games) {
     try {
       const result = await runReview({
@@ -660,6 +704,7 @@ async function runBatchReview(request: TeacherRunRequest, logs: TeacherToolLog[]
     }
   }
   finishTool(batchLog, 'done', `提取 ${issues.filter((issue) => issue.loss > 0).length} 个关键问题点。`)
+  emitToolState(context, logs, '批量分析完成，正在聚合同类问题。')
 
   const profileUpdate = updateStudentProfile(studentName, {
     reviewedGames: games.length,
@@ -682,6 +727,7 @@ async function runBatchReview(request: TeacherRunRequest, logs: TeacherToolLog[]
   })
   const profileLog = startTool(logs, 'studentProfile.write', '学生画像', '把批量分析结果沉淀为长期画像。')
   finishTool(profileLog, 'done', `画像已更新：${profileUpdate.commonMistakes.slice(0, 3).map((item) => item.tag).join('、') || '暂无稳定标签'}`)
+  emitToolState(context, logs, '棋手画像已更新。')
 
   const knowledgeLog = startTool(logs, 'knowledge.searchLocal', '本地知识库', '根据批量问题检索训练主题知识。')
   const themes = themesFromProfile(profileUpdate)
@@ -697,8 +743,10 @@ async function runBatchReview(request: TeacherRunRequest, logs: TeacherToolLog[]
     maxResults: 4
   })
   finishTool(knowledgeLog, 'done', `选中 ${knowledge.length} 条训练参考。`)
+  emitToolState(context, logs, '训练主题知识卡片已就绪。')
 
   const llmLog = startTool(logs, 'llm.teacherAgent', '老师总结', '让老师自己判断输出学生画像、典型错手还是训练计划。')
+  emitProgress(context, { stage: 'assistant-start', message: '开始流式生成最近对局总结。', toolLogs: cloneToolLogs(logs) })
   let markdown = ''
   try {
     markdown = await callTeacherText(getSettings(), systemPrompt(profileUpdate.userLevel), JSON.stringify({
@@ -709,7 +757,7 @@ async function runBatchReview(request: TeacherRunRequest, logs: TeacherToolLog[]
       issues: issues.filter((issue) => issue.loss > 0).slice(0, 20),
       studentProfile: profileUpdate,
       knowledgePacket: knowledge
-    }, null, 2))
+    }, null, 2), (delta) => emitAssistantDelta(context, delta))
     finishTool(llmLog, 'done', '批量分析总结已生成。')
   } catch (error) {
     markdown = [
@@ -744,7 +792,7 @@ async function runBatchReview(request: TeacherRunRequest, logs: TeacherToolLog[]
   }
 }
 
-async function runGameReview(request: TeacherRunRequest, logs: TeacherToolLog[], id: string): Promise<TeacherRunResult> {
+async function runGameReview(request: TeacherRunRequest, logs: TeacherToolLog[], id: string, context?: TeacherRunContext): Promise<TeacherRunResult> {
   if (!request.gameId) {
     throw new Error('整盘分析需要先选择棋谱。')
   }
@@ -759,8 +807,10 @@ async function runGameReview(request: TeacherRunRequest, logs: TeacherToolLog[],
   const sgfLog = startTool(logs, 'sgf.readGameRecord', '读取整盘棋谱', `读取 ${game.black} vs ${game.white} 的主线。`)
   const record = readGameRecord(game)
   finishTool(sgfLog, 'done', `读取 ${record.moves.length} 手，结果 ${game.result || '未知'}。`)
+  emitToolState(context, logs, `已读取 ${record.moves.length} 手主线。`)
 
   const reviewLog = startTool(logs, 'katago.analyzeGameBatch', '整盘 KataGo', '分析当前整盘棋，提取关键问题手和胜率损失。')
+  emitToolState(context, logs, '开始整盘 KataGo 快速扫描。')
   const review = await runReview({
     gameId: game.id,
     playerName: studentName,
@@ -770,6 +820,7 @@ async function runGameReview(request: TeacherRunRequest, logs: TeacherToolLog[],
   })
   const issues = extractIssues(review.artifact, game).filter((issue) => issue.loss > 0)
   finishTool(reviewLog, 'done', `提取 ${issues.length} 个关键问题手。`)
+  emitToolState(context, logs, `已提取 ${issues.length} 个关键问题手。`)
 
   const updatedProfile = updateStudentProfile(studentName, {
     reviewedGames: 1,
@@ -787,6 +838,7 @@ async function runGameReview(request: TeacherRunRequest, logs: TeacherToolLog[],
   })
   const profileLog = startTool(logs, 'studentProfile.write', '学生画像', `把 ${studentName} 的本局问题写入长期画像。`)
   finishTool(profileLog, 'done', `画像累计 ${updatedProfile.gamesReviewed} 盘，问题类型 ${updatedProfile.commonMistakes.length} 类。`)
+  emitToolState(context, logs, '本局问题已写入棋手画像。')
 
   const knowledgeLog = startTool(logs, 'knowledge.searchLocal', '本地知识库', '根据整盘关键问题检索教学主题。')
   const knowledge = searchKnowledge({
@@ -801,8 +853,10 @@ async function runGameReview(request: TeacherRunRequest, logs: TeacherToolLog[],
     maxResults: 4
   })
   finishTool(knowledgeLog, 'done', `选中 ${knowledge.length} 条知识卡片。`)
+  emitToolState(context, logs, '整盘复盘知识卡片已就绪。')
 
   const llmLog = startTool(logs, 'llm.teacherAgent', '老师整盘总结', '让老师结合整盘 KataGo 问题手和知识库生成复盘。')
+  emitProgress(context, { stage: 'assistant-start', message: '开始流式生成整盘复盘。', toolLogs: cloneToolLogs(logs) })
   let markdown = ''
   try {
     markdown = await callTeacherText(getSettings(), systemPrompt(updatedProfile.userLevel), JSON.stringify({
@@ -820,7 +874,7 @@ async function runGameReview(request: TeacherRunRequest, logs: TeacherToolLog[],
       issues: issues.slice(0, 16),
       studentProfile: updatedProfile,
       knowledgePacket: knowledge
-    }, null, 2))
+    }, null, 2), (delta) => emitAssistantDelta(context, delta))
     finishTool(llmLog, 'done', '整盘复盘已生成。')
   } catch (error) {
     markdown = [
@@ -855,11 +909,12 @@ async function runGameReview(request: TeacherRunRequest, logs: TeacherToolLog[],
   }
 }
 
-async function runTrainingPlan(request: TeacherRunRequest, logs: TeacherToolLog[], id: string): Promise<TeacherRunResult> {
+async function runTrainingPlan(request: TeacherRunRequest, logs: TeacherToolLog[], id: string, context?: TeacherRunContext): Promise<TeacherRunResult> {
   const studentName = detectStudentName(request)
   const profile = getStudentProfile(studentName)
   const profileLog = startTool(logs, 'studentProfile.read', '读取学生画像', `读取 ${studentName} 的长期画像。`)
   finishTool(profileLog, 'done', `已有 ${profile.gamesReviewed} 盘复盘记录。`)
+  emitToolState(context, logs, '已读取棋手画像。')
 
   const themes = themesFromProfile(profile)
   const knowledgeLog = startTool(logs, 'knowledge.searchLocal', '本地知识库', '围绕学生薄弱主题检索训练参考。')
@@ -875,8 +930,10 @@ async function runTrainingPlan(request: TeacherRunRequest, logs: TeacherToolLog[
     maxResults: 4
   })
   finishTool(knowledgeLog, 'done', `选中 ${knowledge.length} 条知识卡片。`)
+  emitToolState(context, logs, '训练主题知识卡片已就绪。')
 
   const llmLog = startTool(logs, 'llm.teacherAgent', '训练计划', '根据学生画像和知识库生成训练计划。')
+  emitProgress(context, { stage: 'assistant-start', message: '开始流式生成训练计划。', toolLogs: cloneToolLogs(logs) })
   let markdown = ''
   try {
     markdown = await callTeacherText(getSettings(), systemPrompt(profile.userLevel), JSON.stringify({
@@ -885,7 +942,7 @@ async function runTrainingPlan(request: TeacherRunRequest, logs: TeacherToolLog[
       studentProfile: profile,
       suggestedThemes: themes,
       knowledgePacket: knowledge
-    }, null, 2))
+    }, null, 2), (delta) => emitAssistantDelta(context, delta))
     finishTool(llmLog, 'done', '训练计划已生成。')
   } catch (error) {
     markdown = [
@@ -920,13 +977,14 @@ async function runTrainingPlan(request: TeacherRunRequest, logs: TeacherToolLog[
   }
 }
 
-async function runOpenEndedTask(request: TeacherRunRequest, logs: TeacherToolLog[], id: string): Promise<TeacherRunResult> {
+async function runOpenEndedTask(request: TeacherRunRequest, logs: TeacherToolLog[], id: string, context?: TeacherRunContext): Promise<TeacherRunResult> {
   const game = request.gameId ? getGames().find((item) => item.id === request.gameId) : undefined
   const studentName = detectStudentName(request, game)
   let environmentSummary: Record<string, unknown> | null = null
 
   if (shouldConfigureEnvironment(request.prompt)) {
     const detectLog = startTool(logs, 'system.detectEnvironment', '探测本机环境', '老师正在探测 KataGo、模型、配置和本机 LLM 代理。')
+    emitToolState(context, logs, '正在探测本机环境。')
     try {
       const detected = await detectSystemProfile()
       environmentSummary = {
@@ -938,11 +996,14 @@ async function runOpenEndedTask(request: TeacherRunRequest, logs: TeacherToolLog
         notes: detected.notes
       }
       finishTool(detectLog, 'done', detected.notes.join('；') || '探测完成，但没有发现可自动配置项。')
+      emitToolState(context, logs, '本机环境探测完成。')
     } catch (error) {
       finishTool(detectLog, 'error', `环境探测失败: ${String(error)}`)
+      emitToolState(context, logs, '本机环境探测失败，继续使用现有配置。')
     }
 
     const writeLog = startTool(logs, 'settings.writeAppConfig', '写入应用配置', '把探测结果写入 KataSensei 本地配置，供老师后续直接调用。')
+    emitToolState(context, logs, '正在写入可用配置。')
     try {
       const nextSettings = await applyDetectedDefaults(getSettings())
       replaceSettings(nextSettings)
@@ -951,18 +1012,22 @@ async function runOpenEndedTask(request: TeacherRunRequest, logs: TeacherToolLog
         nextSettings.katagoConfig ? '配置已设置' : '配置未找到',
         nextSettings.katagoModel ? '模型已设置' : '模型未找到'
       ].join('；'))
+      emitToolState(context, logs, '应用配置已更新。')
     } catch (error) {
       finishTool(writeLog, 'error', `写入配置失败: ${String(error)}`)
+      emitToolState(context, logs, '配置写入失败，继续保持当前设置。')
     }
   }
 
   const profileLog = startTool(logs, 'studentProfile.read', '读取学生画像', `读取 ${studentName} 的长期画像，作为开放任务上下文。`)
   const profile = getStudentProfile(studentName)
   finishTool(profileLog, 'done', `已有 ${profile.gamesReviewed} 盘复盘记录。`)
+  emitToolState(context, logs, '已读取棋手画像。')
 
   let recordSummary: Record<string, unknown> | null = null
   if (game) {
     const sgfLog = startTool(logs, 'sgf.readGameRecord', '读取当前棋谱', `读取当前棋谱 ${game.title}，供老师自由判断任务。`)
+    emitToolState(context, logs, '正在读取当前棋谱上下文。')
     try {
       const record = readGameRecord(game)
       const moveNumber = Math.max(0, Math.min(request.moveNumber ?? record.moves.length, record.moves.length))
@@ -983,9 +1048,11 @@ async function runOpenEndedTask(request: TeacherRunRequest, logs: TeacherToolLog
         recentMoves: record.moves.slice(Math.max(0, moveNumber - 12), moveNumber)
       }
       finishTool(sgfLog, 'done', `读取 ${record.moves.length} 手，当前定位第 ${moveNumber} 手。`)
+      emitToolState(context, logs, '当前棋谱上下文已读取。')
 
       if (shouldConfigureEnvironment(request.prompt)) {
         const verifyLog = startTool(logs, 'katago.verifyAnalysis', '验证 KataGo', `用当前棋谱第 ${moveNumber} 手做低访问量验证分析。`)
+        emitToolState(context, logs, '正在验证 KataGo 可实际分析。')
         try {
           const verification = await analyzePosition(game.id, moveNumber, 80)
           environmentSummary = {
@@ -998,24 +1065,30 @@ async function runOpenEndedTask(request: TeacherRunRequest, logs: TeacherToolLog
             }
           }
           finishTool(verifyLog, 'done', `验证成功：推荐 ${verification.before.topMoves[0]?.move ?? '未知'}，当前胜率 ${verification.after.winrate.toFixed(1)}%。`)
+          emitToolState(context, logs, 'KataGo 验证分析成功。')
         } catch (error) {
           finishTool(verifyLog, 'error', `KataGo 验证失败: ${String(error)}`)
+          emitToolState(context, logs, 'KataGo 验证失败，老师会说明当前限制。')
         }
       }
     } catch (error) {
       finishTool(sgfLog, 'error', `棋谱读取失败: ${String(error)}`)
+      emitToolState(context, logs, '当前棋谱读取失败，继续使用其他上下文。')
     }
   }
 
   const knowledgeLog = startTool(logs, 'knowledge.searchLocal', '本地知识库', '开放任务先检索本地知识库，给老师可引用的教学概念。')
   const knowledge = genericKnowledgeForPrompt(request.prompt, profile)
   finishTool(knowledgeLog, 'done', `选中 ${knowledge.length} 条知识卡片。`)
+  emitToolState(context, logs, '本地知识卡片已选好。')
 
   const webSnippets = await maybeSearchWeb(request.prompt, logs)
   const planningLog = startTool(logs, 'teacher.plan', '任务规划', '开放式任务不套模板，老师根据工具目录和上下文自行决定输出形式。')
   finishTool(planningLog, 'done', '已提供完整工具目录、当前棋局上下文、学生画像和知识库片段。')
+  emitToolState(context, logs, '任务上下文已组织好，开始回答。')
 
   const llmLog = startTool(logs, 'llm.teacherAgent', '开放式老师智能体', '把用户任务、工具目录、上下文和知识库交给老师推理。')
+  emitProgress(context, { stage: 'assistant-start', message: '开始流式生成回答。', toolLogs: cloneToolLogs(logs) })
   let markdown = ''
   try {
     markdown = await callTeacherText(getSettings(), systemPrompt(profile.userLevel), JSON.stringify({
@@ -1029,7 +1102,7 @@ async function runOpenEndedTask(request: TeacherRunRequest, logs: TeacherToolLog
       environment: environmentSummary,
       knowledgePacket: knowledge,
       webSearchTitles: webSnippets
-    }, null, 2))
+    }, null, 2), (delta) => emitAssistantDelta(context, delta))
     finishTool(llmLog, 'done', '开放式任务已生成。')
   } catch (error) {
     markdown = [
@@ -1068,22 +1141,54 @@ async function runOpenEndedTask(request: TeacherRunRequest, logs: TeacherToolLog
   }
 }
 
-export async function runTeacherTask(request: TeacherRunRequest): Promise<TeacherRunResult> {
-  const id = randomUUID()
+export async function runTeacherTask(request: TeacherRunRequest, onProgress?: TeacherProgressEmitter): Promise<TeacherRunResult> {
+  const id = request.runId || randomUUID()
   const logs: TeacherToolLog[] = []
   const intent = classifyIntent(request)
+  const context: TeacherRunContext = {
+    runId: id,
+    emit: onProgress
+  }
 
-  if (intent === 'current-move') {
-    return runCurrentMove(request, logs, id)
+  emitProgress(context, {
+    stage: 'queued',
+    message: intent === 'current-move'
+      ? '收到当前手分析任务。'
+      : intent === 'game-review'
+        ? '收到整盘复盘任务。'
+        : intent === 'batch-review'
+          ? '收到最近对局分析任务。'
+          : intent === 'training-plan'
+            ? '收到训练计划任务。'
+            : '收到开放式任务。'
+  })
+
+  try {
+    let result: TeacherRunResult
+    if (intent === 'current-move') {
+      result = await runCurrentMove(request, logs, id, context)
+    } else if (intent === 'game-review') {
+      result = await runGameReview(request, logs, id, context)
+    } else if (intent === 'batch-review') {
+      result = await runBatchReview(request, logs, id, context)
+    } else if (intent === 'training-plan') {
+      result = await runTrainingPlan(request, logs, id, context)
+    } else {
+      result = await runOpenEndedTask(request, logs, id, context)
+    }
+    emitProgress(context, {
+      stage: 'done',
+      markdown: result.markdown,
+      toolLogs: cloneToolLogs(logs),
+      result
+    })
+    return result
+  } catch (error) {
+    emitProgress(context, {
+      stage: 'error',
+      error: String(error),
+      toolLogs: cloneToolLogs(logs)
+    })
+    throw error
   }
-  if (intent === 'game-review') {
-    return runGameReview(request, logs, id)
-  }
-  if (intent === 'batch-review') {
-    return runBatchReview(request, logs, id)
-  }
-  if (intent === 'training-plan') {
-    return runTrainingPlan(request, logs, id)
-  }
-  return runOpenEndedTask(request, logs, id)
 }
