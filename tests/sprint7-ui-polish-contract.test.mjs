@@ -35,6 +35,20 @@ test('WinrateTimelineV2 exposes hover tooltip and score line rendering', () => {
   assert.match(timeline, /hoveredMove/)
 })
 
+test('KataGo live analysis controls expose start pause and visit thresholds', () => {
+  const app = read('src/renderer/src/App.tsx')
+  assert.match(app, /LIVE_ANALYSIS_VISIT_STEPS/)
+  assert.match(app, /LIVE_ANALYSIS_TOTAL_VISIT_LIMIT/)
+  assert.match(app, /LIVE_ANALYSIS_BEST_VISIT_LIMIT/)
+  assert.match(app, /startLiveAnalysis/)
+  assert.match(app, /pauseLiveAnalysis/)
+  assert.match(app, /开始分析/)
+  assert.match(app, /暂停分析/)
+  const styles = read('src/renderer/src/styles.css')
+  assert.match(styles, /analysis-control-strip/)
+  assert.match(styles, /analysis-toggle-button/)
+})
+
 test('TeacherRunCardPro renders structured product modules', () => {
   const teacher = read('src/renderer/src/features/teacher/TeacherRunCardPro.tsx')
   assert.match(teacher, /一句话结论/)

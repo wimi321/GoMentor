@@ -87,6 +87,15 @@ interface StudentBindingState {
   suggestions: StudentBindingSuggestion[]
 }
 
+interface LiveAnalysisState {
+  running: boolean
+  status: string
+  visits: number
+  bestVisits: number
+  targetMoveNumber: number | null
+  round: number
+}
+
 type DesktopCommand =
   | 'open-command-palette'
   | 'open-settings'
@@ -98,6 +107,10 @@ type DesktopCommand =
   | 'open-ui-gallery'
 
 const letters = 'ABCDEFGHJKLMNOPQRSTUVWXYZ'
+const LIVE_ANALYSIS_VISIT_STEPS = [180, 360, 720, 1200, 2000, 3200]
+const LIVE_ANALYSIS_TOTAL_VISIT_LIMIT = 3200
+const LIVE_ANALYSIS_BEST_VISIT_LIMIT = 1200
+const LIVE_ANALYSIS_TIME_LIMIT_MS = 90_000
 
 function safePlayerName(name: string | undefined, fallback: string): string {
   const value = (name ?? '').trim()
@@ -119,6 +132,18 @@ function boardCandidateMoves(analysis: KataGoMoveAnalysis | null): KataGoCandida
 
 function analysisHasCandidates(analysis: KataGoMoveAnalysis | undefined | null): boolean {
   return Boolean(analysis && (analysis.before.topMoves.length > 0 || analysis.after.topMoves.length > 0))
+}
+
+function candidateVisitsTotal(analysis: KataGoMoveAnalysis | null | undefined): number {
+  return analysis?.before.topMoves.reduce((total, candidate) => total + Math.max(0, Number(candidate.visits) || 0), 0) ?? 0
+}
+
+function candidateBestVisits(analysis: KataGoMoveAnalysis | null | undefined): number {
+  return Math.max(0, Number(analysis?.before.topMoves[0]?.visits) || 0)
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function keyMoveSummariesFromEvaluations(evaluations: EvaluationByMove): KeyMoveSummary[] {
@@ -194,6 +219,14 @@ export function App(): ReactElement {
   const [busy, setBusy] = useState('')
   const [graphBusy, setGraphBusy] = useState(false)
   const [graphProgress, setGraphProgress] = useState('')
+  const [liveAnalysis, setLiveAnalysis] = useState<LiveAnalysisState>({
+    running: false,
+    status: '已暂停',
+    visits: 0,
+    bestVisits: 0,
+    targetMoveNumber: null,
+    round: 0
+  })
   const [error, setError] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
@@ -203,6 +236,9 @@ export function App(): ReactElement {
   const [studentBinding, setStudentBinding] = useState<StudentBindingState | null>(null)
   const [katagoAssets, setKatagoAssets] = useState<KataGoAssetStatus | null>(null)
   const graphRunId = useRef('')
+  const liveAnalysisRunId = useRef('')
+  const moveNumberRef = useRef(moveNumber)
+  const selectedGameIdRef = useRef('')
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'hello',
@@ -237,10 +273,19 @@ export function App(): ReactElement {
   }, [selectedGame, selectedId])
 
   useEffect(() => {
+    moveNumberRef.current = moveNumber
+  }, [moveNumber])
+
+  useEffect(() => {
+    selectedGameIdRef.current = selectedGame?.id ?? ''
+  }, [selectedGame?.id])
+
+  useEffect(() => {
     if (!selectedGame) {
       setRecord(null)
       return
     }
+    pauseLiveAnalysis('切换棋谱，已暂停精读')
     void loadRecord(selectedGame.id)
   }, [selectedGame?.id])
 
@@ -501,8 +546,117 @@ export function App(): ReactElement {
   }
 
   function jumpToMove(next: number): void {
+    if (liveAnalysis.running) {
+      pauseLiveAnalysis('切换手数，已暂停精读')
+    }
     setMoveNumber(next)
     setAnalysis(evaluations[next] ?? null)
+  }
+
+  function pauseLiveAnalysis(message = '已暂停精读'): void {
+    liveAnalysisRunId.current = crypto.randomUUID()
+    setLiveAnalysis((current) => ({
+      ...current,
+      running: false,
+      status: message
+    }))
+  }
+
+  async function startLiveAnalysis(): Promise<void> {
+    if (!record || !selectedGame) {
+      return
+    }
+    const targetMove = Math.max(0, Math.min(record.moves.length, Math.round(moveNumber)))
+    const gameId = selectedGame.id
+    const runId = crypto.randomUUID()
+    const startedAt = Date.now()
+    liveAnalysisRunId.current = runId
+    setError('')
+    setMoveNumber(targetMove)
+    setAnalysis(evaluations[targetMove] ?? analysis)
+    setLiveAnalysis({
+      running: true,
+      status: `精读第 ${targetMove} 手`,
+      visits: candidateVisitsTotal(evaluations[targetMove] ?? analysis),
+      bestVisits: candidateBestVisits(evaluations[targetMove] ?? analysis),
+      targetMoveNumber: targetMove,
+      round: 0
+    })
+
+    for (const [index, maxVisits] of LIVE_ANALYSIS_VISIT_STEPS.entries()) {
+      if (liveAnalysisRunId.current !== runId) {
+        return
+      }
+      setLiveAnalysis((current) => ({
+        ...current,
+        running: true,
+        status: `KataGo 精读中 · 上限 ${formatVisits(maxVisits)} visits`,
+        round: index + 1,
+        targetMoveNumber: targetMove
+      }))
+      try {
+        const nextAnalysis = await window.katasensei.analyzePosition({
+          gameId,
+          moveNumber: targetMove,
+          maxVisits
+        })
+        if (liveAnalysisRunId.current !== runId || selectedGameIdRef.current !== gameId) {
+          return
+        }
+        const totalVisits = candidateVisitsTotal(nextAnalysis)
+        const bestVisits = candidateBestVisits(nextAnalysis)
+        rememberEvaluation(nextAnalysis)
+        if (moveNumberRef.current === targetMove) {
+          setAnalysis(nextAnalysis)
+        }
+        setLiveAnalysis({
+          running: true,
+          status: `已搜索 ${formatVisits(totalVisits)} · 一选 ${formatVisits(bestVisits)}`,
+          visits: totalVisits,
+          bestVisits,
+          targetMoveNumber: targetMove,
+          round: index + 1
+        })
+        const elapsed = Date.now() - startedAt
+        const reachedTotal = totalVisits >= LIVE_ANALYSIS_TOTAL_VISIT_LIMIT
+        const reachedBest = bestVisits >= LIVE_ANALYSIS_BEST_VISIT_LIMIT
+        const reachedTime = elapsed >= LIVE_ANALYSIS_TIME_LIMIT_MS
+        if (reachedTotal || reachedBest || reachedTime) {
+          setLiveAnalysis({
+            running: false,
+            status: reachedBest
+              ? `已达到一选 ${formatVisits(bestVisits)}`
+              : reachedTotal
+                ? `已达到总搜索 ${formatVisits(totalVisits)}`
+                : `已运行 ${Math.round(elapsed / 1000)} 秒`,
+            visits: totalVisits,
+            bestVisits,
+            targetMoveNumber: targetMove,
+            round: index + 1
+          })
+          return
+        }
+      } catch (cause) {
+        if (liveAnalysisRunId.current === runId) {
+          setError(`KataGo 精读失败: ${String(cause)}`)
+          setLiveAnalysis((current) => ({
+            ...current,
+            running: false,
+            status: '精读失败'
+          }))
+        }
+        return
+      }
+      await sleep(180)
+    }
+
+    if (liveAnalysisRunId.current === runId) {
+      setLiveAnalysis((current) => ({
+        ...current,
+        running: false,
+        status: `已完成 ${formatVisits(current.visits)}`
+      }))
+    }
   }
 
   async function runMoveAnalysisAt(targetMoveNumber: number): Promise<void> {
@@ -740,7 +894,17 @@ export function App(): ReactElement {
                 loading={graphBusy}
                 loadingLabel={graphProgress}
                 onMove={jumpToMove}
-                summary={<TimelineMoveInfo record={record} moveNumber={moveNumber} analysis={(analysis?.moveNumber === moveNumber ? analysis : evaluations[moveNumber]) ?? null} />}
+                summary={
+                  <TimelineAnalysisHeader
+                    record={record}
+                    moveNumber={moveNumber}
+                    analysis={(analysis?.moveNumber === moveNumber ? analysis : evaluations[moveNumber]) ?? null}
+                    liveAnalysis={liveAnalysis}
+                    disabled={busy !== ''}
+                    onStart={() => void startLiveAnalysis()}
+                    onPause={() => pauseLiveAnalysis()}
+                  />
+                }
               />
             ) : (
               <EvaluationGraph
@@ -781,6 +945,7 @@ export function App(): ReactElement {
           moveNumber={moveNumber}
           graphBusy={graphBusy}
           graphProgress={graphProgress}
+          liveAnalysis={liveAnalysis}
           katagoReady={katagoAssets?.ready || dashboard.systemProfile.katagoReady}
           llmReady={dashboard.systemProfile.hasLlmApiKey}
           busy={busy}
@@ -961,6 +1126,7 @@ function DesktopStatusBar({
   moveNumber,
   graphBusy,
   graphProgress,
+  liveAnalysis,
   katagoReady,
   llmReady,
   busy
@@ -970,6 +1136,7 @@ function DesktopStatusBar({
   moveNumber: number
   graphBusy: boolean
   graphProgress: string
+  liveAnalysis: LiveAnalysisState
   katagoReady: boolean
   llmReady: boolean
   busy: string
@@ -979,6 +1146,7 @@ function DesktopStatusBar({
       <span>{selectedGame ? gameDisplayName(selectedGame) : 'No game selected'}</span>
       <span>{record ? `Move ${moveNumber}/${record.moves.length}` : 'Import SGF to start'}</span>
       <span>{graphBusy ? `Winrate ${graphProgress || 'analyzing'}` : 'Winrate ready'}</span>
+      <span>{liveAnalysis.running ? `Live ${liveAnalysis.status}` : `Live ${formatVisits(liveAnalysis.visits)} visits`}</span>
       <span data-ready={katagoReady}>KataGo</span>
       <span data-ready={llmReady}>Vision LLM</span>
       <em>{busy ? `Task: ${busy}` : 'Ready'}</em>
@@ -1442,6 +1610,51 @@ function TimelineMoveInfo({ record, moveNumber, analysis }: { record: GameRecord
       <span>{current ? `${current.color === 'B' ? '黑' : '白'} ${current.gtp}` : '开局'}</span>
       <em>{typeof winrate === 'number' ? `黑胜率 ${winrate.toFixed(1)}%` : '胜率待分析'}</em>
       <em>{formatScoreLead(scoreLead)}</em>
+    </div>
+  )
+}
+
+function TimelineAnalysisHeader({
+  record,
+  moveNumber,
+  analysis,
+  liveAnalysis,
+  disabled,
+  onStart,
+  onPause
+}: {
+  record: GameRecord
+  moveNumber: number
+  analysis: KataGoMoveAnalysis | null
+  liveAnalysis: LiveAnalysisState
+  disabled: boolean
+  onStart: () => void
+  onPause: () => void
+}): ReactElement {
+  const isCurrentLiveTarget = liveAnalysis.targetMoveNumber === moveNumber
+  const totalVisits = isCurrentLiveTarget ? liveAnalysis.visits : candidateVisitsTotal(analysis)
+  const bestVisits = isCurrentLiveTarget ? liveAnalysis.bestVisits : candidateBestVisits(analysis)
+  const status = isCurrentLiveTarget
+    ? liveAnalysis.status
+    : (analysis ? `已搜索 ${formatVisits(totalVisits)}` : '等待精读')
+  return (
+    <div className="timeline-analysis-header">
+      <TimelineMoveInfo record={record} moveNumber={moveNumber} analysis={analysis} />
+      <div className="analysis-control-strip" aria-label="KataGo 持续分析控制">
+        <div className="analysis-control-strip__stats">
+          <span>{status}</span>
+          <em>总 {formatVisits(totalVisits)} · 一选 {formatVisits(bestVisits)}</em>
+        </div>
+        <button
+          type="button"
+          className={`analysis-toggle-button ${liveAnalysis.running ? 'is-running' : ''}`}
+          onClick={liveAnalysis.running ? onPause : onStart}
+          disabled={!liveAnalysis.running && disabled}
+        >
+          <span className="analysis-toggle-button__dot" />
+          {liveAnalysis.running ? '暂停分析' : '开始分析'}
+        </button>
+      </div>
     </div>
   )
 }
