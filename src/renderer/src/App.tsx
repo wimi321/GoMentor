@@ -715,9 +715,6 @@ export function App(): ReactElement {
               <h1>{selectedGame ? gameDisplayName(selectedGame) : '未选择棋谱'}</h1>
               <StatusPills items={statusItems} />
             </div>
-            <div className="topbar-actions">
-              {record ? <TopbarMoveInfo record={record} moveNumber={moveNumber} analysis={analysis} /> : null}
-            </div>
           </header>
 
           <section className="board-stage">
@@ -743,6 +740,7 @@ export function App(): ReactElement {
                 loading={graphBusy}
                 loadingLabel={graphProgress}
                 onMove={jumpToMove}
+                summary={<TimelineMoveInfo record={record} moveNumber={moveNumber} analysis={(analysis?.moveNumber === moveNumber ? analysis : evaluations[moveNumber]) ?? null} />}
               />
             ) : (
               <EvaluationGraph
@@ -1429,17 +1427,21 @@ function MoveControls({ record, moveNumber, onMove }: { record: GameRecord | nul
   )
 }
 
-function TopbarMoveInfo({ record, moveNumber, analysis }: { record: GameRecord; moveNumber: number; analysis: KataGoMoveAnalysis | null }): ReactElement {
+function TimelineMoveInfo({ record, moveNumber, analysis }: { record: GameRecord; moveNumber: number; analysis: KataGoMoveAnalysis | null }): ReactElement {
+  const black = safePlayerName(record.game.black, '黑方')
+  const white = safePlayerName(record.game.white, '白方')
   const current = moveNumber > 0 ? record.moves[moveNumber - 1] : undefined
   const scoreLead = analysis?.after.scoreLead
-  const bestCandidate = boardCandidateMoves(analysis)[0]
-  const nextColor = sideToPlay(record, moveNumber) === 'B' ? '黑' : '白'
+  const winrate = analysis?.after.winrate
   return (
-    <div className="topbar-move-info" aria-label="当前局面">
-      <strong>{moveNumber}</strong>
-      <span>/ {record.moves.length}</span>
+    <div className="timeline-move-info" aria-label="当前局面">
+      <span>黑 {black}</span>
+      <span>vs</span>
+      <span>白 {white}</span>
+      <strong>{moveNumber}/{record.moves.length}</strong>
       <span>{current ? `${current.color === 'B' ? '黑' : '白'} ${current.gtp}` : '开局'}</span>
-      <em>{bestCandidate ? `${nextColor}先 · 1选 ${formatCandidate(bestCandidate)}` : formatScoreLead(scoreLead)}</em>
+      <em>{typeof winrate === 'number' ? `黑胜率 ${winrate.toFixed(1)}%` : '胜率待分析'}</em>
+      <em>{formatScoreLead(scoreLead)}</em>
     </div>
   )
 }
@@ -1473,21 +1475,6 @@ function formatVisits(visits: number): string {
     return `${(visits / 1_000).toFixed(visits >= 10_000 ? 0 : 1)}k`
   }
   return String(Math.round(visits))
-}
-
-function sideToPlay(record: GameRecord, moveNumber: number): StoneColor {
-  if (moveNumber <= 0) {
-    return 'B'
-  }
-  const lastMove = record.moves[Math.min(moveNumber, record.moves.length) - 1]
-  return lastMove?.color === 'B' ? 'W' : 'B'
-}
-
-function formatCandidate(candidate: KataGoCandidate | undefined): string {
-  if (!candidate) {
-    return '候选点待分析'
-  }
-  return `${candidate.move} · ${candidate.winrate.toFixed(1)}% · ${candidate.scoreLead >= 0 ? '黑' : '白'}+${Math.abs(candidate.scoreLead).toFixed(1)} · ${formatVisits(candidate.visits)}搜`
 }
 
 function evaluationSeverity(item: KataGoMoveAnalysis): 'quiet' | 'inaccuracy' | 'mistake' | 'blunder' {

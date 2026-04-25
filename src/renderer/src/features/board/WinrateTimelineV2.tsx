@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react'
+import type { ReactElement, ReactNode } from 'react'
 import { useMemo, useRef, useState } from 'react'
 import type { KataGoMoveAnalysis } from '@main/lib/types'
 import { getAnalysisMoveNumber, getAnalysisWinrate, classifyMoveLoss, normalizeWinrate } from './boardGeometry'
@@ -20,6 +20,7 @@ interface WinrateTimelineV2Props {
   loading?: boolean
   loadingLabel?: string
   onMove?: (moveNumber: number) => void
+  summary?: ReactNode
 }
 
 function valueOf(record: unknown, key: string): unknown {
@@ -71,7 +72,7 @@ function buildPoints(evaluations: KataGoMoveAnalysis[], totalMoves: number): Tim
     .sort((a, b) => a.moveNumber - b.moveNumber)
 }
 
-export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, loading = false, loadingLabel = '', onMove }: WinrateTimelineV2Props): ReactElement {
+export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, loading = false, loadingLabel = '', onMove, summary }: WinrateTimelineV2Props): ReactElement {
   const [dragging, setDragging] = useState(false)
   const [hoveredMove, setHoveredMove] = useState<number | null>(null)
   const [hoverLeft, setHoverLeft] = useState(0)
@@ -151,8 +152,11 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
   return (
     <div className="ks-timeline-v2">
       <div className="ks-timeline-head">
-        <span>胜率走势</span>
-        <small>{loading ? (loadingLabel || '分析中') : `胜率 / 目差 · ${points.length}/${totalMoves || 0} 局面`}</small>
+        <div className="ks-timeline-title">
+          <span>胜率走势</span>
+          <small>{loading ? (loadingLabel || '分析中') : `胜率 / 目差 · ${points.length}/${totalMoves || 0} 局面`}</small>
+        </div>
+        {summary ? <div className="ks-timeline-summary">{summary}</div> : null}
       </div>
       <svg
         className={`ks-timeline-canvas ${dragging ? 'is-dragging' : ''}`}

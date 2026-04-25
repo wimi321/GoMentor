@@ -275,13 +275,35 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
   color: var(--ks-text-muted, #a9b2bb);
   font-size: 12px;
   font-weight: 800;
 }
 
-.ks-timeline-head span {
+.ks-timeline-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ks-timeline-title span {
   color: var(--ks-text-main, #f4efe7);
+}
+
+.ks-timeline-title small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ks-timeline-summary {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+  max-width: min(70%, 720px);
 }
 
 .ks-timeline-canvas {
