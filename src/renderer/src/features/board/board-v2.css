@@ -1,11 +1,11 @@
 .ks-board-shell {
   position: relative;
   display: grid;
-  width: min(100%, calc(100vh - 330px), 720px);
+  width: min(100%, calc(100vh - 330px), 660px);
   min-width: min(360px, 100%);
   aspect-ratio: 1;
   place-items: center;
-  filter: drop-shadow(0 26px 48px rgb(96 66 31 / 0.22));
+  filter: drop-shadow(0 20px 34px rgb(96 66 31 / 0.18));
 }
 
 .ks-board-shell--compact {
@@ -15,7 +15,7 @@
 .ks-go-board-v2 {
   width: 100%;
   height: 100%;
-  overflow: visible;
+  overflow: hidden;
   touch-action: none;
   user-select: none;
 }
@@ -49,7 +49,7 @@
 
 .ks-board-coordinates-v2 text {
   fill: rgba(50, 31, 17, 0.62);
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 800;
   text-anchor: middle;
   dominant-baseline: middle;
@@ -117,7 +117,7 @@
   fill: color-mix(in srgb, var(--ks-candidate-fill, #54c7c0) 24%, transparent);
   stroke: color-mix(in srgb, var(--ks-candidate-fill, #54c7c0) 38%, transparent);
   stroke-width: 1.1;
-  opacity: 0.68;
+  opacity: 0.56;
 }
 
 .ks-candidate--primary {
@@ -154,14 +154,14 @@
   fill: rgba(30, 20, 10, 0.16);
   stroke: rgba(255, 248, 224, 0.74);
   stroke-width: 1.3;
-  filter: drop-shadow(0 4px 7px rgba(61, 38, 13, 0.28));
+  filter: drop-shadow(0 3px 5px rgba(61, 38, 13, 0.22));
 }
 
 .ks-candidate-disc {
   fill: color-mix(in srgb, var(--ks-candidate-fill, #55cbc4) 92%, white 8%);
   stroke: rgba(255, 250, 230, 0.86);
   stroke-width: 1.45;
-  filter: drop-shadow(0 2px 4px rgba(45, 29, 11, 0.24));
+  filter: drop-shadow(0 1.5px 3px rgba(45, 29, 11, 0.2));
 }
 
 .ks-candidate-rank,
@@ -284,7 +284,7 @@
 
 .ks-timeline-canvas {
   width: 100%;
-  height: 154px;
+  height: 132px;
   border: 1px solid var(--ks-border-soft, rgba(255,255,255,.08));
   border-radius: 14px;
   cursor: pointer;

@@ -20,9 +20,8 @@ import lizzieBlackStoneUrl from './assets/lizzie/black.png'
 import lizzieBoardUrl from './assets/lizzie/board.png'
 import lizzieWhiteStoneUrl from './assets/lizzie/white.png'
 import logoUrl from '../../../assets/logo.svg'
-import { BoardInsightPanel } from './features/board/BoardInsightPanel'
 import { GoBoardV2 } from './features/board/GoBoardV2'
-import { KeyMoveNavigator, type KeyMoveSummary } from './features/board/KeyMoveNavigator'
+import type { KeyMoveSummary } from './features/board/KeyMoveNavigator'
 import { WinrateTimelineV2 } from './features/board/WinrateTimelineV2'
 import { parseBoardPoint, type RenderKeyMove } from './features/board/boardGeometry'
 import { DiagnosticsGate } from './features/diagnostics/DiagnosticsGate'
@@ -225,6 +224,10 @@ export function App(): ReactElement {
   const boardKeyMoveMarks = useMemo(
     () => keyMoveMarksFromSummaries(keyMoveSummaries, evaluations, record?.boardSize ?? 19),
     [keyMoveSummaries, evaluations, record?.boardSize]
+  )
+  const currentBoardKeyMoveMarks = useMemo(
+    () => boardKeyMoveMarks.filter((mark) => mark.moveNumber === moveNumber),
+    [boardKeyMoveMarks, moveNumber]
   )
 
   useEffect(() => {
@@ -732,19 +735,10 @@ export function App(): ReactElement {
               <div className="board-table board-table--v2">
                 <BoardMatchBar record={record} moveNumber={moveNumber} analysis={analysis} />
                 {record.boardSize >= 2 ? (
-                  <GoBoardV2 record={record} moveNumber={moveNumber} analysis={analysis} keyMoves={boardKeyMoveMarks} />
+                  <GoBoardV2 record={record} moveNumber={moveNumber} analysis={analysis} keyMoves={currentBoardKeyMoveMarks} />
                 ) : (
                   <GoBoard record={record} moveNumber={moveNumber} analysis={analysis} />
                 )}
-                <div className="board-insight-stack">
-                  <BoardInsightPanel analysis={analysis} moveNumber={moveNumber} loading={busy === 'teacher' || graphBusy} />
-                  <KeyMoveNavigator
-                    moves={keyMoveSummaries}
-                    currentMoveNumber={moveNumber}
-                    onJump={jumpToMove}
-                    onAnalyzeMove={(targetMove) => void runMoveAnalysisAt(targetMove)}
-                  />
-                </div>
               </div>
             ) : (
               <div className="empty-board">导入 SGF 后开始复盘</div>

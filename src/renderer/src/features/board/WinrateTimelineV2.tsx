@@ -78,7 +78,7 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
   const draggingRef = useRef(false)
   const points = useMemo(() => buildPoints(evaluations, totalMoves), [evaluations, totalMoves])
   const width = 980
-  const height = 154
+  const height = 132
   const padX = 34
   const padY = 18
   const plotW = width - padX * 2
@@ -185,17 +185,6 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
         <line className="ks-timeline-center" x1={padX} y1={y(0.5)} x2={width - padX} y2={y(0.5)} />
         {path ? <path className="ks-timeline-line ks-timeline-line--winrate" d={path} /> : null}
         {scorePath ? <path className="ks-timeline-line ks-timeline-line--score" d={scorePath} /> : null}
-        {points.map((point) => {
-          const visibleLoss = typeof point.loss === 'number' && Math.abs(point.loss) >= 0.04
-          return visibleLoss ? (
-            <g key={`loss-${point.moveNumber}`} className={`ks-timeline-loss ks-timeline-loss--${point.severity ?? 'turning-point'}`}>
-              <rect x={x(point.moveNumber) - 2} y={y(0.5)} width="4" height={Math.max(5, Math.abs(point.loss ?? 0) * plotH)} />
-            </g>
-          ) : null
-        })}
-        {points.filter((point) => point.severity === 'blunder' || point.severity === 'mistake').slice(0, 12).map((point) => (
-          <circle key={`dot-${point.moveNumber}`} className={`ks-timeline-dot ks-timeline-dot--${point.severity}`} cx={x(point.moveNumber)} cy={y(point.winrate)} r="4.5" />
-        ))}
         <line className="ks-timeline-current" x1={x(currentMoveNumber)} y1={padY} x2={x(currentMoveNumber)} y2={height - padY} />
         {hoverPoint ? (
           <g className="ks-timeline-hover">
