@@ -7,6 +7,7 @@ import type {
   GameRecord,
   KataGoCandidate,
   KataGoAssetStatus,
+  KataGoBenchmarkResult,
   KataGoMoveAnalysis,
   KataGoModelPresetId,
   LibraryGame,
@@ -43,6 +44,13 @@ const emptyDashboard: DashboardData = {
     katagoConfig: '',
     katagoModel: '',
     katagoModelPreset: 'official-b18-recommended',
+    katagoAnalysisThreads: 0,
+    katagoSearchThreadsPerAnalysisThread: 1,
+    katagoMaxBatchSize: 32,
+    katagoCacheSizePowerOfTwo: 20,
+    katagoBenchmarkThreads: 0,
+    katagoBenchmarkVisitsPerSecond: 0,
+    katagoBenchmarkUpdatedAt: '',
     pythonBin: 'python3',
     llmBaseUrl: 'https://api.openai.com/v1',
     llmApiKey: '',
@@ -234,6 +242,8 @@ export function App(): ReactElement {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
   const [libraryCollapsed, setLibraryCollapsed] = useState(false)
   const [llmTestMessage, setLlmTestMessage] = useState('')
+  const [katagoBenchmark, setKataGoBenchmark] = useState<KataGoBenchmarkResult | null>(null)
+  const [katagoBenchmarkMessage, setKataGoBenchmarkMessage] = useState('')
   const [currentStudent, setCurrentStudent] = useState<StudentProfile | null>(null)
   const [studentBinding, setStudentBinding] = useState<StudentBindingState | null>(null)
   const [katagoAssets, setKatagoAssets] = useState<KataGoAssetStatus | null>(null)
@@ -542,6 +552,36 @@ export function App(): ReactElement {
       setLlmTestMessage(result.message)
     } catch (cause) {
       setLlmTestMessage(String(cause))
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function runKataGoBenchmark(): Promise<void> {
+    setBusy('katago-benchmark')
+    setKataGoBenchmarkMessage('正在调用 KataGo 官方 benchmark，通常需要几十秒。')
+    setError('')
+    try {
+      if (typeof window.katasensei.benchmarkKataGo !== 'function') {
+        throw new Error('测速服务尚未加载，请重启应用后再试。')
+      }
+      const result = await window.katasensei.benchmarkKataGo()
+      setKataGoBenchmark(result)
+      setKataGoBenchmarkMessage(`已优化：推荐 ${result.recommendedThreads} 线程，${formatSearchSpeed(result.visitsPerSecond)}。`)
+      setDashboard(await window.katasensei.getDashboard())
+      void refreshKataGoAssets()
+      if (selectedGame && record) {
+        pauseLiveAnalysis('测速完成，准备使用新配置')
+        setAnalysis(null)
+        setEvaluations({})
+        void warmupEvaluationGraph(selectedGame.id, moveNumber)
+        if (!userPausedLiveAnalysisRef.current) {
+          void startLiveAnalysis()
+        }
+      }
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause)
+      setKataGoBenchmarkMessage(`KataGo 测速失败：${message}`)
     } finally {
       setBusy('')
     }
@@ -1001,9 +1041,12 @@ export function App(): ReactElement {
           katagoAssets={katagoAssets}
           busy={busy}
           llmTestMessage={llmTestMessage}
+          katagoBenchmark={katagoBenchmark}
+          katagoBenchmarkMessage={katagoBenchmarkMessage}
           onClose={() => setSettingsOpen(false)}
           onSave={(form) => void saveSettings(form)}
           onTest={(form) => void testLlmSettings(form)}
+          onBenchmark={() => void runKataGoBenchmark()}
           onRefreshKataGoAssets={() => void refreshKataGoAssets()}
         />
       </div>
@@ -1260,9 +1303,12 @@ function DesktopPreferencesModal({
   katagoAssets,
   busy,
   llmTestMessage,
+  katagoBenchmark,
+  katagoBenchmarkMessage,
   onClose,
   onSave,
   onTest,
+  onBenchmark,
   onRefreshKataGoAssets
 }: {
   open: boolean
@@ -1270,9 +1316,12 @@ function DesktopPreferencesModal({
   katagoAssets: KataGoAssetStatus | null
   busy: string
   llmTestMessage: string
+  katagoBenchmark: KataGoBenchmarkResult | null
+  katagoBenchmarkMessage: string
   onClose: () => void
   onSave: (form: HTMLFormElement) => void
   onTest: (form: HTMLFormElement) => void
+  onBenchmark: () => void
   onRefreshKataGoAssets: () => void
 }): ReactElement | null {
   if (!open) {
@@ -1293,8 +1342,11 @@ function DesktopPreferencesModal({
           katagoAssets={katagoAssets}
           busy={busy}
           llmTestMessage={llmTestMessage}
+          katagoBenchmark={katagoBenchmark}
+          katagoBenchmarkMessage={katagoBenchmarkMessage}
           onSave={onSave}
           onTest={onTest}
+          onBenchmark={onBenchmark}
           onRefreshKataGoAssets={onRefreshKataGoAssets}
         />
       </section>
@@ -1420,16 +1472,22 @@ function SettingsDrawer({
   katagoAssets,
   busy,
   llmTestMessage,
+  katagoBenchmark,
+  katagoBenchmarkMessage,
   onSave,
   onTest,
+  onBenchmark,
   onRefreshKataGoAssets
 }: {
   dashboard: DashboardData
   katagoAssets: KataGoAssetStatus | null
   busy: string
   llmTestMessage: string
+  katagoBenchmark: KataGoBenchmarkResult | null
+  katagoBenchmarkMessage: string
   onSave: (form: HTMLFormElement) => void
   onTest: (form: HTMLFormElement) => void
+  onBenchmark: () => void
   onRefreshKataGoAssets: () => void
 }): ReactElement {
   const [releaseReadiness, setReleaseReadiness] = useState<ReleaseReadinessResult | null>(null)
@@ -1511,6 +1569,13 @@ function SettingsDrawer({
         <small>{dashboard.systemProfile.katagoStatus}</small>
       </label>
       <KataGoAssetsPanel status={katagoAssets} onRefresh={onRefreshKataGoAssets} />
+      <KataGoBenchmarkPanel
+        settings={dashboard.settings}
+        result={katagoBenchmark}
+        message={katagoBenchmarkMessage}
+        busy={busy === 'katago-benchmark'}
+        onRun={onBenchmark}
+      />
       <BetaAcceptancePanel
         items={betaItems}
         flags={releaseReadiness?.flags}
@@ -1556,6 +1621,53 @@ function SettingsDrawer({
       </div>
       {llmTestMessage ? <div className="test-message">{llmTestMessage}</div> : null}
     </form>
+  )
+}
+
+function KataGoBenchmarkPanel({
+  settings,
+  result,
+  message,
+  busy,
+  onRun
+}: {
+  settings: DashboardData['settings']
+  result: KataGoBenchmarkResult | null
+  message: string
+  busy: boolean
+  onRun: () => void
+}): ReactElement {
+  const bestThreads = result?.recommendedThreads || settings.katagoBenchmarkThreads
+  const bestSpeed = result?.visitsPerSecond || settings.katagoBenchmarkVisitsPerSecond
+  const tunedAt = result?.updatedAt || settings.katagoBenchmarkUpdatedAt
+  return (
+    <section className="runtime-card katago-benchmark-card">
+      <header>
+        <strong>KataGo 一键测速</strong>
+        <span className={bestThreads ? 'runtime-pill runtime-pill--ready' : 'runtime-pill runtime-pill--warn'}>
+          {bestThreads ? `${bestThreads} threads` : '未测速'}
+        </span>
+      </header>
+      <p>使用 KataGo 官方 benchmark 命令测试本机搜索线程，自动写入分析配置。</p>
+      <div className="runtime-list">
+        <div><span>推荐线程</span><strong>{bestThreads || '待测速'}</strong></div>
+        <div><span>测速速度</span><strong>{bestSpeed ? formatSearchSpeed(bestSpeed) : '待测速'}</strong></div>
+        <div><span>分析配置</span><strong>{settings.katagoAnalysisThreads || 'auto'} × {settings.katagoSearchThreadsPerAnalysisThread || 1}</strong></div>
+        <div><span>批量</span><strong>{settings.katagoMaxBatchSize || 32}</strong></div>
+        {tunedAt ? <div><span>更新时间</span><strong>{new Date(tunedAt).toLocaleString()}</strong></div> : null}
+      </div>
+      <button className="primary-button" type="button" onClick={onRun} disabled={busy}>
+        {busy ? '测速中' : '一键测速并优化'}
+      </button>
+      {message ? <p className="test-message">{message}</p> : null}
+      {result?.tested.length ? (
+        <div className="benchmark-results">
+          {result.tested.map((item) => (
+            <span key={item.threads}>{item.threads}T · {formatSearchSpeed(item.visitsPerSecond)}</span>
+          ))}
+        </div>
+      ) : null}
+    </section>
   )
 }
 

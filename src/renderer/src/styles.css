@@ -1749,6 +1749,27 @@ label,
   font-size: 12px;
 }
 
+.katago-benchmark-card .primary-button {
+  justify-self: start;
+  min-height: 30px;
+}
+
+.benchmark-results {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.benchmark-results span {
+  padding: 3px 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.035);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 850;
+}
+
 .runtime-pill {
   flex: 0 0 auto;
   padding: 2px 8px;

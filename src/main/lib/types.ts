@@ -5,6 +5,13 @@ export interface AppSettings {
   katagoConfig: string
   katagoModel: string
   katagoModelPreset: KataGoModelPresetId
+  katagoAnalysisThreads: number
+  katagoSearchThreadsPerAnalysisThread: number
+  katagoMaxBatchSize: number
+  katagoCacheSizePowerOfTwo: number
+  katagoBenchmarkThreads: number
+  katagoBenchmarkVisitsPerSecond: number
+  katagoBenchmarkUpdatedAt: string
   pythonBin: string
   llmBaseUrl: string
   llmApiKey: string
@@ -122,6 +129,31 @@ export interface KataGoAssetStatus {
   modelDisplayName: string
   ready: boolean
   detail: string
+}
+
+export interface KataGoBenchmarkRequest {
+  visits?: number
+  numPositions?: number
+  secondsPerMove?: number
+  threads?: number[]
+}
+
+export interface KataGoBenchmarkThreadResult {
+  threads: number
+  visitsPerSecond: number
+}
+
+export interface KataGoBenchmarkResult {
+  recommendedThreads: number
+  visitsPerSecond: number
+  tested: KataGoBenchmarkThreadResult[]
+  analysisThreads: number
+  searchThreadsPerAnalysisThread: number
+  maxBatchSize: number
+  cacheSizePowerOfTwo: number
+  command: string
+  outputTail: string
+  updatedAt: string
 }
 
 export type ReleaseReadinessStatus = 'pass' | 'warn' | 'fail' | 'unknown'

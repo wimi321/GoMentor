@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell, type MenuItemConstructorOptions } from 'electron'
 import { isAbsolute, relative, resolve, join } from 'node:path'
 import { appHome, findGame, getGames, getSettings, hasLlmApiKey, replaceSettings, setSettings, upsertGames } from './lib/store'
-import type { AnalyzeGameQuickRequest, AnalyzePositionRequest, AppSettings, DashboardData, FoxSyncRequest, LlmSettingsTestRequest, ReviewRequest, TeacherRunRequest } from './lib/types'
+import type { AnalyzeGameQuickRequest, AnalyzePositionRequest, AppSettings, DashboardData, FoxSyncRequest, KataGoBenchmarkRequest, LlmSettingsTestRequest, ReviewRequest, TeacherRunRequest } from './lib/types'
 import { importSgfFile, readGameRecord } from './services/sgf'
 import { syncFoxGames } from './services/fox'
 import { runReview } from './services/review'
@@ -9,6 +9,7 @@ import { applyDetectedDefaults, detectSystemProfile } from './services/systemPro
 import { runTeacherTask } from './services/teacherAgent'
 import { testLlmSettings } from './services/llm'
 import { analyzeGameQuick, analyzePosition } from './services/katago'
+import { benchmarkKataGo } from './services/katagoBenchmark'
 import { collectDiagnostics } from './services/diagnostics'
 import { searchKnowledgeCards } from './services/knowledge/searchLocal'
 import { inspectKataGoAssets } from './services/katago/katagoAssets'
@@ -253,6 +254,7 @@ app.whenReady().then(() => {
       })
     })
   )
+  ipcMain.handle('katago:benchmark', async (_event, payload: KataGoBenchmarkRequest | undefined) => benchmarkKataGo(payload ?? {}))
   ipcMain.handle('teacher:run', async (_event, payload: TeacherRunRequest) => runTeacherTask(payload))
   ipcMain.handle('llm:test', async (_event, payload: LlmSettingsTestRequest) => testLlmSettings(payload))
   ipcMain.handle('release:readiness', async () => inspectReleaseReadiness())

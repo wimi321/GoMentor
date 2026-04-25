@@ -9,6 +9,8 @@ import type {
   FoxSyncRequest,
   GameRecord,
   KataGoAssetStatus,
+  KataGoBenchmarkRequest,
+  KataGoBenchmarkResult,
   LibraryImportResult,
   LlmSettingsTestRequest,
   LlmSettingsTestResult,
@@ -44,6 +46,7 @@ const api = {
   startReview: (payload: ReviewRequest): Promise<ReviewResult> => ipcRenderer.invoke('review:start', payload),
   analyzePosition: (payload: AnalyzePositionRequest): Promise<KataGoMoveAnalysis> => ipcRenderer.invoke('katago:analyze-position', payload),
   analyzeGameQuick: (payload: AnalyzeGameQuickRequest): Promise<KataGoMoveAnalysis[]> => ipcRenderer.invoke('katago:analyze-game-quick', payload),
+  benchmarkKataGo: (payload?: KataGoBenchmarkRequest): Promise<KataGoBenchmarkResult> => ipcRenderer.invoke('katago:benchmark', payload ?? {}),
   onAnalyzeGameQuickProgress: (handler: (payload: AnalyzeGameQuickProgress) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: AnalyzeGameQuickProgress): void => handler(payload)
     ipcRenderer.on('katago:analyze-game-quick-progress', listener)

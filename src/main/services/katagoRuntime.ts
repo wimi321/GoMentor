@@ -137,13 +137,27 @@ function modelCandidates(preset: KataGoModelPreset, settings?: AppSettings): str
   return [...selectedPresetFiles, ...matchingPresetFiles, ...compatibilityFiles]
 }
 
-function ensureAnalysisConfig(): string {
+function saneInteger(value: number | undefined, fallback: number, min: number, max: number): number {
+  if (!Number.isFinite(value) || !value) {
+    return fallback
+  }
+  return Math.max(min, Math.min(max, Math.round(value)))
+}
+
+function defaultAnalysisThreads(): number {
+  return Math.max(1, Math.min(4, os.cpus().length - 2))
+}
+
+function ensureAnalysisConfig(settings?: AppSettings): string {
   const configDir = join(appHome, 'katago', 'configs')
   mkdirSync(configDir, { recursive: true })
   const logDir = join(appHome, 'katago', 'logs')
   mkdirSync(logDir, { recursive: true })
   const configPath = join(configDir, 'analysis_builtin.cfg')
-  const analysisThreads = Math.max(2, Math.min(4, os.cpus().length - 2))
+  const analysisThreads = saneInteger(settings?.katagoAnalysisThreads, defaultAnalysisThreads(), 1, 16)
+  const searchThreadsPerAnalysisThread = saneInteger(settings?.katagoSearchThreadsPerAnalysisThread, 1, 1, 16)
+  const maxBatchSize = saneInteger(settings?.katagoMaxBatchSize, 32, 1, 256)
+  const cacheSizePowerOfTwo = saneInteger(settings?.katagoCacheSizePowerOfTwo, 20, 16, 28)
   writeFileSync(
     configPath,
     [
@@ -153,9 +167,9 @@ function ensureAnalysisConfig(): string {
       'analysisPVLen = 12',
       'reportAnalysisWinratesAs = BLACK',
       `numAnalysisThreads = ${analysisThreads}`,
-      'numSearchThreadsPerAnalysisThread = 1',
-      'nnMaxBatchSize = 32',
-      'nnCacheSizePowerOfTwo = 20',
+      `numSearchThreadsPerAnalysisThread = ${searchThreadsPerAnalysisThread}`,
+      `nnMaxBatchSize = ${maxBatchSize}`,
+      `nnCacheSizePowerOfTwo = ${cacheSizePowerOfTwo}`,
       ''
     ].join('\n'),
     'utf8'
@@ -166,7 +180,7 @@ function ensureAnalysisConfig(): string {
 export function resolveKataGoRuntime(settings?: AppSettings): KataGoRuntime {
   const modelPreset = getKataGoModelPreset(settings?.katagoModelPreset)
   const katagoBin = firstExisting([...binaryCandidates(), settings?.katagoBin ?? ''])
-  const katagoConfig = ensureAnalysisConfig()
+  const katagoConfig = ensureAnalysisConfig(settings)
   const katagoModel = firstExisting(modelCandidates(modelPreset, settings))
   const notes: string[] = []
 

@@ -8,6 +8,8 @@ import type {
   FoxSyncRequest,
   GameRecord,
   KataGoAssetStatus,
+  KataGoBenchmarkRequest,
+  KataGoBenchmarkResult,
   LibraryImportResult,
   LlmSettingsTestRequest,
   LlmSettingsTestResult,
@@ -45,6 +47,7 @@ declare global {
       startReview: (payload: ReviewRequest) => Promise<ReviewResult>
       analyzePosition: (payload: AnalyzePositionRequest) => Promise<KataGoMoveAnalysis>
       analyzeGameQuick: (payload: AnalyzeGameQuickRequest) => Promise<KataGoMoveAnalysis[]>
+      benchmarkKataGo: (payload?: KataGoBenchmarkRequest) => Promise<KataGoBenchmarkResult>
       onAnalyzeGameQuickProgress: (handler: (payload: AnalyzeGameQuickProgress) => void) => () => void
       getDiagnostics: () => Promise<DiagnosticsReport>
       inspectKataGoAssets: () => Promise<KataGoAssetStatus>
