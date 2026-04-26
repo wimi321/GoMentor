@@ -30,7 +30,7 @@ function valueOf(record: unknown, key: string): unknown {
 function extractLoss(item: unknown): number | undefined {
   const raw = valueOf(valueOf(item, 'playedMove'), 'winrateLoss') ?? valueOf(item, 'winrateLoss') ?? valueOf(item, 'loss') ?? valueOf(item, 'mistakeLoss')
   if (typeof raw === 'number' && Number.isFinite(raw)) {
-    return Math.abs(raw) <= 1 ? raw * 100 : raw
+    return Math.max(0, Math.abs(raw))
   }
   const before = normalizeWinrate(valueOf(valueOf(item, 'before'), 'winrate'))
   const after = normalizeWinrate(valueOf(valueOf(item, 'after'), 'winrate'))

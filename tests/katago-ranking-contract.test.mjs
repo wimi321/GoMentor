@@ -40,3 +40,15 @@ test('Board overlays display candidate values from the side-to-move perspective'
   assert.match(board, /candidate\.winrateValue/)
   assert.match(board, /candidate\.scoreValue/)
 })
+
+test('Timeline and issue list treat KataGo winrate loss as percentage points', () => {
+  const app = read('src/renderer/src/App.tsx')
+  assert.match(app, /function normalizeLossPercent/)
+  assert.match(app, /return Math\.max\(0, Math\.abs\(value\)\)/)
+  assert.doesNotMatch(app, /Math\.abs\(value\) <= 1 \? Math\.abs\(value\) \* 100/)
+
+  const timeline = read('src/renderer/src/features/board/WinrateTimelineV2.tsx')
+  assert.match(timeline, /playedMove'\), 'winrateLoss'/)
+  assert.match(timeline, /return Math\.max\(0, Math\.abs\(raw\)\)/)
+  assert.doesNotMatch(timeline, /Math\.abs\(raw\) <= 1 \? raw \* 100 : raw/)
+})

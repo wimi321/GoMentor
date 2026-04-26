@@ -182,7 +182,7 @@ function normalizeLossPercent(value: number | undefined): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return 0
   }
-  return Math.max(0, Math.abs(value) <= 1 ? Math.abs(value) * 100 : Math.abs(value))
+  return Math.max(0, Math.abs(value))
 }
 
 function sleep(ms: number): Promise<void> {
