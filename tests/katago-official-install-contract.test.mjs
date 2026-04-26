@@ -52,9 +52,9 @@ test('official KataGo model installer is wired through main preload and settings
   assert.match(app, /官网推荐 zhizi 模型/)
 
   const panel = read('src/renderer/src/features/settings/KataGoAssetsPanel.tsx')
-  assert.match(panel, /一键安装官方权重/)
+  assert.match(panel, /应用选择的权重/)
   assert.match(panel, /katago-install-progress/)
   assert.match(panel, /selectedPreset/)
-  assert.match(panel, /KataGo 官方直链/)
+  assert.match(panel, /katago-resource-summary/)
   assert.match(panel, /speedTierLabel/)
 })

@@ -63,42 +63,37 @@ export function KataGoAssetsPanel({
   const bytesLabel = installProgress?.receivedBytes
     ? `${formatBytes(installProgress.receivedBytes)}${installProgress.totalBytes ? ` / ${formatBytes(installProgress.totalBytes)}` : ''}`
     : ''
+  const modelReady = Boolean(status?.modelFound)
+  const binaryReady = Boolean(status?.binaryFound && status.binaryExecutable)
+  const statusLabel = status?.ready ? '已就绪' : modelReady ? '权重已安装' : '待应用'
   return (
     <section className="runtime-card katago-assets-card">
       <header>
         <div>
-          <strong>KataGo 官方资源</strong>
-          <p>{selectedPreset ? `${selectedPreset.label} · ${selectedPreset.badge}` : '选择官方推荐权重后可一键安装。'}</p>
+          <strong>权重安装</strong>
+          <p>{selectedPreset ? `${selectedPreset.blockSize} · ${speedTierLabel(selectedPreset.speedTier)} · ${selectedPreset.badge}` : '选择权重后应用。'}</p>
         </div>
-        <span className={status?.ready ? 'runtime-pill runtime-pill--ready' : 'runtime-pill runtime-pill--warn'}>{status?.ready ? 'Ready' : 'Missing'}</span>
+        <span className={status?.ready ? 'runtime-pill runtime-pill--ready' : 'runtime-pill runtime-pill--warn'}>{statusLabel}</span>
       </header>
       {selectedPreset ? (
         <div className="katago-preset-card">
           <div>
-            <span>分组</span>
+            <span>当前选择</span>
             <strong>{selectedPreset.group}</strong>
           </div>
           <div>
-            <span>规格</span>
+            <span>推荐场景</span>
             <strong>{selectedPreset.blockSize} · {speedTierLabel(selectedPreset.speedTier)}</strong>
-          </div>
-          <div>
-            <span>网络</span>
-            <strong title={selectedPreset.networkName}>{selectedPreset.networkName}</strong>
-          </div>
-          <div>
-            <span>来源</span>
-            <strong>{selectedPreset.downloadUrl ? 'KataGo 官方直链' : 'KataGo 官方索引'}</strong>
           </div>
         </div>
       ) : null}
       {status ? (
-        <div className="runtime-list">
-          <div><span>平台</span><strong>{status.platformKey}</strong></div>
-          <div><span>Manifest</span><strong>{status.manifestFound ? '已找到' : '缺失'}</strong></div>
-          <div><span>引擎</span><strong>{status.binaryFound ? (status.binaryExecutable ? '可执行' : '不可执行') : '缺失'}</strong></div>
-          <div><span>模型</span><strong>{status.modelFound ? status.modelDisplayName : '缺失'}</strong></div>
-          <p>{status.detail}</p>
+        <div className="katago-resource-summary">
+          <span className={modelReady ? 'runtime-dot runtime-dot--ready' : 'runtime-dot runtime-dot--warn'} />
+          <p>
+            {modelReady ? `当前模型：${status.modelDisplayName}` : '当前选择的权重尚未安装。'}
+            {!binaryReady ? ' KataGo 引擎还需要准备。' : ''}
+          </p>
         </div>
       ) : <p>尚未读取资源状态。</p>}
       {installProgress ? (
@@ -116,7 +111,7 @@ export function KataGoAssetsPanel({
       {installMessage && !installProgress ? <p className="test-message">{installMessage}</p> : null}
       <div className="katago-assets-card__actions">
         <button className="primary-button" type="button" onClick={onInstall} disabled={!onInstall || busy}>
-          {busy ? '安装中' : '一键安装官方权重'}
+          {busy ? '应用中' : '应用选择的权重'}
         </button>
         <button className="ghost-button" type="button" onClick={onRefresh}>重新检查</button>
       </div>

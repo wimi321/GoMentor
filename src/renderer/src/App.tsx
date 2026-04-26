@@ -2059,7 +2059,6 @@ function SettingsDrawer({
           ))}
         </select>
         {selectedPreset ? <small>{selectedPreset.description}</small> : null}
-        <small>{dashboard.systemProfile.katagoStatus}</small>
       </label>
       <KataGoAssetsPanel
         status={katagoAssets}

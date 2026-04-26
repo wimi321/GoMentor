@@ -2090,8 +2090,8 @@ label,
 .katago-preset-card {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 7px;
-  padding: 9px;
+  gap: 8px;
+  padding: 8px 9px;
   border: 1px solid color-mix(in srgb, var(--accent-gold) 26%, var(--line-soft));
   border-radius: 9px;
   background:
@@ -2118,6 +2118,39 @@ label,
   white-space: nowrap;
   font-size: 11px;
   font-weight: 820;
+}
+
+.katago-resource-summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 26px;
+  padding: 6px 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 0.025);
+}
+
+.katago-resource-summary p {
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.runtime-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--accent-gold);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-gold) 18%, transparent);
+}
+
+.runtime-dot--ready {
+  background: var(--accent-green);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-green) 18%, transparent);
 }
 
 .katago-assets-card__actions {
