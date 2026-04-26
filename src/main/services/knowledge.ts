@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { CoachUserLevel, GameMove, KnowledgePacket } from '@main/lib/types'
+import type { CoachUserLevel, GameMove, KnowledgeMatch, KnowledgePacket } from '@main/lib/types'
 import {
   formatPatternForPrompt,
   loadKnowledgePatternCards,
@@ -9,6 +9,7 @@ import {
   type PatternRegion,
   type PatternSearchMatch
 } from './knowledge/patterns'
+import { formatKnowledgeMatchForPrompt, searchKnowledgeMatchEngine, type BoardSnapshotStone, type LocalWindow } from './knowledge/matchEngine'
 
 interface KnowledgeEntry {
   id: string
@@ -43,6 +44,10 @@ export interface KnowledgeQuery {
   boardSize: number
   recentMoves: GameMove[]
   userLevel: CoachUserLevel
+  studentLevel?: CoachUserLevel
+  playerColor?: 'B' | 'W'
+  boardSnapshot?: BoardSnapshotStone[]
+  localWindows?: LocalWindow[]
   lossScore?: number
   judgement?: string
   contextTags?: string[]
@@ -209,6 +214,10 @@ export function searchKnowledge(query: KnowledgeQuery): KnowledgePacket[] {
     lossScore: query.lossScore,
     judgement: query.judgement
   })
+  const knowledgeMatches = searchKnowledgeMatches({
+    ...query,
+    maxResults: 6
+  })
 
   for (const entry of entries) {
     if (!entry.content || !entry.levels.includes(query.userLevel)) {
@@ -317,8 +326,24 @@ export function searchKnowledge(query: KnowledgeQuery): KnowledgePacket[] {
     selectedBody: formatPatternForPrompt(match),
     score: match.score
   }))
+  const matchPackets = knowledgeMatches
+    .filter((match) => match.confidence !== 'weak')
+    .map((match) => ({
+      id: match.id,
+      title: match.title,
+      category: match.matchType,
+      phase: phase,
+      tags: [...new Set([match.matchType, match.confidence, ...match.teachingPayload.keyVariations.slice(0, 2)])],
+      summary: match.teachingPayload.recognition,
+      selectedBody: formatKnowledgeMatchForPrompt(match),
+      score: match.score + 5
+    }))
 
-  return [...markdownPackets, ...p0Packets, ...patternPackets]
+  return [...markdownPackets, ...p0Packets, ...patternPackets, ...matchPackets]
     .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title))
     .slice(0, query.maxResults ?? 4)
+}
+
+export function searchKnowledgeMatches(query: KnowledgeQuery): KnowledgeMatch[] {
+  return searchKnowledgeMatchEngine(dataRoot(), query)
 }

@@ -88,5 +88,14 @@
     "status": "source-risk-reference",
     "why": "The discussion highlights that Internet availability and archive copies do not imply Creative Commons rights. GoMentor uses this as a policy reminder to avoid importing classic book scans or problem collections without explicit permission.",
     "usedFor": ["copyright review policy"]
+  },
+  {
+    "id": "gomentor_original_training_catalog",
+    "name": "GoMentor original common-pattern training catalog",
+    "url": "local:data/knowledge/training-catalog.json",
+    "license": "MIT project content",
+    "status": "original-common-pattern",
+    "why": "The catalog contains original teaching reconstructions of common joseki, life-and-death, and tesuji patterns. It deliberately avoids copying book diagrams, problem ordering, SGF comments, or website explanations.",
+    "usedFor": ["joseki matching", "life-death training recommendations", "tesuji training recommendations", "teacher explanation payloads"]
   }
 ]

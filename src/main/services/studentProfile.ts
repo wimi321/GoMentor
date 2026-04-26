@@ -77,6 +77,9 @@ function hydrateProfile(raw: unknown, fallbackName = '默认学生'): StudentPro
     recentGameIds: data.recentGameIds ?? [],
     commonMistakes: data.commonMistakes ?? statsToMistakeArray(weaknessStats),
     trainingThemes: data.trainingThemes ?? data.trainingFocus ?? [],
+    josekiWeaknesses: data.josekiWeaknesses ?? [],
+    lifeDeathWeaknesses: data.lifeDeathWeaknesses ?? [],
+    tesujiWeaknesses: data.tesujiWeaknesses ?? [],
     typicalMoves: data.typicalMoves ?? [],
     updatedAt: data.updatedAt ?? createdAt,
     createdAt,
@@ -162,6 +165,9 @@ export function resolveStudentByName(displayName: string, createdFrom: StudentPr
     recentGameIds: [],
     commonMistakes: [],
     trainingThemes: [],
+    josekiWeaknesses: [],
+    lifeDeathWeaknesses: [],
+    tesujiWeaknesses: [],
     typicalMoves: [],
     createdAt: timestamp,
     updatedAt: timestamp
@@ -240,6 +246,9 @@ export function updateStudentProfile(
     typicalMoves?: StudentProfile['typicalMoves']
     recentPatterns?: string[]
     trainingFocus?: string[]
+    josekiWeaknesses?: string[]
+    lifeDeathWeaknesses?: string[]
+    tesujiWeaknesses?: string[]
     gameId?: string
   }
 ): StudentProfile {
@@ -255,6 +264,9 @@ export function updateStudentProfile(
     ...profile.trainingFocus
   ])).slice(0, 12)
   const recentPatterns = Array.from(new Set([...(update.recentPatterns ?? []), ...profile.recentPatterns])).slice(0, 20)
+  const josekiWeaknesses = Array.from(new Set([...(update.josekiWeaknesses ?? []), ...(profile.josekiWeaknesses ?? [])])).slice(0, 12)
+  const lifeDeathWeaknesses = Array.from(new Set([...(update.lifeDeathWeaknesses ?? []), ...(profile.lifeDeathWeaknesses ?? [])])).slice(0, 12)
+  const tesujiWeaknesses = Array.from(new Set([...(update.tesujiWeaknesses ?? []), ...(profile.tesujiWeaknesses ?? [])])).slice(0, 12)
   const typicalMoves = [...(update.typicalMoves ?? []), ...profile.typicalMoves]
     .sort((a, b) => b.lossWinrate - a.lossWinrate)
     .slice(0, 12)
@@ -269,6 +281,9 @@ export function updateStudentProfile(
     weaknessStats,
     recentPatterns,
     trainingFocus,
+    josekiWeaknesses,
+    lifeDeathWeaknesses,
+    tesujiWeaknesses,
     recentGameIds,
     typicalMoves,
     lastAnalyzedAt: nowIso()
@@ -326,6 +341,9 @@ export function formatStudentProfileForPrompt(student: StudentProfile | null): s
     `别名: ${student.aliases.join(', ') || '无'}`,
     `复盘局数: ${student.gamesReviewed}`,
     `常见问题: ${weakness}`,
+    `定式弱点: ${(student.josekiWeaknesses ?? []).join('；') || '暂无'}`,
+    `死活弱点: ${(student.lifeDeathWeaknesses ?? []).join('；') || '暂无'}`,
+    `手筋弱点: ${(student.tesujiWeaknesses ?? []).join('；') || '暂无'}`,
     `近期模式: ${student.recentPatterns.join('；') || '暂无'}`,
     `训练重点: ${student.trainingFocus.join('；') || '暂无'}`
   ].join('\n')

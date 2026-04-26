@@ -191,6 +191,9 @@ export const galleryStudent: StudentProfile = {
   recentGameIds: ['g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8'],
   commonMistakes: [{ tag: '大场判断', count: 7 }],
   trainingThemes: ['全局方向', '攻防次序'],
+  josekiWeaknesses: ['星位点三三：脱先时机'],
+  lifeDeathWeaknesses: ['真眼假眼：急所第一感'],
+  tesujiWeaknesses: ['倒扑：基础型'],
   typicalMoves: [],
   updatedAt: now,
   createdAt: now,
@@ -235,6 +238,41 @@ export const galleryTeacherResult: TeacherRunResult = {
   toolLogs,
   analysis: galleryAnalysis,
   knowledge: [],
+  knowledgeMatches: [
+    {
+      id: 'joseki_star_33_tenuki_timing',
+      matchType: 'joseki',
+      title: '星位点三三：脱先时机',
+      confidence: 'strong',
+      score: 28,
+      reason: ['region:corner', 'shape:3-3', 'katago-candidate-prefix'],
+      applicability: '本局棋形和 KataGo 候选点相近，可以作为强相关型讲解，但仍要看全局厚薄。',
+      teachingPayload: {
+        summary: 'AI 时代定式不是固定答案，要用候选点、目差和全局配合选择分支。',
+        recognition: '看到星位角被点三三，第一反应是判断外势朝哪边。',
+        correctIdea: '局部基本安定后，要敢于转向全局最大点。',
+        keyVariations: ['脱先时机: 局部没有被强攻风险时转身', '取势分支: 外侧有配合时取外势'],
+        memoryCue: '定式先问方向，再问先手，最后才背手顺。',
+        commonMistakes: ['只背局部手顺，不看旁边厚薄。'],
+        drills: ['星位点三三专项：方向判断'],
+        boundary: 'partial 匹配只能说像这个型。',
+        sourceKind: 'common-pattern'
+      },
+      relatedProblems: []
+    }
+  ],
+  recommendedProblems: [
+    {
+      id: 'life_death_true_false_eye_vital_point',
+      title: '真眼假眼：急所第一感',
+      problemType: 'life_death',
+      difficulty: 'basic',
+      objective: '判断能否做出两个真眼',
+      firstHint: '第一感先找对方眼形的中心点。',
+      answerSummary: 'C3: 先占急所。',
+      tags: ['真眼', '假眼', '眼形']
+    }
+  ],
   studentProfile: galleryStudent,
   structured: {
     taskType: 'current-move',
@@ -267,6 +305,8 @@ export const galleryTeacherResult: TeacherRunResult = {
     followupQuestions: ['为什么 Q10 比补角大？', '这盘还有哪些类似方向问题？', '按我的画像安排一周训练。'],
     markdown: '',
     knowledgeCardIds: ['opening-big-point', 'weak-group-direction'],
+    knowledgeMatches: [],
+    recommendedProblems: [],
     profileUpdates: {
       errorTypes: ['大场判断', '先手意识'],
       patterns: ['优势时继续补小棋'],

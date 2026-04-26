@@ -99,6 +99,24 @@ function pickToolLogs(result: unknown): AnyRecord[] {
   return arrayValue(asRecord(result).toolLogs).map(asRecord)
 }
 
+function pickKnowledgeMatches(result: unknown, structured: AnyRecord): AnyRecord[] {
+  const record = asRecord(result)
+  const structuredMatches = arrayValue(structured.knowledgeMatches)
+  return (structuredMatches.length > 0 ? structuredMatches : arrayValue(record.knowledgeMatches))
+    .map(asRecord)
+    .filter((match) => stringValue(match.title))
+    .slice(0, 5)
+}
+
+function pickRecommendedProblems(result: unknown, structured: AnyRecord): AnyRecord[] {
+  const record = asRecord(result)
+  const structuredProblems = arrayValue(structured.recommendedProblems)
+  return (structuredProblems.length > 0 ? structuredProblems : arrayValue(record.recommendedProblems))
+    .map(asRecord)
+    .filter((problem) => stringValue(problem.title))
+    .slice(0, 3)
+}
+
 function moveTitle(move: AnyRecord, index: number): string {
   const moveNumber = move.moveNumber ?? move.move ?? move.n
   const title = stringValue(move.title ?? move.label ?? move.problem)
@@ -137,6 +155,8 @@ export function TeacherRunCardPro({
   const recommendations = pickRecommendations(structured)
   const followups = pickFollowups(structured)
   const errorTypes = pickErrorTypes(structured, keyMoves)
+  const knowledgeMatches = pickKnowledgeMatches(result, structured)
+  const recommendedProblems = pickRecommendedProblems(result, structured)
   const toolLogs = pickToolLogs(result)
   const error = stringValue(asRecord(result).error ?? structured.error)
   const detailSummary = stringValue(structured.summary)
@@ -184,6 +204,26 @@ export function TeacherRunCardPro({
         </details>
       ) : null}
 
+      {knowledgeMatches.length > 0 ? (
+        <details className="ks-teacher-pro-section ks-agent-item" open>
+          <summary><span>知识匹配</span><em>{knowledgeMatches.length}</em></summary>
+          <div className="ks-knowledge-match-list">
+            {knowledgeMatches.map((match, index) => (
+              <div key={`${index}-${stringValue(match.id) || stringValue(match.title)}`} className="ks-knowledge-match-card">
+                <div className="ks-knowledge-match-card__top">
+                  <strong>{stringValue(match.title)}</strong>
+                  <span>{stringValue(match.matchType) || 'pattern'} · {stringValue(match.confidence) || 'partial'}</span>
+                </div>
+                <p>{stringValue(match.applicability) || stringValue(asRecord(match.teachingPayload).recognition) || '老师会把这个棋形作为讲解参考，并说明本局适用边界。'}</p>
+                {arrayValue(match.reason).length > 0 ? (
+                  <small>{arrayValue(match.reason).map((item) => stringValue(item)).filter(Boolean).slice(0, 3).join(' / ')}</small>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
+
       {keyMoves.length > 0 ? (
         <details className="ks-teacher-pro-section ks-agent-item" open>
           <summary><span>关键问题手</span><em>{keyMoves.length}</em></summary>
@@ -211,6 +251,24 @@ export function TeacherRunCardPro({
           <ol className="ks-teacher-pro-training">
             {training.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}
           </ol>
+        </details>
+      ) : null}
+
+      {recommendedProblems.length > 0 ? (
+        <details className="ks-teacher-pro-section ks-agent-item">
+          <summary><span>关联训练题</span><em>{recommendedProblems.length}</em></summary>
+          <div className="ks-recommended-problem-list">
+            {recommendedProblems.map((problem, index) => (
+              <div key={`${index}-${stringValue(problem.id) || stringValue(problem.title)}`} className="ks-recommended-problem-card">
+                <div className="ks-recommended-problem-card__top">
+                  <strong>{stringValue(problem.title)}</strong>
+                  <span>{stringValue(problem.difficulty) || 'standard'}</span>
+                </div>
+                <p>{stringValue(problem.objective)}</p>
+                <small>第一提示：{stringValue(problem.firstHint) || '先找局部急所，再看失败第一手。'}</small>
+              </div>
+            ))}
+          </div>
         </details>
       ) : null}
 

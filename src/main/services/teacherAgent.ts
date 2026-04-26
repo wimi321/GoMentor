@@ -6,8 +6,10 @@ import type {
   CoachUserLevel,
   GameMove,
   KataGoMoveAnalysis,
+  KnowledgeMatch,
   KnowledgePacket,
   LibraryGame,
+  RecommendedProblem,
   ReviewArtifact,
   StructuredTeacherResult,
   StudentProfile,
@@ -17,7 +19,8 @@ import type {
   TeacherToolLog
 } from '@main/lib/types'
 import { analyzePosition } from './katago'
-import { searchKnowledge } from './knowledge'
+import { searchKnowledge, searchKnowledgeMatches } from './knowledge'
+import { recommendedProblemsFromMatches } from './knowledge/matchEngine'
 import { readGameRecord } from './sgf'
 import { callMultimodalTeacher, callTeacherText } from './llm'
 import { getStudentProfile, readStudentForGame, updateStudentProfile } from './studentProfile'
@@ -274,6 +277,26 @@ function themesFromProfile(profile: StudentProfile): string[] {
   })
 }
 
+function weaknessTagsFromMatches(matches: KnowledgeMatch[]): {
+  josekiWeaknesses: string[]
+  lifeDeathWeaknesses: string[]
+  tesujiWeaknesses: string[]
+} {
+  const strong = matches.filter((match) => match.confidence !== 'weak')
+  return {
+    josekiWeaknesses: strong.filter((match) => match.matchType === 'joseki').map((match) => match.title).slice(0, 6),
+    lifeDeathWeaknesses: strong.filter((match) => match.matchType === 'life_death').map((match) => match.title).slice(0, 6),
+    tesujiWeaknesses: strong.filter((match) => match.matchType === 'tesuji').map((match) => match.title).slice(0, 6)
+  }
+}
+
+function knowledgeFocusFromMatches(matches: KnowledgeMatch[], problems: RecommendedProblem[]): string[] {
+  return Array.from(new Set([
+    ...matches.filter((match) => match.confidence !== 'weak').slice(0, 4).map((match) => match.title),
+    ...problems.slice(0, 3).map((problem) => problem.title)
+  ])).slice(0, 6)
+}
+
 function systemPrompt(level: CoachUserLevel): string {
   const levelLine: Record<CoachUserLevel, string> = {
     beginner: '学生是入门水平，请少用术语，句子短，先讲方向再讲变化。',
@@ -309,7 +332,9 @@ function currentMovePayload(
   request: TeacherRunRequest,
   analysis: KataGoMoveAnalysis,
   knowledge: KnowledgePacket[],
-  profile: StudentProfile
+  profile: StudentProfile,
+  knowledgeMatches: KnowledgeMatch[] = [],
+  recommendedProblems: RecommendedProblem[] = []
 ): string {
   return JSON.stringify({
     task: 'analyze_current_move',
@@ -325,13 +350,17 @@ function currentMovePayload(
     katagoFacts: analysis,
     studentProfile: profile,
     knowledgePacket: knowledge,
+    knowledgeMatches,
+    recommendedProblems,
     responseStyle: {
       format: 'natural_chat',
       guidance: [
         '直接给学生讲，不要先输出 JSON。',
         '当前手只保留最有教育价值的一两个变化。',
         '如果引用 KataGo，只引用胜率/目差/候选点作为证据，不要堆表格。',
-        '如果 knowledgePacket 里有 joseki、life_death、tesuji 或 shape pattern，优先讲它的识别特征、常见变化、记忆法和本局适用边界。'
+        '如果 knowledgeMatches 里有 exact/strong 的 joseki、life_death、tesuji 或 shape，优先讲它的识别特征、常见变化、记忆法和本局适用边界。',
+        'partial 匹配只能说“像某某型”，weak 匹配不要进入主讲，只能作为备用训练题。',
+        '推荐训练题时只给 2-3 道，先讲题型目标和第一提示，不要变成完整刷题系统。'
       ]
     }
   }, null, 2)
@@ -423,7 +452,9 @@ function structuredCurrentMoveResult(
   title: string,
   markdown: string,
   analysis: KataGoMoveAnalysis,
-  knowledge: KnowledgePacket[]
+  knowledge: KnowledgePacket[],
+  knowledgeMatches: KnowledgeMatch[] = [],
+  recommendedProblems: RecommendedProblem[] = []
 ): StructuredTeacherResult {
   const best = analysis.before.topMoves[0]
   const mistake = analysis.playedMove && analysis.playedMove.winrateLoss > 0.5
@@ -449,17 +480,22 @@ function structuredCurrentMoveResult(
       best ? `先比较 1 选 ${formatCandidateForPrompt(best, analysis.currentMove?.color)}。` : '先确认当前局面的最大价值点。',
       analysis.before.topMoves[1] ? `再看 2 选 ${formatCandidateForPrompt(analysis.before.topMoves[1], analysis.currentMove?.color)}，理解不同方案的代价。` : '把实战手和候选点放在同一张棋盘上比较。'
     ],
-    drills: knowledge.slice(0, 3).map((card) => `${card.title}: ${card.summary}`),
+    drills: [
+      ...recommendedProblems.slice(0, 3).map((problem) => `${problem.title}: ${problem.objective}。提示：${problem.firstHint}`),
+      ...knowledge.slice(0, 2).map((card) => `${card.title}: ${card.summary}`)
+    ].slice(0, 5),
     followupQuestions: [
       '把这手的前两选变化拆开讲',
       '这类问题下次怎么提前发现'
     ],
     markdown,
     knowledgeCardIds: knowledge.map((card) => card.id),
+    knowledgeMatches,
+    recommendedProblems,
     profileUpdates: {
       errorTypes: mistake.map((item) => item.errorType),
-      patterns: mistake.map((item) => item.explanation),
-      trainingFocus: knowledge.slice(0, 3).map((card) => card.title)
+      patterns: [...mistake.map((item) => item.explanation), ...knowledgeMatches.slice(0, 3).map((match) => match.title)],
+      trainingFocus: [...knowledgeFocusFromMatches(knowledgeMatches, recommendedProblems), ...knowledge.slice(0, 2).map((card) => card.title)].slice(0, 6)
     }
   }
 }
@@ -470,7 +506,9 @@ function structuredIssueResult(
   markdown: string,
   issues: BatchIssue[],
   knowledge: KnowledgePacket[],
-  profile: StudentProfile
+  profile: StudentProfile,
+  knowledgeMatches: KnowledgeMatch[] = [],
+  recommendedProblems: RecommendedProblem[] = []
 ): StructuredTeacherResult {
   const keyMistakes = issues
     .filter((issue) => issue.loss > 0)
@@ -491,17 +529,22 @@ function structuredIssueResult(
     summary: firstMarkdownLine(markdown, keyMistakes.length ? `共定位 ${keyMistakes.length} 个重点问题手。` : '本次没有稳定的大损问题。'),
     keyMistakes,
     correctThinking: profileThemes.slice(0, 4),
-    drills: knowledge.slice(0, 4).map((card) => `${card.title}: ${card.summary}`),
+    drills: [
+      ...recommendedProblems.slice(0, 3).map((problem) => `${problem.title}: ${problem.objective}。提示：${problem.firstHint}`),
+      ...knowledge.slice(0, 3).map((card) => `${card.title}: ${card.summary}`)
+    ].slice(0, 5),
     followupQuestions: [
       '按损失最大的一手展开变化',
       '把这些问题整理成一周训练表'
     ],
     markdown,
     knowledgeCardIds: knowledge.map((card) => card.id),
+    knowledgeMatches,
+    recommendedProblems,
     profileUpdates: {
       errorTypes: keyMistakes.map((item) => item.errorType),
-      patterns: keyMistakes.map((item) => item.explanation),
-      trainingFocus: [...profileThemes, ...knowledge.slice(0, 2).map((card) => card.title)].slice(0, 6)
+      patterns: [...keyMistakes.map((item) => item.explanation), ...knowledgeMatches.slice(0, 4).map((match) => match.title)],
+      trainingFocus: [...profileThemes, ...knowledgeFocusFromMatches(knowledgeMatches, recommendedProblems), ...knowledge.slice(0, 2).map((card) => card.title)].slice(0, 6)
     }
   }
 }
@@ -510,7 +553,9 @@ function structuredFreeformResult(
   title: string,
   markdown: string,
   knowledge: KnowledgePacket[],
-  profile: StudentProfile
+  profile: StudentProfile,
+  knowledgeMatches: KnowledgeMatch[] = [],
+  recommendedProblems: RecommendedProblem[] = []
 ): StructuredTeacherResult {
   return {
     taskType: 'freeform',
@@ -525,10 +570,12 @@ function structuredFreeformResult(
     ],
     markdown,
     knowledgeCardIds: knowledge.map((card) => card.id),
+    knowledgeMatches,
+    recommendedProblems,
     profileUpdates: {
       errorTypes: [],
-      patterns: [],
-      trainingFocus: knowledge.slice(0, 3).map((card) => card.title)
+      patterns: knowledgeMatches.slice(0, 4).map((match) => match.title),
+      trainingFocus: [...knowledgeFocusFromMatches(knowledgeMatches, recommendedProblems), ...knowledge.slice(0, 3).map((card) => card.title)].slice(0, 6)
     }
   }
 }
@@ -537,7 +584,9 @@ function structuredFromTeacherText(
   markdown: string,
   taskType: StructuredTeacherResult['taskType'],
   knowledge: KnowledgePacket[],
-  fallback: () => StructuredTeacherResult
+  fallback: () => StructuredTeacherResult,
+  knowledgeMatches: KnowledgeMatch[] = [],
+  recommendedProblems: RecommendedProblem[] = []
 ): StructuredTeacherResult {
   const parsed = parseStructuredTeacherResult({
     text: markdown,
@@ -550,14 +599,28 @@ function structuredFromTeacherText(
     parsed.drills.length > 0 ||
     parsed.profileUpdates.errorTypes.length > 0
   if (looksStructured) {
-    return parsed
+    return {
+      ...parsed,
+      knowledgeMatches: parsed.knowledgeMatches?.length ? parsed.knowledgeMatches : knowledgeMatches,
+      recommendedProblems: parsed.recommendedProblems?.length ? parsed.recommendedProblems : recommendedProblems,
+      drills: parsed.drills.length > 0
+        ? parsed.drills
+        : recommendedProblems.slice(0, 3).map((problem) => `${problem.title}: ${problem.objective}。提示：${problem.firstHint}`),
+      profileUpdates: {
+        ...parsed.profileUpdates,
+        patterns: Array.from(new Set([...parsed.profileUpdates.patterns, ...knowledgeMatches.slice(0, 4).map((match) => match.title)])),
+        trainingFocus: Array.from(new Set([...parsed.profileUpdates.trainingFocus, ...knowledgeFocusFromMatches(knowledgeMatches, recommendedProblems)])).slice(0, 6)
+      }
+    }
   }
   const generated = fallback()
   return {
     ...generated,
     headline: firstMarkdownLine(markdown, generated.headline),
     summary: parsed.summary || generated.summary,
-    markdown: markdown || generated.markdown
+    markdown: markdown || generated.markdown,
+    knowledgeMatches: generated.knowledgeMatches?.length ? generated.knowledgeMatches : knowledgeMatches,
+    recommendedProblems: generated.recommendedProblems?.length ? generated.recommendedProblems : recommendedProblems
   }
 }
 
@@ -588,14 +651,16 @@ async function runCurrentMove(request: TeacherRunRequest, logs: TeacherToolLog[]
   )
   emitToolState(context, logs, 'KataGo 证据已就绪，开始找教学概念。')
 
-  const knowledgeLog = startTool(logs, 'knowledge.searchLocal', '本地知识库', '按阶段、区域、学生水平和 KataGo 损失检索 YiGo 知识库。')
-  const knowledge = searchKnowledge({
+  const knowledgeLog = startTool(logs, 'knowledge.searchLocal', '本地知识库', '按阶段、区域、学生水平和 KataGo 损失检索定式、死活、手筋和教学卡。')
+  const knowledgeQuery = {
     text: request.prompt,
     moveNumber,
     totalMoves: record?.moves.length ?? moveNumber,
     boardSize: record?.boardSize ?? analysis.boardSize,
     recentMoves: record?.moves.slice(Math.max(0, moveNumber - 5), moveNumber) ?? [],
     userLevel: profile.userLevel,
+    studentLevel: profile.userLevel,
+    playerColor: analysis.currentMove?.color,
     lossScore: analysis.playedMove?.scoreLoss,
     judgement: analysis.judgement,
     contextTags: tagsFromAnalysis(analysis, analysis.currentMove),
@@ -603,8 +668,11 @@ async function runCurrentMove(request: TeacherRunRequest, logs: TeacherToolLog[]
     candidateMoves: analysis.before.topMoves.slice(0, 8).map((candidate) => candidate.move),
     principalVariation: analysis.before.topMoves.slice(0, 3).flatMap((candidate) => candidate.pv.slice(0, 8)),
     maxResults: 4
-  })
-  finishTool(knowledgeLog, 'done', `选中 ${knowledge.length} 条知识卡片。`)
+  }
+  const knowledgeMatches = searchKnowledgeMatches({ ...knowledgeQuery, maxResults: 8 })
+  const recommendedProblems = recommendedProblemsFromMatches(knowledgeMatches, 3)
+  const knowledge = searchKnowledge(knowledgeQuery)
+  finishTool(knowledgeLog, 'done', `选中 ${knowledge.length} 条知识卡片，匹配 ${knowledgeMatches.length} 个定式/死活/手筋型，推荐 ${recommendedProblems.length} 道训练题。`)
   emitToolState(context, logs, '本地知识卡片已选好，准备交给老师组织讲解。')
 
   const webSnippets = await maybeSearchWeb(request.prompt, logs)
@@ -621,7 +689,7 @@ async function runCurrentMove(request: TeacherRunRequest, logs: TeacherToolLog[]
       markdown = await callMultimodalTeacher(
         getSettings(),
         systemPrompt(profile.userLevel),
-        currentMovePayload(request, analysis, knowledge, profile) + (webSnippets.length ? `\n\n外部资料标题:\n${webSnippets.join('\n')}` : ''),
+        currentMovePayload(request, analysis, knowledge, profile, knowledgeMatches, recommendedProblems) + (webSnippets.length ? `\n\n外部资料标题:\n${webSnippets.join('\n')}` : ''),
         request.boardImageDataUrl,
         (delta) => emitAssistantDelta(context, delta)
       )
@@ -633,11 +701,15 @@ async function runCurrentMove(request: TeacherRunRequest, logs: TeacherToolLog[]
   }
   emitToolState(context, logs, llmLog.status === 'done' ? '老师讲解已生成。' : '老师讲解没有完成，保留当前错误说明。')
 
-  const updatedProfile = updateStudentProfile(studentName, {
+  let updatedProfile = updateStudentProfile(studentName, {
     reviewedGames: 1,
-    mistakeTags: tagsFromAnalysis(analysis, analysis.currentMove),
-    recentPatterns: tagsFromAnalysis(analysis, analysis.currentMove).map((tag) => `第 ${moveNumber} 手出现${tag}相关问题`),
-    trainingFocus: knowledge.slice(0, 3).map((card) => card.title),
+    mistakeTags: [...tagsFromAnalysis(analysis, analysis.currentMove), ...knowledgeMatches.filter((match) => match.confidence !== 'weak').map((match) => match.matchType)],
+    recentPatterns: [
+      ...tagsFromAnalysis(analysis, analysis.currentMove).map((tag) => `第 ${moveNumber} 手出现${tag}相关问题`),
+      ...knowledgeMatches.filter((match) => match.confidence !== 'weak').slice(0, 3).map((match) => `第 ${moveNumber} 手匹配${match.title}（${match.confidence}）`)
+    ],
+    trainingFocus: [...knowledgeFocusFromMatches(knowledgeMatches, recommendedProblems), ...knowledge.slice(0, 2).map((card) => card.title)],
+    ...weaknessTagsFromMatches(knowledgeMatches),
     gameId: request.gameId,
     typicalMoves: analysis.playedMove
       ? [{
@@ -659,10 +731,12 @@ async function runCurrentMove(request: TeacherRunRequest, logs: TeacherToolLog[]
     markdown,
     'current-move',
     knowledge,
-    () => structuredCurrentMoveResult(title, markdown, analysis, knowledge)
+    () => structuredCurrentMoveResult(title, markdown, analysis, knowledge, knowledgeMatches, recommendedProblems),
+    knowledgeMatches,
+    recommendedProblems
   )
   markdown = structured.markdown || markdown
-  const reportPath = saveReport(id, title, markdown, { analysis, knowledge, studentProfile: updatedProfile, structured })
+  const reportPath = saveReport(id, title, markdown, { analysis, knowledge, knowledgeMatches, recommendedProblems, studentProfile: updatedProfile, structured })
   return {
     id,
     mode: 'current-move',
@@ -671,6 +745,8 @@ async function runCurrentMove(request: TeacherRunRequest, logs: TeacherToolLog[]
     toolLogs: logs,
     analysis,
     knowledge,
+    knowledgeMatches,
+    recommendedProblems,
     studentProfile: updatedProfile,
     structured,
     structuredResult: structured,
@@ -729,7 +805,7 @@ async function runBatchReview(request: TeacherRunRequest, logs: TeacherToolLog[]
   finishTool(batchLog, 'done', `提取 ${issues.filter((issue) => issue.loss > 0).length} 个关键问题点。`)
   emitToolState(context, logs, '批量分析完成，正在聚合同类问题。')
 
-  const profileUpdate = updateStudentProfile(studentName, {
+  let profileUpdate = updateStudentProfile(studentName, {
     reviewedGames: games.length,
     mistakeTags: profileTagsFromIssues(issues.filter((issue) => issue.loss > 0)),
     recentPatterns: issues
@@ -755,7 +831,7 @@ async function runBatchReview(request: TeacherRunRequest, logs: TeacherToolLog[]
   const knowledgeLog = startTool(logs, 'knowledge.searchLocal', '本地知识库', '根据批量问题检索训练主题知识。')
   const themes = themesFromProfile(profileUpdate)
   const topIssue = issues.filter((issue) => issue.loss > 0).sort((a, b) => b.loss - a.loss)[0]
-  const knowledge = searchKnowledge({
+  const knowledgeQuery = {
     text: request.prompt,
     moveNumber: 60,
     totalMoves: 180,
@@ -769,8 +845,20 @@ async function runBatchReview(request: TeacherRunRequest, logs: TeacherToolLog[]
     candidateMoves: topIssue?.bestMove ? [topIssue.bestMove] : [],
     principalVariation: topIssue?.pv ?? [],
     maxResults: 4
-  })
-  finishTool(knowledgeLog, 'done', `选中 ${knowledge.length} 条训练参考。`)
+  }
+  const knowledgeMatches = searchKnowledgeMatches({ ...knowledgeQuery, maxResults: 8 })
+  const recommendedProblems = recommendedProblemsFromMatches(knowledgeMatches, 3)
+  const knowledge = searchKnowledge(knowledgeQuery)
+  if (knowledgeMatches.some((match) => match.confidence !== 'weak')) {
+    profileUpdate = updateStudentProfile(studentName, {
+      reviewedGames: 0,
+      mistakeTags: knowledgeMatches.filter((match) => match.confidence !== 'weak').map((match) => match.matchType),
+      recentPatterns: knowledgeMatches.filter((match) => match.confidence !== 'weak').slice(0, 4).map((match) => `最近对局高频匹配：${match.title}`),
+      trainingFocus: knowledgeFocusFromMatches(knowledgeMatches, recommendedProblems),
+      ...weaknessTagsFromMatches(knowledgeMatches)
+    })
+  }
+  finishTool(knowledgeLog, 'done', `选中 ${knowledge.length} 条训练参考，匹配 ${knowledgeMatches.length} 个棋形，推荐 ${recommendedProblems.length} 道训练题。`)
   emitToolState(context, logs, '训练主题知识卡片已就绪。')
 
   const llmLog = startTool(logs, 'llm.teacherAgent', '老师总结', '让老师自己判断输出学生画像、典型错手还是训练计划。')
@@ -784,7 +872,9 @@ async function runBatchReview(request: TeacherRunRequest, logs: TeacherToolLog[]
       games: games.map((game) => ({ id: game.id, title: game.title, black: game.black, white: game.white, result: game.result, date: game.date })),
       issues: issues.filter((issue) => issue.loss > 0).slice(0, 20),
       studentProfile: profileUpdate,
-      knowledgePacket: knowledge
+      knowledgePacket: knowledge,
+      knowledgeMatches,
+      recommendedProblems
     }, null, 2), (delta) => emitAssistantDelta(context, delta))
     finishTool(llmLog, 'done', '批量分析总结已生成。')
   } catch (error) {
@@ -802,10 +892,12 @@ async function runBatchReview(request: TeacherRunRequest, logs: TeacherToolLog[]
     markdown,
     'recent-games',
     knowledge,
-    () => structuredIssueResult('recent-games', title, markdown, issues, knowledge, profileUpdate)
+    () => structuredIssueResult('recent-games', title, markdown, issues, knowledge, profileUpdate, knowledgeMatches, recommendedProblems),
+    knowledgeMatches,
+    recommendedProblems
   )
   markdown = structured.markdown || markdown
-  const reportPath = saveReport(id, title, markdown, { games, issues, knowledge, studentProfile: profileUpdate, structured })
+  const reportPath = saveReport(id, title, markdown, { games, issues, knowledge, knowledgeMatches, recommendedProblems, studentProfile: profileUpdate, structured })
   return {
     id,
     mode: 'freeform',
@@ -813,6 +905,8 @@ async function runBatchReview(request: TeacherRunRequest, logs: TeacherToolLog[]
     markdown,
     toolLogs: logs,
     knowledge,
+    knowledgeMatches,
+    recommendedProblems,
     studentProfile: profileUpdate,
     structured,
     structuredResult: structured,
@@ -850,7 +944,7 @@ async function runGameReview(request: TeacherRunRequest, logs: TeacherToolLog[],
   finishTool(reviewLog, 'done', `提取 ${issues.length} 个关键问题手。`)
   emitToolState(context, logs, `已提取 ${issues.length} 个关键问题手。`)
 
-  const updatedProfile = updateStudentProfile(studentName, {
+  let updatedProfile = updateStudentProfile(studentName, {
     reviewedGames: 1,
     mistakeTags: profileTagsFromIssues(issues),
     recentPatterns: issues.slice(0, 8).map((issue) => `${game.black} vs ${game.white} 第${issue.moveNumber}手 ${issue.playedMove} 推荐 ${issue.bestMove}`),
@@ -870,7 +964,7 @@ async function runGameReview(request: TeacherRunRequest, logs: TeacherToolLog[],
 
   const knowledgeLog = startTool(logs, 'knowledge.searchLocal', '本地知识库', '根据整盘关键问题检索教学主题。')
   const topIssue = issues.filter((issue) => issue.loss > 0).sort((a, b) => b.loss - a.loss)[0]
-  const knowledge = searchKnowledge({
+  const knowledgeQuery = {
     text: request.prompt,
     moveNumber: issues[0]?.moveNumber ?? Math.min(80, record.moves.length),
     totalMoves: record.moves.length,
@@ -884,8 +978,20 @@ async function runGameReview(request: TeacherRunRequest, logs: TeacherToolLog[],
     candidateMoves: topIssue?.bestMove ? [topIssue.bestMove] : [],
     principalVariation: topIssue?.pv ?? [],
     maxResults: 4
-  })
-  finishTool(knowledgeLog, 'done', `选中 ${knowledge.length} 条知识卡片。`)
+  }
+  const knowledgeMatches = searchKnowledgeMatches({ ...knowledgeQuery, maxResults: 8 })
+  const recommendedProblems = recommendedProblemsFromMatches(knowledgeMatches, 3)
+  const knowledge = searchKnowledge(knowledgeQuery)
+  if (knowledgeMatches.some((match) => match.confidence !== 'weak')) {
+    updatedProfile = updateStudentProfile(studentName, {
+      reviewedGames: 0,
+      mistakeTags: knowledgeMatches.filter((match) => match.confidence !== 'weak').map((match) => match.matchType),
+      recentPatterns: knowledgeMatches.filter((match) => match.confidence !== 'weak').slice(0, 4).map((match) => `本局关键问题匹配：${match.title}`),
+      trainingFocus: knowledgeFocusFromMatches(knowledgeMatches, recommendedProblems),
+      ...weaknessTagsFromMatches(knowledgeMatches)
+    })
+  }
+  finishTool(knowledgeLog, 'done', `选中 ${knowledge.length} 条知识卡片，匹配 ${knowledgeMatches.length} 个棋形，推荐 ${recommendedProblems.length} 道训练题。`)
   emitToolState(context, logs, '整盘复盘知识卡片已就绪。')
 
   const llmLog = startTool(logs, 'llm.teacherAgent', '老师整盘总结', '让老师结合整盘 KataGo 问题手和知识库生成复盘。')
@@ -906,7 +1012,9 @@ async function runGameReview(request: TeacherRunRequest, logs: TeacherToolLog[],
       },
       issues: issues.slice(0, 16),
       studentProfile: updatedProfile,
-      knowledgePacket: knowledge
+      knowledgePacket: knowledge,
+      knowledgeMatches,
+      recommendedProblems
     }, null, 2), (delta) => emitAssistantDelta(context, delta))
     finishTool(llmLog, 'done', '整盘复盘已生成。')
   } catch (error) {
@@ -924,10 +1032,12 @@ async function runGameReview(request: TeacherRunRequest, logs: TeacherToolLog[],
     markdown,
     'full-game',
     knowledge,
-    () => structuredIssueResult('full-game', title, markdown, issues, knowledge, updatedProfile)
+    () => structuredIssueResult('full-game', title, markdown, issues, knowledge, updatedProfile, knowledgeMatches, recommendedProblems),
+    knowledgeMatches,
+    recommendedProblems
   )
   markdown = structured.markdown || markdown
-  const reportPath = saveReport(id, title, markdown, { game, issues, knowledge, studentProfile: updatedProfile, structured })
+  const reportPath = saveReport(id, title, markdown, { game, issues, knowledge, knowledgeMatches, recommendedProblems, studentProfile: updatedProfile, structured })
   return {
     id,
     mode: 'freeform',
@@ -935,6 +1045,8 @@ async function runGameReview(request: TeacherRunRequest, logs: TeacherToolLog[],
     markdown,
     toolLogs: logs,
     knowledge,
+    knowledgeMatches,
+    recommendedProblems,
     studentProfile: updatedProfile,
     structured,
     structuredResult: structured,
@@ -951,7 +1063,7 @@ async function runTrainingPlan(request: TeacherRunRequest, logs: TeacherToolLog[
 
   const themes = themesFromProfile(profile)
   const knowledgeLog = startTool(logs, 'knowledge.searchLocal', '本地知识库', '围绕学生薄弱主题检索训练参考。')
-  const knowledge = searchKnowledge({
+  const knowledgeQuery = {
     text: request.prompt,
     moveNumber: 80,
     totalMoves: 180,
@@ -962,8 +1074,11 @@ async function runTrainingPlan(request: TeacherRunRequest, logs: TeacherToolLog[
     judgement: 'mistake',
     contextTags: themes,
     maxResults: 4
-  })
-  finishTool(knowledgeLog, 'done', `选中 ${knowledge.length} 条知识卡片。`)
+  }
+  const knowledgeMatches = searchKnowledgeMatches({ ...knowledgeQuery, maxResults: 8 })
+  const recommendedProblems = recommendedProblemsFromMatches(knowledgeMatches, 3)
+  const knowledge = searchKnowledge(knowledgeQuery)
+  finishTool(knowledgeLog, 'done', `选中 ${knowledge.length} 条知识卡片，匹配 ${knowledgeMatches.length} 个训练主题，推荐 ${recommendedProblems.length} 道题。`)
   emitToolState(context, logs, '训练主题知识卡片已就绪。')
 
   const llmLog = startTool(logs, 'llm.teacherAgent', '训练计划', '根据学生画像和知识库生成训练计划。')
@@ -975,7 +1090,9 @@ async function runTrainingPlan(request: TeacherRunRequest, logs: TeacherToolLog[
       userPrompt: request.prompt,
       studentProfile: profile,
       suggestedThemes: themes,
-      knowledgePacket: knowledge
+      knowledgePacket: knowledge,
+      knowledgeMatches,
+      recommendedProblems
     }, null, 2), (delta) => emitAssistantDelta(context, delta))
     finishTool(llmLog, 'done', '训练计划已生成。')
   } catch (error) {
@@ -993,10 +1110,12 @@ async function runTrainingPlan(request: TeacherRunRequest, logs: TeacherToolLog[
     markdown,
     'freeform',
     knowledge,
-    () => structuredFreeformResult(title, markdown, knowledge, profile)
+    () => structuredFreeformResult(title, markdown, knowledge, profile, knowledgeMatches, recommendedProblems),
+    knowledgeMatches,
+    recommendedProblems
   )
   markdown = structured.markdown || markdown
-  const reportPath = saveReport(id, title, markdown, { studentProfile: profile, knowledge, structured })
+  const reportPath = saveReport(id, title, markdown, { studentProfile: profile, knowledge, knowledgeMatches, recommendedProblems, structured })
   return {
     id,
     mode: 'freeform',
@@ -1004,6 +1123,8 @@ async function runTrainingPlan(request: TeacherRunRequest, logs: TeacherToolLog[
     markdown,
     toolLogs: logs,
     knowledge,
+    knowledgeMatches,
+    recommendedProblems,
     studentProfile: profile,
     structured,
     structuredResult: structured,
@@ -1113,7 +1234,22 @@ async function runOpenEndedTask(request: TeacherRunRequest, logs: TeacherToolLog
 
   const knowledgeLog = startTool(logs, 'knowledge.searchLocal', '本地知识库', '开放任务先检索本地知识库，给老师可引用的教学概念。')
   const knowledge = genericKnowledgeForPrompt(request.prompt, profile)
-  finishTool(knowledgeLog, 'done', `选中 ${knowledge.length} 条知识卡片。`)
+  const recordContext = recordSummary as { currentMoveNumber?: number; totalMoves?: number; boardSize?: number; recentMoves?: GameMove[] } | null
+  const knowledgeMatches = searchKnowledgeMatches({
+    text: request.prompt,
+    moveNumber: recordContext?.currentMoveNumber ?? 80,
+    totalMoves: recordContext?.totalMoves ?? 180,
+    boardSize: recordContext?.boardSize ?? 19,
+    recentMoves: recordContext?.recentMoves ?? [],
+    userLevel: profile.userLevel,
+    studentLevel: profile.userLevel,
+    lossScore: /错|问题|弱点|死活|手筋|定式/.test(request.prompt) ? 4 : 2,
+    judgement: /大错|严重|败着|崩/.test(request.prompt) ? 'blunder' : 'mistake',
+    contextTags: [...themesFromProfile(profile), ...request.prompt.split(/[，。！？\s,.!?]/).filter((token) => token.length >= 2).slice(0, 8)],
+    maxResults: 8
+  })
+  const recommendedProblems = recommendedProblemsFromMatches(knowledgeMatches, 3)
+  finishTool(knowledgeLog, 'done', `选中 ${knowledge.length} 条知识卡片，匹配 ${knowledgeMatches.length} 个棋形，推荐 ${recommendedProblems.length} 道题。`)
   emitToolState(context, logs, '本地知识卡片已选好。')
 
   const webSnippets = await maybeSearchWeb(request.prompt, logs)
@@ -1135,6 +1271,8 @@ async function runOpenEndedTask(request: TeacherRunRequest, logs: TeacherToolLog
       currentGameContext: recordSummary,
       environment: environmentSummary,
       knowledgePacket: knowledge,
+      knowledgeMatches,
+      recommendedProblems,
       webSearchTitles: webSnippets
     }, null, 2), (delta) => emitAssistantDelta(context, delta))
     finishTool(llmLog, 'done', '开放式任务已生成。')
@@ -1157,10 +1295,12 @@ async function runOpenEndedTask(request: TeacherRunRequest, logs: TeacherToolLog
     markdown,
     'freeform',
     knowledge,
-    () => structuredFreeformResult(title, markdown, knowledge, profile)
+    () => structuredFreeformResult(title, markdown, knowledge, profile, knowledgeMatches, recommendedProblems),
+    knowledgeMatches,
+    recommendedProblems
   )
   markdown = structured.markdown || markdown
-  const reportPath = saveReport(id, title, markdown, { studentProfile: profile, currentGameContext: recordSummary, environment: environmentSummary, knowledge, webSnippets, availableTools: toolCatalogPayload(), structured })
+  const reportPath = saveReport(id, title, markdown, { studentProfile: profile, currentGameContext: recordSummary, environment: environmentSummary, knowledge, knowledgeMatches, recommendedProblems, webSnippets, availableTools: toolCatalogPayload(), structured })
   return {
     id,
     mode: 'freeform',
@@ -1168,6 +1308,8 @@ async function runOpenEndedTask(request: TeacherRunRequest, logs: TeacherToolLog
     markdown,
     toolLogs: logs,
     knowledge,
+    knowledgeMatches,
+    recommendedProblems,
     studentProfile: profile,
     structured,
     structuredResult: structured,

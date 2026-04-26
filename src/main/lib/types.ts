@@ -214,6 +214,43 @@ export interface KnowledgePacket {
   score: number
 }
 
+export type KnowledgeMatchType = 'joseki' | 'life_death' | 'tesuji' | 'shape' | 'concept'
+export type KnowledgeMatchConfidence = 'exact' | 'strong' | 'partial' | 'weak'
+export type KnowledgeSourceKind = 'original' | 'common-pattern' | 'licensed-source'
+
+export interface RecommendedProblem {
+  id: string
+  title: string
+  problemType: 'life_death' | 'tesuji'
+  difficulty: string
+  objective: string
+  firstHint: string
+  answerSummary: string
+  tags: string[]
+}
+
+export interface KnowledgeMatch {
+  id: string
+  matchType: KnowledgeMatchType
+  title: string
+  confidence: KnowledgeMatchConfidence
+  score: number
+  reason: string[]
+  applicability: string
+  teachingPayload: {
+    summary: string
+    recognition: string
+    correctIdea: string
+    keyVariations: string[]
+    memoryCue: string
+    commonMistakes: string[]
+    drills: string[]
+    boundary: string
+    sourceKind: KnowledgeSourceKind
+  }
+  relatedProblems: RecommendedProblem[]
+}
+
 export interface KataGoCandidate {
   move: string
   winrate: number
@@ -269,6 +306,9 @@ export interface StudentProfile {
   recentGameIds: string[]
   commonMistakes: Array<{ tag: string; count: number }>
   trainingThemes: string[]
+  josekiWeaknesses?: string[]
+  lifeDeathWeaknesses?: string[]
+  tesujiWeaknesses?: string[]
   typicalMoves: Array<{
     gameId: string
     moveNumber: number
@@ -309,6 +349,8 @@ export interface StructuredTeacherResult {
   followupQuestions: string[]
   markdown: string
   knowledgeCardIds: string[]
+  knowledgeMatches?: KnowledgeMatch[]
+  recommendedProblems?: RecommendedProblem[]
   profileUpdates: {
     errorTypes: string[]
     patterns: string[]
@@ -378,6 +420,8 @@ export interface TeacherRunResult {
   toolLogs: TeacherToolLog[]
   analysis?: KataGoMoveAnalysis
   knowledge: KnowledgePacket[]
+  knowledgeMatches?: KnowledgeMatch[]
+  recommendedProblems?: RecommendedProblem[]
   studentProfile?: StudentProfile
   structured?: StructuredTeacherResult
   structuredResult?: StructuredTeacherResult

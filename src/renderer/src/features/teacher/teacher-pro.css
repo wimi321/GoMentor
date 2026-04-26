@@ -229,6 +229,73 @@
   font-size: 12px;
 }
 
+.ks-knowledge-match-list,
+.ks-recommended-problem-list {
+  display: grid;
+  gap: 8px;
+}
+
+.ks-knowledge-match-card,
+.ks-recommended-problem-card {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--ks-teal, #5fd4cf) 22%, transparent);
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--ks-teal, #5fd4cf) 8%, transparent), transparent 52%),
+    rgba(255, 255, 255, 0.026);
+}
+
+.ks-recommended-problem-card {
+  border-color: color-mix(in srgb, var(--ks-gold, #d8b567) 24%, transparent);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--ks-gold, #d8b567) 9%, transparent), transparent 54%),
+    rgba(255, 255, 255, 0.024);
+}
+
+.ks-knowledge-match-card__top,
+.ks-recommended-problem-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ks-knowledge-match-card strong,
+.ks-recommended-problem-card strong {
+  color: var(--ks-text-main, #f4efe7);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.ks-knowledge-match-card span,
+.ks-recommended-problem-card span {
+  flex: 0 0 auto;
+  color: var(--ks-teal, #5fd4cf);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.ks-recommended-problem-card span {
+  color: var(--ks-gold, #d8b567);
+}
+
+.ks-knowledge-match-card p,
+.ks-recommended-problem-card p {
+  margin: 0;
+  color: var(--ks-text-muted, #a9b2bb);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.ks-knowledge-match-card small,
+.ks-recommended-problem-card small {
+  color: var(--ks-text-soft, #87929c);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
 .ks-teacher-pro-markdown {
   color: var(--ks-text-muted, #a9b2bb);
   white-space: pre-wrap;
