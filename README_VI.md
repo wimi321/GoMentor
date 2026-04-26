@@ -5,8 +5,8 @@
 <h1 align="center">GoMentor</h1>
 
 <p align="center">
-  <strong>AI 에디터처럼 동작하는 데스크톱 바둑 선생님.</strong><br />
-  KataGo는 사실을 판단하고, 멀티모달 LLM은 사람이 이해할 수 있게 설명합니다.
+  <strong>Một giáo viên cờ vây trên desktop, hoạt động theo phong cách AI editor.</strong><br />
+  KataGo đưa ra dữ liệu phân tích, multimodal LLM chuyển dữ liệu đó thành lời giảng dễ hiểu.
 </p>
 
 <p align="center">
@@ -14,7 +14,7 @@
   <a href="https://github.com/wimi321/GoMentor/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/wimi321/GoMentor/total?style=for-the-badge&label=Downloads" /></a>
   <a href="https://github.com/wimi321/GoMentor/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/wimi321/GoMentor?style=for-the-badge" /></a>
   <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-0f172a?style=for-the-badge" /></a>
-  <a href="#커뮤니티"><img alt="QQ Group" src="https://img.shields.io/badge/QQ%20Group-1030632742-2563eb?style=for-the-badge" /></a>
+  <a href="#cộng-đồng"><img alt="QQ Group" src="https://img.shields.io/badge/QQ%20Group-1030632742-2563eb?style=for-the-badge" /></a>
 </p>
 
 <p align="center">
@@ -28,33 +28,33 @@
 
 ---
 
-GoMentor는 KataGo, 바둑판 스크린샷, 로컬 지식 카드, 학생 프로필, 멀티모달 LLM을 하나의 에이전트형 바둑 선생님으로 묶는 로컬 우선 데스크톱 앱입니다.
+GoMentor là ứng dụng desktop local-first cho người học và giáo viên cờ vây. Ứng dụng kết hợp KataGo, ảnh bàn cờ, bộ thẻ kiến thức cục bộ, hồ sơ học viên dài hạn và multimodal LLM thành một giáo viên cờ vây có thể tự chạy công cụ và giải thích kết quả.
 
-## 다운로드
+## Tải xuống
 
-공개 베타:
+Bản beta công khai:
 
 [GoMentor v0.2.0-beta.1](https://github.com/wimi321/GoMentor/releases/tag/v0.2.0-beta.1)
 
-| 플랫폼 | 다운로드 |
+| Nền tảng | Tải xuống |
 | --- | --- |
 | macOS Apple Silicon | [DMG](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-mac-arm64.dmg) |
 | macOS Intel | [DMG](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-mac-x64.dmg) |
 | Windows x64 portable | [EXE](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-win-x64-portable.exe) |
 | Windows x64 installer | [EXE](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-win-x64.exe) |
 
-현재 베타 패키지는 서명되지 않았으므로 macOS Gatekeeper 또는 Windows SmartScreen 경고가 표시될 수 있습니다.
+Lưu ý: bản beta hiện chưa được ký và notarize trên macOS, cũng chưa được code-sign trên Windows, vì vậy hệ điều hành có thể hiển thị cảnh báo bảo mật.
 
-## 주요 기능
+## Tính năng chính
 
-- Fox/野狐 공개 기보 동기화와 SGF 가져오기.
-- Lizzie / KTrain 스타일 바둑판, 후보수, 실전수 비교, 승률 그래프.
-- 기보를 불러오면 KataGo 분석을 자동 시작.
-- 승률 그래프에서 수순을 선택하면 해당 국면 분석을 자동으로 계속 진행.
-- 현재 수, 전체 대국, 최근 10국, 훈련 계획을 LLM이 설명.
-- 로컬 지식 베이스와 장기 학생 프로필.
+- Đồng bộ ván công khai từ Fox/野狐 và nhập SGF.
+- Bàn cờ lấy cảm hứng từ Lizzie / KTrain với candidate moves, so sánh nước thực chiến và biểu đồ winrate.
+- Tự động bắt đầu phân tích KataGo sau khi tải ván cờ.
+- Khi chọn một nước trên biểu đồ, ứng dụng tự động tiếp tục phân tích vị trí đó.
+- Giáo viên AI có thể phân tích nước hiện tại, toàn bộ ván, 10 ván gần nhất và tạo kế hoạch luyện tập.
+- Bộ kiến thức cục bộ và hồ sơ học viên dài hạn.
 
-## 개발
+## Phát triển
 
 ```bash
 pnpm install
@@ -69,13 +69,13 @@ pnpm build
 pnpm check
 ```
 
-## 개인정보
+## Quyền riêng tư
 
-기보, 설정, 리포트, 학생 프로필은 기본적으로 `~/.gomentor`에 저장됩니다. 현재 수 설명은 사용자가 설정한 LLM 엔드포인트로 바둑판 이미지, KataGo JSON, 선택된 지식 카드를 보낼 수 있습니다.
+Ván cờ, báo cáo, cài đặt và hồ sơ học viên được lưu mặc định trong `~/.gomentor`. Phân tích nước hiện tại có thể gửi ảnh bàn cờ, KataGo JSON và một số knowledge cards đến LLM endpoint do người dùng cấu hình.
 
-## 커뮤니티
+## Cộng đồng
 
-의견과 제안을 위해 QQ 그룹에 참여해 주세요.
+Tham gia nhóm QQ để trao đổi, góp ý và cùng hoàn thiện GoMentor:
 
 ```text
 1030632742

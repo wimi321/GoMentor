@@ -1,104 +1,125 @@
 <p align="center">
-  <img src="./assets/logo.png" alt="KataSensei logo" width="132" height="132" />
+  <img src="./assets/logo.png" alt="GoMentor logo" width="132" height="132" />
 </p>
 
-# KataSensei
+<h1 align="center">GoMentor</h1>
 
-> 像 Cursor / Claude Code 一样会调用工具的 AI 围棋老师。KataGo 负责事实判断，多模态 LLM 负责教学表达，学生画像负责长期进步。
+<p align="center">
+  <strong>像 AI 编辑器一样工作的围棋老师。</strong><br />
+  KataGo 负责事实判断，多模态 LLM 负责讲清楚，学生画像负责长期进步。
+</p>
 
-[![CI](https://github.com/wimi321/katasensei/actions/workflows/ci.yml/badge.svg)](https://github.com/wimi321/katasensei/actions/workflows/ci.yml)
-[![Release](https://github.com/wimi321/katasensei/actions/workflows/release.yml/badge.svg)](https://github.com/wimi321/katasensei/actions/workflows/release.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+<p align="center">
+  <a href="https://github.com/wimi321/GoMentor/releases"><img alt="Release" src="https://img.shields.io/github/v/release/wimi321/GoMentor?include_prereleases&style=for-the-badge&label=Release" /></a>
+  <a href="https://github.com/wimi321/GoMentor/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/wimi321/GoMentor/total?style=for-the-badge&label=Downloads" /></a>
+  <a href="https://github.com/wimi321/GoMentor/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/wimi321/GoMentor?style=for-the-badge" /></a>
+  <a href="https://github.com/wimi321/GoMentor/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/wimi321/GoMentor/ci.yml?branch=main&style=for-the-badge&label=CI" /></a>
+  <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-0f172a?style=for-the-badge" /></a>
+  <a href="#社区"><img alt="QQ Group" src="https://img.shields.io/badge/QQ%20Group-1030632742-2563eb?style=for-the-badge" /></a>
+</p>
 
-KataSensei 是一个本地优先的跨平台桌面应用，目标不是再做一个普通复盘工具，而是做一个能长期陪学生学围棋的智能体老师：
+<p align="center">
+  <a href="./README.md">中文</a> |
+  <a href="./README_EN.md">English</a> |
+  <a href="./README_JA.md">日本語</a> |
+  <a href="./README_KO.md">한국어</a> |
+  <a href="./README_TH.md">ไทย</a> |
+  <a href="./README_VI.md">Tiếng Việt</a>
+</p>
 
-- 左侧同步和管理野狐 / SGF 棋谱。
-- 中间是 KTrain / Lizzie 风格棋盘与整盘胜率图。
-- 右侧是会规划、会调用 KataGo、会查知识库、会写报告的 AI 围棋老师。
-- 老师可以直接执行“分析当前手”“分析整盘围棋”“分析近 10 局围棋”“给学生做训练计划”等自然语言任务。
+---
 
-KataGo 的结构化分析永远是事实裁判；LLM 只负责把事实讲成学生听得懂、能执行的训练建议。
+GoMentor 是一个本地优先、跨平台的桌面围棋学习工作台。它不是把聊天框放在棋盘旁边，而是把 KataGo、棋盘截图、本地知识库、学生长期画像和多模态 LLM 组织成一个会执行任务的 AI 围棋老师。
 
-## English
+你可以直接说：
 
-English documentation is available in [README_EN.md](./README_EN.md).
+- “分析当前手为什么亏。”
+- “复盘整盘棋，找出胜负转折点。”
+- “分析这个棋手最近 10 局，找出最常见的问题。”
+- “根据最近的弱点做一周训练计划。”
 
-## 当前状态
+KataGo 是事实裁判，LLM 是讲棋老师。GoMentor 的目标是让学生不仅知道哪一步不好，还能理解为什么不好，以及下一周该怎么练。
 
-KataSensei 处于早期公开版本阶段。核心工作台、野狐同步、SGF 主线解析、KataGo 分析、快速胜率图、右侧老师智能体、多模态 LLM 配置、本地知识库和学生画像已经打通。
+## 下载
 
-仍在演进中的部分：
+当前公开测试版：
 
-- 正式发布包的签名、公证和自动更新。
-- 更完整的 KataGo 权重下载器和校验器。
-- 更丰富的报告模板和训练题库。
-- 多语言 UI。
+[GoMentor v0.2.0-beta.1](https://github.com/wimi321/GoMentor/releases/tag/v0.2.0-beta.1)
 
-## 核心能力
+| 平台 | 下载 |
+| --- | --- |
+| macOS Apple Silicon | [GoMentor-0.2.0-beta.1-mac-arm64.dmg](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-mac-arm64.dmg) |
+| macOS Intel | [GoMentor-0.2.0-beta.1-mac-x64.dmg](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-mac-x64.dmg) |
+| Windows x64 免安装版 | [GoMentor-0.2.0-beta.1-win-x64-portable.exe](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-win-x64-portable.exe) |
+| Windows x64 安装版 | [GoMentor-0.2.0-beta.1-win-x64.exe](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-win-x64.exe) |
 
-### 三栏围棋学习工作台
+Beta 说明：
 
-- 左侧：输入野狐昵称 / UID，同步公开棋谱；支持分页浏览；支持上传本地 SGF。
-- 中间：大棋盘、黑白双方、当前手、推荐点、整盘胜率图、关键问题手误差柱。
-- 右侧：AI 围棋老师聊天区，展示工具调用日志、讲解和报告。
+- macOS 包目前未完成 Developer ID 签名和公证，首次打开可能出现 Gatekeeper 提示。
+- Windows 包目前未签名，可能出现 SmartScreen 提示。
+- Windows ARM64 暂不支持。
+- 大型 KataGo 二进制和模型不会作为普通 Git 文件提交。
 
-### 老师是智能体，不是固定按钮
+## 你会得到什么
 
-右侧老师拥有工具目录，可以根据任务自己选择链路：
+### 专业围棋工作台
 
-- `library.findGames`：按学生、来源、日期、最近 N 盘筛选棋谱。
-- `sgf.readGameRecord`：读取 SGF 主线、棋局元信息和当前手。
+- 左侧：棋手、野狐公开棋谱、SGF 导入和棋谱列表。
+- 中间：KTrain / Lizzie 风格棋盘、坐标、落子、推荐点、实战点、变化图预览和胜率走势。
+- 右侧：类似 AI 编辑器的老师对话区，支持自然语言任务、工具调用日志和流式讲解。
+
+### 类 Lizzie 的分析体验
+
+- 加载棋谱后默认自动开始 KataGo 分析。
+- 在胜率图或关键手上切换手数后，默认继续分析当前局面。
+- 只有用户主动点击暂停，分析才保持停止。
+- 推荐点显示选点序号、胜率、目差、搜索数。
+- 实战下一手会和 KataGo 推荐点一起对照，问题手按胜率/目差损失判断。
+- 鼠标悬停推荐点时展示后续变化，帮助学生理解“AI 为什么这样下”。
+
+### AI 老师是智能体
+
+老师不是固定模板回复。它可以根据任务调用工具：
+
+- `library.findGames`：按棋手、来源、日期、最近 N 局筛选棋谱。
+- `sgf.readGameRecord`：读取 SGF 主线、棋局信息和当前手。
 - `katago.analyzePosition`：分析当前局面。
 - `katago.analyzeGameBatch`：批量分析一盘或多盘棋。
 - `board.captureTeachingImage`：生成带坐标、最后一手和推荐点的棋盘截图。
-- `knowledge.searchLocal`：检索随应用打包的围棋知识库。
+- `knowledge.searchLocal`：检索本地围棋知识卡。
 - `studentProfile.read/write`：读写长期学生画像。
 - `report.saveAnalysis`：保存当前手、整盘、多盘和训练计划报告。
-- `web.searchGoKnowledge`：在用户需要外部资料时做泛化搜索，不发送隐私棋谱。
 
-### 快捷复盘
+### 多模态讲棋
 
-顶部快捷按钮：
+当前手分析会把这些信息组合给用户配置的多模态 LLM：
 
-- `分析当前手`：截图棋盘，KataGo 分析当前手，结合知识库和多模态 LLM 讲解。
-- `分析整盘围棋`：分析当前整盘棋，提取关键问题手和胜负转折点。
-- `分析近10局围棋`：筛选学生最近 10 盘，批量提取常见问题，更新学生画像。
+- 当前棋盘截图。
+- KataGo JSON 分析数据。
+- 当前手、候选点、实战点、胜率/目差变化。
+- 本地知识库中检索到的 2 到 4 张教学卡。
+- 棋手画像和最近常见问题。
 
-### LLM 配置
+LLM 负责把这些事实讲成人能听懂、能执行的复盘建议。
 
-设置入口在右侧老师栏齿轮中：
+## 项目状态
 
-- OpenAI-compatible Base URL。
-- API Key。
-- 多模态模型名称。
+GoMentor 目前处于早期公开 Beta：
 
-KataSensei 只面向支持图片输入的多模态模型。当前手分析会把棋盘截图、KataGo JSON 和知识库片段一起发给配置的 LLM。
-
-### KataGo 运行方式
-
-应用优先寻找随包携带的 KataGo 运行时：
-
-```text
-data/katago/
-  bin/<platform>-<arch>/katago
-  models/kata1-b18c384nbt-s9996604416-d4316597426.bin.gz
-  models/kata1-zhizi-b28c512nbt-muonfd2.bin.gz
-```
-
-开发模式下也会回退使用本机 `katago` 和 `~/.katago/models/latest-kata1.bin.gz`。大型模型和平台二进制不会提交到 Git，请按 [data/katago/README.md](./data/katago/README.md) 放置。
-
-内置权重预设：
-
-- `推荐通用 b18`：默认推荐，速度和强度平衡，适合日常教学和快速胜率图。
-- `强力精读 b28`：更适合关键局面精读，资源占用更高。
+- 已打通三栏桌面工作台。
+- 已支持野狐公开棋谱同步和本地 SGF 导入。
+- 已接入 KataGo 当前手、整盘和多盘分析链路。
+- 已支持 OpenAI-compatible 多模态 LLM 配置。
+- 已加入本地知识库、学生画像、诊断页和 release readiness 检查。
+- 正在继续打磨 UI、签名/公证、自动更新和多语言 UI。
 
 ## 架构
 
 ```mermaid
 flowchart LR
-  UI["React Workbench\n棋谱库 / 棋盘 / 老师聊天"] --> IPC["Electron Preload IPC"]
+  UI["React Workbench\n棋谱 / 棋盘 / AI 老师"] --> IPC["Electron Preload IPC"]
   IPC --> Main["Electron Main"]
-  Main --> Store["Local Store\n~/.katasensei"]
+  Main --> Store["Local Store\n~/.gomentor"]
   Main --> SGF["SGF Parser"]
   Main --> Fox["Fox Public Game Sync"]
   Main --> KataGo["KataGo Analysis Engine"]
@@ -117,44 +138,41 @@ flowchart LR
 ```text
 src/main            Electron 主进程、IPC、KataGo、野狐同步、老师智能体
 src/preload         Renderer 可用的安全桥接 API
-src/renderer        React 三栏工作台
+src/renderer        React 三栏桌面工作台
 data/knowledge      本地围棋知识库
-data/katago         可选内置 KataGo 二进制和权重布局说明
-scripts             批量复盘、KataGo 准备、开发辅助脚本
-docs                架构和老师智能体设计
+data/katago         KataGo 二进制和权重布局说明
+scripts             资产检查、批量复盘、视觉 QA、release 辅助脚本
+docs                架构、发布、签名、公证、QA 文档
 ```
 
-## 快速开始
+## 本地开发
 
-### 要求
+要求：
 
 - Node.js 22+
 - pnpm 10+
-- Python 3.10+，用于批量 SGF/KataGo 复盘脚本
+- Python 3.10+
 - KataGo 二进制和一个 KataGo 模型
 - 可选：OpenAI-compatible 多模态 LLM API
 
-### 安装依赖
+启动：
 
 ```bash
 pnpm install
 python3 -m pip install -r scripts/requirements.txt
-```
-
-### 启动开发版
-
-```bash
 pnpm dev
 ```
 
-### 检查
+检查：
 
 ```bash
 pnpm typecheck
+pnpm test
 pnpm build
+pnpm check
 ```
 
-## 打包
+打包：
 
 ```bash
 pnpm dist:mac
@@ -162,60 +180,49 @@ pnpm dist:win
 pnpm dist:linux
 ```
 
-输出目录：
+## KataGo 资源
+
+GoMentor 优先寻找随安装包携带的 KataGo 运行时：
 
 ```text
-release/<version>/
+data/katago/
+  bin/<platform>-<arch>/katago
+  models/kata1-b18c384nbt-s9996604416-d4316597426.bin.gz
+  models/kata1-zhizi-b28c512nbt-muonfd2.bin.gz
 ```
 
-发布标签会触发 GitHub Actions，分别在 macOS、Windows、Linux runner 上构建安装包，并把产物上传到 GitHub Release：
-
-```bash
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-注意：正式面向普通用户分发前，还需要配置 macOS 签名/公证、Windows 代码签名和自动更新策略。
+大型 KataGo binary/model 不作为普通 Git 文件提交。请阅读 [data/katago/README.md](./data/katago/README.md) 和 [docs/KATAGO_ASSETS.md](./docs/KATAGO_ASSETS.md)。
 
 ## 隐私与安全
 
-- 棋谱库、学生画像和报告默认保存在 `~/.katasensei`。
+- 棋谱、学生画像、报告和设置默认保存在 `~/.gomentor`。
 - LLM API Key 在支持的平台上使用 Electron `safeStorage` 加密保存。
-- 前端永远拿不到已保存的完整 API Key。
-- 当前手讲解会发送棋盘截图、KataGo JSON、知识库摘录到用户配置的 LLM 服务。
-- 批量分析默认只做本地 KataGo，最后再把聚合结果交给 LLM 总结。
-- Web 搜索只允许泛化围棋概念，不发送学生姓名、棋谱原文、截图、API Key 或本机路径。
+- 前端不会拿到已保存的完整 API Key。
+- 当前手讲解会发送棋盘截图、KataGo JSON 和知识库摘录到用户配置的 LLM 服务。
+- Web 搜索只用于泛化围棋概念，不发送学生姓名、棋谱原文、截图、API Key 或本机路径。
 
-## 开发规范
+## 社区
 
-提交前请至少运行：
+欢迎加入 QQ 群交流、提建议、一起完善：
 
-```bash
-pnpm typecheck
-pnpm build
+```text
+1030632742
 ```
 
-推荐阅读：
-
-- [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)
-- [docs/TEACHER_AGENT.md](./docs/TEACHER_AGENT.md)
-- [CONTRIBUTING.md](./CONTRIBUTING.md)
-- [SECURITY.md](./SECURITY.md)
+你也可以通过 [Issues](https://github.com/wimi321/GoMentor/issues) 提交 bug、产品建议、UI 建议、模型配置经验和复盘样例。
 
 ## 路线图
 
-- [x] 三栏工作台：棋谱库、棋盘、老师聊天。
-- [x] 野狐公开棋谱同步和 SGF 上传。
-- [x] KataGo 当前手分析。
-- [x] 加载棋谱后快速生成胜率图。
-- [x] 当前手、整盘、最近 10 局快捷智能体任务。
-- [x] 本地知识库检索。
-- [x] 学生画像读写。
-- [x] macOS / Windows / Linux CI 和 Release workflow。
-- [ ] 官方安装包签名与公证。
-- [ ] 内置 KataGo 下载器、模型校验和版本管理。
-- [ ] 更完整的训练计划和题库系统。
-- [ ] 插件化老师工具注册表。
+- [x] 三栏桌面工作台。
+- [x] 野狐公开棋谱同步和 SGF 导入。
+- [x] KataGo 当前手、整盘、多盘分析。
+- [x] 推荐点、实战点、变化图预览和胜率走势。
+- [x] 多模态 AI 老师、流式回复、本地知识库和学生画像。
+- [x] macOS / Windows Beta 安装包。
+- [ ] macOS Developer ID 签名和公证。
+- [ ] Windows 代码签名。
+- [ ] 自动更新。
+- [ ] 更完整的训练计划、题库系统和多语言 UI。
 
 ## 致谢
 
@@ -223,7 +230,7 @@ pnpm build
 - [katagotraining.org](https://katagotraining.org/)
 - [Electron](https://www.electronjs.org/)
 - [React](https://react.dev/)
-- 本地项目 `YiGo`、`LizzieYZY`、`KTrain` 风格参考
+- Lizzie / LizzieYZY / KTrain 等专业围棋分析软件带来的交互启发
 
 ## License
 
