@@ -156,6 +156,10 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
           <span>胜率走势</span>
           <small>{loading ? (loadingLabel || '分析中') : '胜率 / 目差曲线'}</small>
         </div>
+        <div className="ks-timeline-legend" aria-label="曲线说明">
+          <span><i className="ks-timeline-legend__swatch ks-timeline-legend__swatch--winrate" />黑胜率</span>
+          <span><i className="ks-timeline-legend__swatch ks-timeline-legend__swatch--score" />目差</span>
+        </div>
         {summary ? <div className="ks-timeline-summary">{summary}</div> : null}
       </div>
       <svg

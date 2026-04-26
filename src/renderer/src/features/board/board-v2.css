@@ -348,11 +348,14 @@
 }
 
 .ks-played-move--W .ks-played-move-frame {
-  stroke: rgba(17, 19, 20, 0.96);
+  fill: rgba(255, 250, 235, 0.09);
+  stroke: rgba(255, 250, 235, 0.96);
+  filter: drop-shadow(0 3px 8px rgba(255, 246, 218, 0.2));
 }
 
 .ks-played-move--B .ks-played-move-frame {
-  stroke: rgba(244, 238, 222, 0.96);
+  fill: rgba(9, 10, 10, 0.1);
+  stroke: rgba(12, 13, 13, 0.96);
   filter: drop-shadow(0 3px 7px rgba(0, 0, 0, 0.42));
 }
 
@@ -468,6 +471,7 @@
 
 .ks-timeline-title {
   display: flex;
+  flex: 0 0 auto;
   align-items: baseline;
   gap: 8px;
   min-width: 0;
@@ -485,6 +489,7 @@
 
 .ks-timeline-summary {
   display: flex;
+  margin-left: auto;
   justify-content: flex-end;
   min-width: 0;
   max-width: min(70%, 720px);
@@ -537,6 +542,40 @@
   stroke: #d464c8;
   stroke-width: 1.75;
   filter: drop-shadow(0 0 5px rgba(212, 100, 200, 0.18));
+}
+
+.ks-timeline-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: max-content;
+  color: var(--ks-text-muted, #a9b2bb);
+  font-size: 11px;
+  font-weight: 780;
+}
+
+.ks-timeline-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.ks-timeline-legend__swatch {
+  width: 16px;
+  height: 2px;
+  border-radius: 999px;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.ks-timeline-legend__swatch--winrate {
+  color: #62b9f0;
+  background: #62b9f0;
+}
+
+.ks-timeline-legend__swatch--score {
+  color: #d464c8;
+  background: #d464c8;
 }
 
 .ks-timeline-area {

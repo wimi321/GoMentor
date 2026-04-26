@@ -387,35 +387,45 @@ export async function analyzePositionWithProgress(
   let latestBefore: KataGoResponse | undefined
   let latestAfter: KataGoResponse | undefined
 
-  const responses = await queryKataGoBatch([
-    {
-      id: beforeId,
-      moves: moveHistory(beforeMoves),
-      boardSize: record.boardSize,
-      komi,
-      maxVisits,
-      reportDuringSearchEvery
-    },
-    {
-      id: afterId,
-      moves: moveHistory(afterMoves),
-      boardSize: record.boardSize,
-      komi,
-      maxVisits: afterVisits,
-      reportDuringSearchEvery
-    }
-  ], (response) => {
-    if (response.id === beforeId) {
-      latestBefore = response
-    }
-    if (response.id === afterId) {
-      latestAfter = response
-    }
-    if (latestBefore?.rootInfo && latestAfter?.rootInfo) {
+  let responses: Map<string, KataGoResponse>
+  try {
+    responses = await queryKataGoBatch([
+      {
+        id: beforeId,
+        moves: moveHistory(beforeMoves),
+        boardSize: record.boardSize,
+        komi,
+        maxVisits,
+        reportDuringSearchEvery
+      },
+      {
+        id: afterId,
+        moves: moveHistory(afterMoves),
+        boardSize: record.boardSize,
+        komi,
+        maxVisits: afterVisits,
+        reportDuringSearchEvery
+      }
+    ], (response) => {
+      if (response.id === beforeId) {
+        latestBefore = response
+      }
+      if (response.id === afterId) {
+        latestAfter = response
+      }
+      if (latestBefore?.rootInfo && latestAfter?.rootInfo) {
+        const partial = buildMoveAnalysis(gameId, moveNumber, record.boardSize, currentMove, latestBefore, latestAfter)
+        onProgress?.(partial, !latestBefore.isDuringSearch && !latestAfter.isDuringSearch)
+      }
+    })
+  } catch (error) {
+    if (String(error).includes('KataGo 分析超时') && latestBefore?.rootInfo && latestAfter?.rootInfo) {
       const partial = buildMoveAnalysis(gameId, moveNumber, record.boardSize, currentMove, latestBefore, latestAfter)
-      onProgress?.(partial, !latestBefore.isDuringSearch && !latestAfter.isDuringSearch)
+      onProgress?.(partial, true)
+      return partial
     }
-  })
+    throw error
+  }
 
   const beforeResponse = responses.get(beforeId)
   const afterResponse = responses.get(afterId)

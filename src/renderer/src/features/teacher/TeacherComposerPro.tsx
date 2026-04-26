@@ -26,7 +26,7 @@ export function TeacherComposerPro({ value, busy = false, actions = [], onChange
     <form className="ks-composer-pro" onSubmit={onSubmit}>
       <div className="ks-composer-pro__chrome">
         <span>Ask GoMentor</span>
-        <small>{busy ? 'Reading board...' : '自然提问，老师会自己调用工具'}</small>
+        {busy ? <small>Reading board...</small> : null}
       </div>
       {actions.length > 0 ? (
         <div className="ks-composer-pro__actions" aria-label="老师快捷动作">
@@ -54,7 +54,7 @@ export function TeacherComposerPro({ value, busy = false, actions = [], onChange
         <textarea
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          placeholder="问任何复盘问题，例如：这手为什么方向不对？这盘我该记住哪一件事？"
+          placeholder="输入复盘问题..."
         />
         <button type="submit" disabled={busy || !value.trim()}>
           {busy ? '分析中' : '发送'}

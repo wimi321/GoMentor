@@ -2241,10 +2241,34 @@ label small {
 
 .teacher-editor-head {
   grid-template-columns: minmax(0, 1fr) auto;
-  min-height: 58px;
-  padding: 10px 12px;
+  min-height: 46px;
+  padding: 6px 10px;
   background: rgb(255 252 245 / 0.78);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.78);
+}
+
+.teacher-editor-title > span {
+  display: none;
+}
+
+.teacher-editor-title strong {
+  margin-top: 0;
+  font-size: 13px;
+}
+
+.teacher-editor-meta {
+  gap: 4px;
+  margin-top: 3px;
+}
+
+.teacher-editor-meta em {
+  max-width: 92px;
+  padding: 1px 5px;
+  font-size: 9.5px;
+}
+
+.teacher-editor-actions {
+  gap: 5px;
 }
 
 .teacher-agent-mark {

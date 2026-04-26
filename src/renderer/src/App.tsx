@@ -261,13 +261,7 @@ export function App(): ReactElement {
   const userPausedLiveAnalysisRef = useRef(false)
   const moveNumberRef = useRef(moveNumber)
   const selectedGameIdRef = useRef('')
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 'hello',
-      role: 'teacher',
-      content: '你可以直接问：“这手为什么不好？”或者“这盘我最大的问题是什么？”我会先看棋盘和 KataGo 数据，再像复盘老师一样讲给人听。'
-    }
-  ])
+  const [messages, setMessages] = useState<ChatMessage[]>([])
 
   useEffect(() => {
     void refresh()
@@ -757,6 +751,13 @@ export function App(): ReactElement {
       userPausedLiveAnalysisRef.current = false
     }
     const targetMove = Math.max(0, Math.min(targetRecord.moves.length, Math.round(options.moveNumber ?? moveNumber)))
+    if (
+      liveAnalysis.running &&
+      liveAnalysis.targetMoveNumber === targetMove &&
+      selectedGameIdRef.current === gameId
+    ) {
+      return
+    }
     const runId = crypto.randomUUID()
     const startedAt = Date.now()
     let lastSampleAt = performance.now()
@@ -844,12 +845,54 @@ export function App(): ReactElement {
         }))
       } catch (cause) {
         if (liveAnalysisRunId.current === runId) {
-          setError(`KataGo 实时分析失败: ${String(cause)}`)
-          setLiveAnalysis((current) => ({
-            ...current,
-            running: false,
-            status: '实时分析失败'
-          }))
+          const message = String(cause)
+          const hasUsablePartial = lastVisitSample > 0 || analysisHasCandidates(cachedAnalysis)
+          if (message.includes('KataGo 分析超时') && hasUsablePartial) {
+            setLiveAnalysis((current) => ({
+              ...current,
+              running: false,
+              status: `已保留 ${formatVisits(current.visits || lastVisitSample)}`
+            }))
+          } else if (message.includes('KataGo 分析超时')) {
+            try {
+              const quickAnalysis = await window.gomentor.analyzePosition({
+                gameId,
+                moveNumber: targetMove,
+                maxVisits: 120
+              })
+              if (liveAnalysisRunId.current !== runId || selectedGameIdRef.current !== gameId) {
+                return
+              }
+              const totalVisits = candidateVisitsTotal(quickAnalysis)
+              const bestVisits = candidateBestVisits(quickAnalysis)
+              rememberEvaluation(quickAnalysis)
+              if (moveNumberRef.current === targetMove) {
+                setAnalysis(quickAnalysis)
+              }
+              setLiveAnalysis((current) => ({
+                ...current,
+                running: false,
+                status: `快速分析 ${formatVisits(totalVisits)}`,
+                visits: totalVisits,
+                bestVisits,
+                targetMoveNumber: targetMove
+              }))
+            } catch (fallbackCause) {
+              setError(`KataGo 暂时没有返回分析，请稍后重试或先运行一键测速。${String(fallbackCause)}`)
+              setLiveAnalysis((current) => ({
+                ...current,
+                running: false,
+                status: '等待重试'
+              }))
+            }
+          } else {
+            setError(`KataGo 实时分析失败: ${message}`)
+            setLiveAnalysis((current) => ({
+              ...current,
+              running: false,
+              status: '实时分析失败'
+            }))
+          }
         }
       } finally {
         disposeProgress()
@@ -950,6 +993,9 @@ export function App(): ReactElement {
       return
     }
     const targetMove = Math.max(0, Math.min(record.moves.length, Math.round(targetMoveNumber)))
+    if (liveAnalysis.running) {
+      pauseLiveAnalysis('老师讲解中，暂停精读')
+    }
     setMoveNumber(targetMove)
     setAnalysis(evaluations[targetMove] ?? null)
     setBusy('teacher')
@@ -985,6 +1031,15 @@ export function App(): ReactElement {
         content: message.content || `任务失败：${String(cause)}`
       }))
     } finally {
+      setLiveAnalysis((current) => current.status === '老师讲解中，暂停精读'
+        ? {
+            ...current,
+            running: false,
+            status: '讲解完成，已暂停精读',
+            visitsPerSecond: 0
+          }
+        : current
+      )
       setBusy('')
     }
   }
