@@ -1441,13 +1441,13 @@ function LibraryPanel({
         ))}
         {pageGames.length === 0 ? <div className="empty-list">没有匹配的棋谱</div> : null}
       </div>
-      <div className="pagination-row">
-        <button className="ghost-button" onClick={() => setPage(Math.max(1, safePage - 1))} disabled={safePage <= 1}>
-          上一页
+      <div className="pagination-row library-pagination" aria-label="棋谱分页">
+        <button className="ghost-button" onClick={() => setPage(Math.max(1, safePage - 1))} disabled={safePage <= 1} aria-label="上一页棋谱">
+          ‹
         </button>
         <span>{safePage} / {pageCount}</span>
-        <button className="ghost-button" onClick={() => setPage(Math.min(pageCount, safePage + 1))} disabled={safePage >= pageCount}>
-          下一页
+        <button className="ghost-button" onClick={() => setPage(Math.min(pageCount, safePage + 1))} disabled={safePage >= pageCount} aria-label="下一页棋谱">
+          ›
         </button>
       </div>
     </div>

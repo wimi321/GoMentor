@@ -400,7 +400,10 @@ textarea {
 }
 
 .library-rail {
+  display: flex;
+  flex-direction: column;
   border-right: 1px solid var(--line-soft);
+  overflow: hidden;
 }
 
 .teacher-column {
@@ -458,7 +461,8 @@ label,
 .teacher-panel {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1 1 auto;
+  height: auto;
   min-height: 0;
 }
 
@@ -615,6 +619,7 @@ label,
 }
 
 .pagination-row {
+  flex: 0 0 auto;
   min-height: 28px;
 }
 
@@ -631,6 +636,30 @@ label,
   gap: 5px;
   min-height: 0;
   overflow: auto;
+  padding-bottom: 2px;
+}
+
+.library-pagination {
+  margin-top: 1px;
+  padding: 5px 6px;
+  border: 1px solid color-mix(in srgb, var(--line-soft) 84%, transparent);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.04), rgb(255 255 255 / 0.015));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04);
+}
+
+.library-pagination span {
+  min-width: 56px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 860;
+}
+
+.library-pagination .ghost-button {
+  width: 34px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
 }
 
 .empty-list {
@@ -2129,6 +2158,12 @@ label small {
 .library-list-head small,
 .pagination-row {
   color: var(--ks-text-muted);
+}
+
+.library-pagination {
+  border-color: var(--ks-border-hairline);
+  background: rgb(255 252 245 / 0.62);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.68);
 }
 
 .board-stage {
