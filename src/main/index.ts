@@ -132,7 +132,7 @@ function buildApplicationMenu(): void {
     {
       label: 'File',
       submenu: [
-        { label: 'Import SGF...', accelerator: 'CommandOrControl+O', click: () => sendDesktopCommand('import-sgf') },
+        { label: 'Import SGF Game Record...', accelerator: 'CommandOrControl+O', click: () => sendDesktopCommand('import-sgf') },
         { type: 'separator' },
         { label: 'Command Palette...', accelerator: 'CommandOrControl+K', click: () => sendDesktopCommand('open-command-palette') },
         { label: 'Settings...', accelerator: process.platform === 'darwin' ? 'Command+,' : 'Control+,', click: () => sendDesktopCommand('open-settings') },
@@ -210,11 +210,17 @@ app.whenReady().then(() => {
     return dashboard()
   })
 
-  ipcMain.handle('library:import', async () => {
-    const picked = await dialog.showOpenDialog({
+  ipcMain.handle('library:import', async (event) => {
+    const owner = BrowserWindow.fromWebContents(event.sender) ?? mainWindow ?? undefined
+    const dialogOptions: Electron.OpenDialogOptions = {
+      title: '导入棋谱 SGF 文件',
+      buttonLabel: '导入棋谱',
       properties: ['openFile', 'multiSelections'],
       filters: [{ name: 'SGF files', extensions: ['sgf'] }]
-    })
+    }
+    const picked = owner
+      ? await dialog.showOpenDialog(owner, dialogOptions)
+      : await dialog.showOpenDialog(dialogOptions)
     if (picked.canceled) {
       return { dashboard: await dashboard(), imported: [] }
     }

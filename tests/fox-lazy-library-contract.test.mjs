@@ -30,6 +30,8 @@ test('all SGF consumers hydrate remote Fox games before reading filePath', () =>
   assert.match(main, /ensureFoxGameDownloaded/)
   assert.match(main, /const readyGame = await ensureFoxGameDownloaded\(game\)/)
   assert.match(main, /readGameRecord\(readyGame\)/)
+  assert.match(main, /BrowserWindow\.fromWebContents\(event\.sender\)/)
+  assert.match(main, /title: '导入棋谱 SGF 文件'/)
 
   const katago = read('src/main/services/katago.ts')
   assert.match(katago, /const game = await ensureFoxGameDownloaded\(indexedGame\)/)
@@ -52,7 +54,7 @@ test('library panel communicates remote list state and keeps pagination compact'
   assert.match(app, /library-pagination/)
   assert.match(app, /aria-label="棋谱分页"/)
   assert.match(app, /library-rail-heading/)
-  assert.match(app, /导入 SGF 文件/)
+  assert.match(app, /导入棋谱 SGF 文件/)
   assert.match(app, /boardGameTitle/)
   assert.doesNotMatch(app, /onCommand\('import-sgf'\)\}>Import SGF/)
   assert.doesNotMatch(app, /label: `\$\{dashboard\.games\.length\} 棋谱`/)

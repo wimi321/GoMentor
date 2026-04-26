@@ -1460,7 +1460,7 @@ function LibraryPanel({
         </button>
       </form>
       <button className="ghost-button library-import-button" type="button" onClick={onImport} disabled={busy !== ''}>
-        导入 SGF 文件
+        {busy === 'import' ? '正在导入棋谱...' : '导入棋谱 SGF 文件'}
       </button>
       <StudentRailCard
         displayName={currentStudent?.displayName}
@@ -1590,7 +1590,7 @@ function CommandPalette({
     { id: 'analyze-current' as const, title: '分析当前手', detail: '截图棋盘，调用 KataGo，再让老师讲解', shortcut: 'Ctrl/Cmd 1', disabled: !hasRecord || busy !== '' },
     { id: 'analyze-game' as const, title: '分析整盘围棋', detail: '扫描关键问题手和胜负转折点', shortcut: 'Ctrl/Cmd 2', disabled: !hasRecord || busy !== '' },
     { id: 'analyze-recent' as const, title: '分析近 10 局', detail: '聚合棋手稳定问题并更新画像', shortcut: 'Ctrl/Cmd 3', disabled: !hasGames || busy !== '' },
-    { id: 'import-sgf' as const, title: '导入 SGF', detail: '从本机文件系统添加棋谱', shortcut: 'Ctrl/Cmd O', disabled: busy !== '' },
+    { id: 'import-sgf' as const, title: '导入棋谱 SGF 文件', detail: '从本机文件系统添加棋谱', shortcut: 'Ctrl/Cmd O', disabled: busy !== '' },
     { id: 'open-settings' as const, title: '打开设置', detail: '配置模型、KataGo 资源和发布 readiness', shortcut: 'Ctrl/Cmd ,', disabled: false },
     { id: 'toggle-library' as const, title: '切换棋谱栏', detail: '收起或展开左侧棋手棋谱栏', shortcut: 'Ctrl/Cmd B', disabled: false },
     { id: 'open-ui-gallery' as const, title: '打开 UI Gallery', detail: '进入内部视觉 QA 样例页', shortcut: 'Ctrl/Cmd Shift G', disabled: false }
@@ -1625,7 +1625,7 @@ function CommandPalette({
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="输入任务或命令，例如：分析当前手、导入 SGF、打开设置"
+          placeholder="输入任务或命令，例如：分析当前手、导入棋谱、打开设置"
         />
         <div className="desktop-command-palette__list">
           {filtered.map((command) => (
