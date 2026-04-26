@@ -27,6 +27,21 @@ function formatBytes(value: number | undefined): string {
   return `${Math.round(value / 1024)} KB`
 }
 
+function speedTierLabel(tier: KataGoModelPreset['speedTier'] | undefined): string {
+  switch (tier) {
+    case 'fast':
+      return '速度优先'
+    case 'balanced':
+      return '教学平衡'
+    case 'strong':
+      return '精读强度'
+    case 'maximum':
+      return '旗舰强度'
+    default:
+      return '官方权重'
+  }
+}
+
 export function KataGoAssetsPanel({
   status,
   selectedPreset,
@@ -57,6 +72,26 @@ export function KataGoAssetsPanel({
         </div>
         <span className={status?.ready ? 'runtime-pill runtime-pill--ready' : 'runtime-pill runtime-pill--warn'}>{status?.ready ? 'Ready' : 'Missing'}</span>
       </header>
+      {selectedPreset ? (
+        <div className="katago-preset-card">
+          <div>
+            <span>分组</span>
+            <strong>{selectedPreset.group}</strong>
+          </div>
+          <div>
+            <span>规格</span>
+            <strong>{selectedPreset.blockSize} · {speedTierLabel(selectedPreset.speedTier)}</strong>
+          </div>
+          <div>
+            <span>网络</span>
+            <strong title={selectedPreset.networkName}>{selectedPreset.networkName}</strong>
+          </div>
+          <div>
+            <span>来源</span>
+            <strong>{selectedPreset.downloadUrl ? 'KataGo 官方直链' : 'KataGo 官方索引'}</strong>
+          </div>
+        </div>
+      ) : null}
       {status ? (
         <div className="runtime-list">
           <div><span>平台</span><strong>{status.platformKey}</strong></div>

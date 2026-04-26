@@ -20,16 +20,21 @@ export interface AppSettings {
   defaultPlayerName: string
 }
 
-export type KataGoModelPresetId = 'official-b18-recommended' | 'official-b28-strong'
+export type KataGoModelPresetId = string
 
 export interface KataGoModelPreset {
   id: KataGoModelPresetId
   label: string
   badge: string
+  group: string
+  blockSize: string
+  speedTier: 'fast' | 'balanced' | 'strong' | 'maximum'
+  sizeHint: string
   description: string
   networkName: string
   fileName: string
   sourceUrl: string
+  downloadUrl?: string
   recommended: boolean
 }
 

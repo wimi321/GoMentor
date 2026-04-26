@@ -1956,6 +1956,14 @@ function SettingsDrawer({
   const modelPresets = dashboard.systemProfile.katagoModelPresets
   const [selectedPresetId, setSelectedPresetId] = useState<KataGoModelPresetId>(dashboard.settings.katagoModelPreset)
   const selectedPreset = modelPresets.find((preset) => preset.id === selectedPresetId) ?? modelPresets[0]
+  const groupedModelPresets = useMemo(() => {
+    const groups = new Map<string, typeof modelPresets>()
+    for (const preset of modelPresets) {
+      const group = preset.group || '官方权重'
+      groups.set(group, [...(groups.get(group) ?? []), preset])
+    }
+    return [...groups.entries()]
+  }, [modelPresets])
   const betaItems = useMemo<BetaAcceptanceItem[]>(() => {
     if (releaseReadiness) {
       return releaseReadiness.items.map((item) => ({
@@ -2022,17 +2030,21 @@ function SettingsDrawer({
         onSave(event.currentTarget)
       }}
     >
-      <label>
-        KataGo 权重
+      <label className="katago-preset-select">
+        KataGo 官方权重
         <select
           name="katagoModelPreset"
           value={selectedPresetId}
           onChange={(event) => setSelectedPresetId(event.target.value as KataGoModelPresetId)}
         >
-          {modelPresets.map((preset) => (
-            <option key={preset.id} value={preset.id}>
-              {preset.label} · {preset.badge}
-            </option>
+          {groupedModelPresets.map(([group, presets]) => (
+            <optgroup key={group} label={group}>
+              {presets.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.label} · {preset.badge} · {preset.sizeHint}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </select>
         {selectedPreset ? <small>{selectedPreset.description}</small> : null}

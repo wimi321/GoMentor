@@ -7,25 +7,132 @@ import type { AppSettings, KataGoModelPreset, KataGoModelPresetId } from '@main/
 
 export const DEFAULT_KATAGO_MODEL_PRESET: KataGoModelPresetId = 'official-b18-recommended'
 
+const OFFICIAL_NETWORKS_URL = 'https://katagotraining.org/networks/'
+const OFFICIAL_NETWORK_CDN = 'https://media.katagotraining.org/uploaded/networks/models/kata1/'
+
+function officialNetworkUrl(fileName: string): string {
+  return `${OFFICIAL_NETWORK_CDN}${fileName}`
+}
+
 export const KATAGO_MODEL_PRESETS: KataGoModelPreset[] = [
   {
     id: 'official-b18-recommended',
-    label: '推荐通用 b18',
+    label: 'b18 日常教学推荐',
     badge: '最推荐',
+    group: '18b 官方推荐 / 日常教学',
+    blockSize: 'b18',
+    speedTier: 'balanced',
+    sizeHint: '通用',
     description: 'KataGo README 推荐的一般首选：强、准、机器压力适中，适合日常教学和自动胜率图。',
     networkName: 'kata1-b18c384nbt-s9996604416-d4316597426',
     fileName: 'kata1-b18c384nbt-s9996604416-d4316597426.bin.gz',
-    sourceUrl: 'https://katagotraining.org/networks/',
+    sourceUrl: OFFICIAL_NETWORKS_URL,
+    downloadUrl: officialNetworkUrl('kata1-b18c384nbt-s9996604416-d4316597426.bin.gz'),
     recommended: true
   },
   {
+    id: 'official-b18-stable',
+    label: 'b18 稳定备选',
+    badge: '轻快',
+    group: '18b 官方推荐 / 日常教学',
+    blockSize: 'b18',
+    speedTier: 'fast',
+    sizeHint: '通用',
+    description: '同为 b18c384nbt 的高分备选权重，适合希望保持轻快分析速度的机器。',
+    networkName: 'kata1-b18c384nbt-s9967423488-d4308703317',
+    fileName: 'kata1-b18c384nbt-s9967423488-d4308703317.bin.gz',
+    sourceUrl: OFFICIAL_NETWORKS_URL,
+    downloadUrl: officialNetworkUrl('kata1-b18c384nbt-s9967423488-d4308703317.bin.gz'),
+    recommended: false
+  },
+  {
+    id: 'official-b20-strong',
+    label: 'b20 强力轻量',
+    badge: '20b 强',
+    group: '20b 快速分析 / 旧机友好',
+    blockSize: 'b20',
+    speedTier: 'balanced',
+    sizeHint: '较快',
+    description: 'b20c256x2 中较高评分的一档，适合 CPU 或入门 GPU 做快速胜率图和日常复盘。',
+    networkName: 'kata1-b20c256x2-s5303129600-d1228401921',
+    fileName: 'kata1-b20c256x2-s5303129600-d1228401921.bin.gz',
+    sourceUrl: OFFICIAL_NETWORKS_URL,
+    downloadUrl: officialNetworkUrl('kata1-b20c256x2-s5303129600-d1228401921.bin.gz'),
+    recommended: false
+  },
+  {
+    id: 'official-b20-balanced',
+    label: 'b20 平衡备选',
+    badge: '20b 快',
+    group: '20b 快速分析 / 旧机友好',
+    blockSize: 'b20',
+    speedTier: 'fast',
+    sizeHint: '较快',
+    description: 'b20c256x2 的轻量备选，更偏速度和兼容性，适合先把整盘胜率曲线快速跑出来。',
+    networkName: 'kata1-b20c256x2-s5055114240-d1149032340',
+    fileName: 'kata1-b20c256x2-s5055114240-d1149032340.bin.gz',
+    sourceUrl: OFFICIAL_NETWORKS_URL,
+    downloadUrl: officialNetworkUrl('kata1-b20c256x2-s5055114240-d1149032340.bin.gz'),
+    recommended: false
+  },
+  {
     id: 'official-b28-strong',
-    label: '强力精读 b28',
-    badge: '官网强力',
+    label: 'b28 官网最强精读',
+    badge: '官网最强',
+    group: '28b 高强度精读',
+    blockSize: 'b28',
+    speedTier: 'strong',
+    sizeHint: '较慢',
     description: 'katagotraining.org 当前 strongest confidently-rated 档位，更适合关键局面精读，速度会慢一些。',
     networkName: 'kata1-zhizi-b28c512nbt-muonfd2',
     fileName: 'kata1-zhizi-b28c512nbt-muonfd2.bin.gz',
-    sourceUrl: 'https://katagotraining.org/networks/',
+    sourceUrl: OFFICIAL_NETWORKS_URL,
+    downloadUrl: officialNetworkUrl('kata1-zhizi-b28c512nbt-muonfd2.bin.gz'),
+    recommended: false
+  },
+  {
+    id: 'official-b28-latest',
+    label: 'b28 最新训练线',
+    badge: '28b 新',
+    group: '28b 高强度精读',
+    blockSize: 'b28',
+    speedTier: 'strong',
+    sizeHint: '较慢',
+    description: '官方网络列表中较新的 b28c512nbt 训练线，适合高配置机器做更深的局面判断。',
+    networkName: 'kata1-b28c512nbt-s12763923712-d5805955894',
+    fileName: 'kata1-b28c512nbt-s12763923712-d5805955894.bin.gz',
+    sourceUrl: OFFICIAL_NETWORKS_URL,
+    downloadUrl: officialNetworkUrl('kata1-b28c512nbt-s12763923712-d5805955894.bin.gz'),
+    recommended: false
+  },
+  {
+    id: 'official-b40-latest',
+    label: 'b40 最新旗舰',
+    badge: '40b 新',
+    group: '40b 旗舰 / 高配机器',
+    blockSize: 'b40',
+    speedTier: 'maximum',
+    sizeHint: '很慢',
+    description: '官方 latest network：更重、更强，适合高端 GPU 对关键局面做深度精读。',
+    networkName: 'kata1-zhizi-b40c768nbt-fdx6c',
+    fileName: 'kata1-zhizi-b40c768nbt-fdx6c.bin.gz',
+    sourceUrl: OFFICIAL_NETWORKS_URL,
+    downloadUrl: officialNetworkUrl('kata1-zhizi-b40c768nbt-fdx6c.bin.gz'),
+    recommended: false
+  },
+  {
+    id: 'official-b40-classic',
+    label: 'b40 经典 c256',
+    badge: '40b 稳',
+    group: '40b 旗舰 / 高配机器',
+    blockSize: 'b40',
+    speedTier: 'maximum',
+    sizeHint: '很慢',
+    description: '经典 b40c256 高强度权重，适合需要 40b 级别判断但希望资源压力低于最新旗舰的场景。',
+    networkName: 'kata1-b40c256-s12860905472-d3197353276',
+    fileName: 'kata1-b40c256-s12860905472-d3197353276.bin.gz',
+    sourceUrl: OFFICIAL_NETWORKS_URL,
+    downloadUrl: officialNetworkUrl('kata1-b40c256-s12860905472-d3197353276.bin.gz'),
     recommended: false
   }
 ]
@@ -69,6 +176,10 @@ function globModelFiles(directory: string, pattern: RegExp): string[] {
   } catch {
     return []
   }
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 export function getKataGoModelPreset(id?: string): KataGoModelPreset {
@@ -122,16 +233,19 @@ function modelDirectories(): string[] {
 
 function modelCandidates(preset: KataGoModelPreset, settings?: AppSettings): string[] {
   const directories = modelDirectories()
-  const presetPatterns =
-    preset.id === 'official-b18-recommended'
-      ? [/^kata1-b18c384nbt.*\.bin\.gz$/]
-      : [/^kata1-zhizi-b28c512nbt.*\.bin\.gz$/, /^kata1-b28c512nbt.*\.bin\.gz$/]
+  const blockToken = preset.blockSize || preset.networkName.match(/b\d+/)?.[0] || ''
+  const presetPatterns = [
+    new RegExp(`^${escapeRegExp(preset.networkName)}\\.bin\\.gz$`),
+    blockToken ? new RegExp(`^kata1-.*${escapeRegExp(blockToken)}.*\\.bin\\.gz$`) : null
+  ].filter((pattern): pattern is RegExp => Boolean(pattern))
   const selectedPresetFiles = directories.map((directory) => join(directory, preset.fileName))
   const matchingPresetFiles = directories.flatMap((directory) => presetPatterns.flatMap((pattern) => globModelFiles(directory, pattern)))
   const compatibilityFiles = [
     settings?.katagoModel ?? '',
     ...directories.map((directory) => join(directory, 'latest-kata1.bin.gz')),
-    ...directories.flatMap((directory) => globModelFiles(directory, /^kata1-(zhizi-)?b28c512nbt.*\.bin\.gz$/)),
+    ...directories.flatMap((directory) => globModelFiles(directory, /^kata1-.*b40.*\.bin\.gz$/)),
+    ...directories.flatMap((directory) => globModelFiles(directory, /^kata1-.*b28.*\.bin\.gz$/)),
+    ...directories.flatMap((directory) => globModelFiles(directory, /^kata1-.*b20.*\.bin\.gz$/)),
     ...directories.flatMap((directory) => globModelFiles(directory, /^kata1-b18c384nbt.*\.bin\.gz$/))
   ]
   return [...selectedPresetFiles, ...matchingPresetFiles, ...compatibilityFiles]

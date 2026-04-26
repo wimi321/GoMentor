@@ -99,6 +99,9 @@ function absoluteUrl(value: string): string {
 
 async function discoverModelDownloadUrl(presetId?: string): Promise<string> {
   const preset = getKataGoModelPreset(presetId)
+  if (preset.downloadUrl) {
+    return preset.downloadUrl
+  }
   if (/\.bin\.gz($|\?)/i.test(preset.sourceUrl)) {
     return preset.sourceUrl
   }
