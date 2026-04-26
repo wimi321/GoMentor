@@ -236,8 +236,8 @@ function VariationPreview({
 function PlayedMoveMark({ played, boardSize }: { played: RenderPlayedMove; boardSize: number }): ReactElement {
   const p = xy(played, boardSize)
   const rankLabel = played.rank ? `${played.rank}选` : '实战'
-  const loss = Math.max(0, played.scoreLoss ?? 0)
-  const severity = loss >= 4 ? 'mistake' : loss >= 1.2 ? 'inaccuracy' : 'ok'
+  const loss = Math.max(0, played.winrateLoss ?? 0)
+  const severity = loss >= 10 ? 'mistake' : loss >= 4 ? 'inaccuracy' : 'ok'
   return (
     <g className={`ks-played-move ks-played-move--${played.color} ks-played-move--${severity}`} transform={`translate(${p.x} ${p.y})`}>
       <rect className="ks-played-move-frame" x="-28" y="-28" width="56" height="56" rx="9" />

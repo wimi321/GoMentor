@@ -323,7 +323,7 @@ function tagsFromAnalysis(analysis: KataGoMoveAnalysis, move?: GameMove): string
     tags.add('方向')
     tags.add('大场')
   }
-  if ((analysis.playedMove?.scoreLoss ?? 0) >= 3) {
+  if ((analysis.playedMove?.winrateLoss ?? 0) >= 4) {
     tags.add('急所')
     tags.add('价值判断')
   }

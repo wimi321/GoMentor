@@ -2479,13 +2479,14 @@ function formatSearchSpeed(visitsPerSecond: number): string {
 }
 
 function evaluationSeverity(item: KataGoMoveAnalysis): 'quiet' | 'inaccuracy' | 'mistake' | 'blunder' {
-  if (item.judgement === 'blunder' || (item.playedMove?.scoreLoss ?? 0) >= 8 || (item.playedMove?.winrateLoss ?? 0) >= 18) {
+  const winrateLoss = normalizeLossPercent(item.playedMove?.winrateLoss)
+  if (item.judgement === 'blunder' || winrateLoss >= 18) {
     return 'blunder'
   }
-  if (item.judgement === 'mistake' || (item.playedMove?.scoreLoss ?? 0) >= 4 || (item.playedMove?.winrateLoss ?? 0) >= 10) {
+  if (item.judgement === 'mistake' || winrateLoss >= 10) {
     return 'mistake'
   }
-  if (item.judgement === 'inaccuracy' || (item.playedMove?.scoreLoss ?? 0) >= 1.5 || (item.playedMove?.winrateLoss ?? 0) >= 4) {
+  if (item.judgement === 'inaccuracy' || winrateLoss >= 4) {
     return 'inaccuracy'
   }
   return 'quiet'
@@ -2598,7 +2599,7 @@ function EvaluationGraph({
   const currentBadgeHeight = 16
   const domainMoves = Math.max(totalMoves, 1)
   const xForMove = (move: number): number => plotLeft + (clamp(move, 0, domainMoves) / domainMoves) * plotWidth
-  const lossScale = roundedScale(Math.max(...sortedEvaluations.map((item) => Math.max(0, item.playedMove?.scoreLoss ?? 0)), 0), 5, 5)
+  const lossScale = roundedScale(Math.max(...sortedEvaluations.map((item) => normalizeLossPercent(item.playedMove?.winrateLoss)), 0), 10, 10)
   const yForWinrate = (winrate: number): number => clamp(plotTop + ((100 - winrate) / 100) * plotHeight, plotTop, plotBottom)
   const winrateTicks = [
     { label: '黑100', value: 100 },
@@ -2751,8 +2752,8 @@ function EvaluationGraph({
             <path className="evaluation-area" d={areaPath} />
             <path className="evaluation-line evaluation-line--winrate" d={winratePath} />
             {sortedEvaluations.map((item) => {
-              const loss = Math.max(0, item.playedMove?.scoreLoss ?? 0)
-              if (loss <= 0.2) {
+              const loss = normalizeLossPercent(item.playedMove?.winrateLoss)
+              if (loss <= 0.5) {
                 return null
               }
               const barHeight = clamp((loss / lossScale) * (barBottom - barTop), 1, barBottom - barTop)

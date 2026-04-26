@@ -14,6 +14,11 @@ test('KataGo candidate ranking uses before-position choices and current-player l
   assert.match(katago, /function playerWinrate/)
   assert.match(katago, /function playerScoreLead/)
   assert.match(katago, /function playedMoveValue/)
+  assert.match(katago, /function forcePlayedMoveQuery/)
+  assert.match(katago, /function forcedPlayedCandidate/)
+  assert.match(katago, /allowMoves\?:/)
+  assert.match(katago, /payload\.allowMoves = query\.allowMoves/)
+  assert.match(katago, /playedMoveValue\(currentMove, searchMoves, afterRoot, forcedActual\)/)
   assert.match(katago, /playedLoss\(currentMove, best, actual\)/)
   assert.match(katago, /playerWinrate\(best\.winrate, currentMove\.color\) - playerWinrate\(actual\.winrate, currentMove\.color\)/)
   assert.match(katago, /playerScoreLead\(best\.scoreLead, currentMove\.color\) - playerScoreLead\(actual\.scoreLead, currentMove\.color\)/)
@@ -51,4 +56,11 @@ test('Timeline and issue list treat KataGo winrate loss as percentage points', (
   assert.match(timeline, /playedMove'\), 'winrateLoss'/)
   assert.match(timeline, /return Math\.max\(0, Math\.abs\(raw\)\)/)
   assert.doesNotMatch(timeline, /Math\.abs\(raw\) <= 1 \? raw \* 100 : raw/)
+
+  const board = read('src/renderer/src/features/board/GoBoardV2.tsx')
+  assert.match(board, /played\.winrateLoss/)
+  assert.doesNotMatch(board, /const loss = Math\.max\(0, played\.scoreLoss/)
+
+  assert.match(app, /normalizeLossPercent\(item\.playedMove\?\.winrateLoss\)/)
+  assert.doesNotMatch(app, /sortedEvaluations\.map\(\(item\) => Math\.max\(0, item\.playedMove\?\.scoreLoss/)
 })

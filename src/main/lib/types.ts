@@ -317,6 +317,7 @@ export interface KataGoMoveAnalysis {
     playerScoreLead?: number
     visits?: number
     rank?: number
+    source?: 'candidate' | 'forced' | 'after-root'
     winrateLoss: number
     scoreLoss: number
   }
