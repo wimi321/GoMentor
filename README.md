@@ -55,7 +55,7 @@ KataGo 是事实裁判，LLM 是讲棋老师。GoMentor 的目标是让学生不
 | --- | --- |
 | macOS Apple Silicon | [GoMentor-0.2.0-beta.1-mac-arm64.dmg](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-mac-arm64.dmg) |
 | macOS Intel | [GoMentor-0.2.0-beta.1-mac-x64.dmg](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-mac-x64.dmg) |
-| Windows x64 免安装版 | [GoMentor-0.2.0-beta.1-win-x64-portable.exe](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-win-x64-portable.exe) |
+| Windows x64 免安装 ZIP | [GoMentor-0.2.0-beta.1-win-x64-portable.zip](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-win-x64-portable.zip) |
 | Windows x64 安装版 | [GoMentor-0.2.0-beta.1-win-x64.exe](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-win-x64.exe) |
 
 Beta 说明：

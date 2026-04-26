@@ -45,7 +45,7 @@ Bản beta công khai:
 | --- | --- |
 | macOS Apple Silicon | [DMG](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-mac-arm64.dmg) |
 | macOS Intel | [DMG](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-mac-x64.dmg) |
-| Windows x64 portable | [EXE](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-win-x64-portable.exe) |
+| Windows x64 portable ZIP | [ZIP](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-win-x64-portable.zip) |
 | Windows x64 installer | [EXE](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-win-x64.exe) |
 
 Lưu ý: bản beta hiện chưa được ký và notarize trên macOS, cũng chưa được code-sign trên Windows, vì vậy hệ điều hành có thể hiển thị cảnh báo bảo mật.

@@ -55,7 +55,7 @@ Current public beta:
 | --- | --- |
 | macOS Apple Silicon | [GoMentor-0.2.0-beta.1-mac-arm64.dmg](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-mac-arm64.dmg) |
 | macOS Intel | [GoMentor-0.2.0-beta.1-mac-x64.dmg](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-mac-x64.dmg) |
-| Windows x64 portable | [GoMentor-0.2.0-beta.1-win-x64-portable.exe](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-win-x64-portable.exe) |
+| Windows x64 portable ZIP | [GoMentor-0.2.0-beta.1-win-x64-portable.zip](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-win-x64-portable.zip) |
 | Windows x64 installer | [GoMentor-0.2.0-beta.1-win-x64.exe](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-win-x64.exe) |
 
 Beta caveats:
