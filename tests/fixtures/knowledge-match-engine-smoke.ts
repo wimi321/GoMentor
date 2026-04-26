@@ -1,6 +1,7 @@
 import { searchKnowledgeMatchEngine, recommendedProblemsFromMatches } from '../../src/main/services/knowledge/matchEngine'
+import { fileURLToPath } from 'node:url'
 
-const dataRoot = new URL('../../data', import.meta.url).pathname
+const dataRoot = fileURLToPath(new URL('../../data', import.meta.url))
 const letters = 'ABCDEFGHJKLMNOPQRSTUVWXYZ'
 
 function move(moveNumber: number, color: 'B' | 'W', gtp: string) {
