@@ -27,6 +27,11 @@
   <a href="./README_VI.md">Tiếng Việt</a>
 </p>
 
+<p align="center">
+  <strong>Join the GoMentor community: QQ 1030632742</strong><br />
+  Share feedback, report bugs, and help improve the AI Go teacher together.
+</p>
+
 ---
 
 GoMentor is a local-first, cross-platform desktop workbench for Go students and teachers. It is not just a chat panel beside a board: it turns KataGo, board screenshots, local knowledge cards, long-term student memory, and a multimodal LLM into an agentic Go teacher.

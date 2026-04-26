@@ -27,6 +27,11 @@
   <a href="./README_VI.md">Tiếng Việt</a>
 </p>
 
+<p align="center">
+  <strong>加入 GoMentor 交流群：QQ 1030632742</strong><br />
+  欢迎交流使用体验、提交建议、反馈 bug，一起把 AI 围棋老师打磨好。
+</p>
+
 ---
 
 GoMentor 是一个本地优先、跨平台的桌面围棋学习工作台。它不是把聊天框放在棋盘旁边，而是把 KataGo、棋盘截图、本地知识库、学生长期画像和多模态 LLM 组织成一个会执行任务的 AI 围棋老师。

@@ -26,6 +26,11 @@
   <a href="./README_VI.md">Tiếng Việt</a>
 </p>
 
+<p align="center">
+  <strong>GoMentor 커뮤니티: QQ 1030632742</strong><br />
+  사용 후기, 제안, 버그 리포트를 환영합니다.
+</p>
+
 ---
 
 GoMentor는 KataGo, 바둑판 스크린샷, 로컬 지식 카드, 학생 프로필, 멀티모달 LLM을 하나의 에이전트형 바둑 선생님으로 묶는 로컬 우선 데스크톱 앱입니다.

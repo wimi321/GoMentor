@@ -26,6 +26,11 @@
   <a href="./README_VI.md">Tiếng Việt</a>
 </p>
 
+<p align="center">
+  <strong>Cộng đồng GoMentor: QQ 1030632742</strong><br />
+  Chào mừng góp ý, báo lỗi và cùng hoàn thiện giáo viên cờ vây AI.
+</p>
+
 ---
 
 GoMentor là ứng dụng desktop local-first cho người học và giáo viên cờ vây. Ứng dụng kết hợp KataGo, ảnh bàn cờ, bộ thẻ kiến thức cục bộ, hồ sơ học viên dài hạn và multimodal LLM thành một giáo viên cờ vây có thể tự chạy công cụ và giải thích kết quả.
