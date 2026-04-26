@@ -27,6 +27,9 @@ test('official KataGo model installer is wired through main preload and settings
   assert.match(runtime, /official-b40-latest/)
   assert.match(runtime, /official-b20-strong/)
   assert.match(runtime, /official-b18-recommended/)
+  assert.match(runtime, /官网推荐 zhizi 模型/)
+  assert.match(runtime, /zhizi b28 官网最强/)
+  assert.match(runtime, /zhizi b40 官网最新/)
   assert.match(runtime, /downloadUrl: officialNetworkUrl/)
   assert.match(runtime, /blockSize: 'b40'/)
   assert.match(runtime, /blockSize: 'b20'/)
@@ -46,6 +49,7 @@ test('official KataGo model installer is wired through main preload and settings
   assert.match(app, /onInstallOfficialModel/)
   assert.match(app, /<optgroup/)
   assert.match(app, /groupedModelPresets/)
+  assert.match(app, /官网推荐 zhizi 模型/)
 
   const panel = read('src/renderer/src/features/settings/KataGoAssetsPanel.tsx')
   assert.match(panel, /一键安装官方权重/)

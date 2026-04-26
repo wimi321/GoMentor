@@ -1962,7 +1962,18 @@ function SettingsDrawer({
       const group = preset.group || '官方权重'
       groups.set(group, [...(groups.get(group) ?? []), preset])
     }
-    return [...groups.entries()]
+    const groupOrder = [
+      '官网推荐 zhizi 模型',
+      '18b 官方推荐 / 日常教学',
+      '20b 快速分析 / 旧机友好',
+      '28b 高强度精读',
+      '40b 旗舰 / 高配机器'
+    ]
+    return [...groups.entries()].sort(([left], [right]) => {
+      const leftIndex = groupOrder.indexOf(left)
+      const rightIndex = groupOrder.indexOf(right)
+      return (leftIndex === -1 ? 99 : leftIndex) - (rightIndex === -1 ? 99 : rightIndex)
+    })
   }, [modelPresets])
   const betaItems = useMemo<BetaAcceptanceItem[]>(() => {
     if (releaseReadiness) {
