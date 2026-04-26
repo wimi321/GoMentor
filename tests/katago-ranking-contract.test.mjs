@@ -24,6 +24,10 @@ test('KataGo candidate ranking uses before-position choices and current-player l
 test('Board overlays display candidate values from the side-to-move perspective', () => {
   const app = read('src/renderer/src/App.tsx')
   assert.match(app, /analysis\.before\.topMoves\.length > 0 \? analysis\.before\.topMoves : analysis\.after\.topMoves/)
+  assert.match(app, /const currentAnalysis = useMemo/)
+  assert.match(app, /analysis\?\.moveNumber === moveNumber/)
+  assert.match(app, /<GoBoardV2 record=\{record\} moveNumber=\{moveNumber\} analysis=\{currentAnalysis\}/)
+  assert.match(app, /<GoBoard record=\{record\} moveNumber=\{moveNumber\} analysis=\{currentAnalysis\}/)
 
   const geometry = read('src/renderer/src/features/board/boardGeometry.ts')
   assert.match(geometry, /function playerWinrateValue/)

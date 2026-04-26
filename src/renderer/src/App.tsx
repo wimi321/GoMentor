@@ -359,6 +359,13 @@ export function App(): ReactElement {
     () => boardKeyMoveMarks.filter((mark) => mark.moveNumber === moveNumber),
     [boardKeyMoveMarks, moveNumber]
   )
+  const currentAnalysis = useMemo(() => {
+    const cached = evaluations[moveNumber] ?? null
+    if (analysis?.moveNumber === moveNumber && (analysisHasCandidates(analysis) || !analysisHasCandidates(cached))) {
+      return analysis
+    }
+    return cached
+  }, [analysis, evaluations, moveNumber])
 
   useEffect(() => {
     if (selectedGame && !selectedId) {
@@ -796,6 +803,14 @@ export function App(): ReactElement {
     }))
   }
 
+  function analysisForMove(targetMove: number): KataGoMoveAnalysis | null {
+    const cached = evaluations[targetMove] ?? null
+    if (analysis?.moveNumber === targetMove && (analysisHasCandidates(analysis) || !analysisHasCandidates(cached))) {
+      return analysis
+    }
+    return cached
+  }
+
   function queueAutoLiveAnalysis(gameId: string, targetRecord: GameRecord, targetMove: number, delay = 80): void {
     if (userPausedLiveAnalysisRef.current) {
       return
@@ -825,7 +840,7 @@ export function App(): ReactElement {
       pauseLiveAnalysis('切换手数，准备继续分析')
     }
     setMoveNumber(targetMove)
-    setAnalysis(evaluations[targetMove] ?? null)
+    setAnalysis(analysisForMove(targetMove))
     if (record && selectedGame && !userPausedLiveAnalysisRef.current) {
       queueAutoLiveAnalysis(selectedGame.id, record, targetMove)
     }
@@ -870,7 +885,7 @@ export function App(): ReactElement {
     const runId = crypto.randomUUID()
     const startedAt = Date.now()
     let lastSampleAt = performance.now()
-    const cachedAnalysis = options.record ? null : (evaluations[targetMove] ?? analysis)
+    const cachedAnalysis = options.record ? null : analysisForMove(targetMove)
     let lastVisitSample = candidateVisitsTotal(cachedAnalysis)
     let lastEffectiveVisitSample = lastVisitSample
     const benchmarkSpeed = dashboard.settings.katagoBenchmarkVisitsPerSecond
@@ -1324,7 +1339,7 @@ export function App(): ReactElement {
                 title={selectedGame ? boardGameTitle(selectedGame) : '未选择棋谱'}
                 record={record}
                 moveNumber={moveNumber}
-                analysis={(analysis?.moveNumber === moveNumber ? analysis : evaluations[moveNumber]) ?? null}
+                analysis={currentAnalysis}
                 liveAnalysis={liveAnalysis}
                 disabled={busy !== ''}
                 onStart={() => void startLiveAnalysis()}
@@ -1344,9 +1359,9 @@ export function App(): ReactElement {
             {record ? (
               <div className="board-table board-table--v2">
                 {record.boardSize >= 2 ? (
-                  <GoBoardV2 record={record} moveNumber={moveNumber} analysis={analysis} keyMoves={currentBoardKeyMoveMarks} />
+                  <GoBoardV2 record={record} moveNumber={moveNumber} analysis={currentAnalysis} keyMoves={currentBoardKeyMoveMarks} />
                 ) : (
-                  <GoBoard record={record} moveNumber={moveNumber} analysis={analysis} />
+                  <GoBoard record={record} moveNumber={moveNumber} analysis={currentAnalysis} />
                 )}
               </div>
             ) : (
@@ -1376,7 +1391,7 @@ export function App(): ReactElement {
               </>
             ) : (
               <EvaluationGraph
-                analysis={analysis}
+                analysis={currentAnalysis}
                 evaluations={Object.values(evaluations)}
                 moveNumber={moveNumber}
                 totalMoves={0}
