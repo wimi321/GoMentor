@@ -1,9 +1,9 @@
 import { spawn } from 'node:child_process'
-import { getSettings } from '@main/lib/store'
+import { findGame, getSettings } from '@main/lib/store'
 import type { GameMove, KataGoCandidate, KataGoMoveAnalysis } from '@main/lib/types'
-import { findGame } from '@main/lib/store'
 import { readGameRecord } from './sgf'
 import { resolveKataGoRuntime } from './katagoRuntime'
+import { ensureFoxGameDownloaded } from './fox'
 
 interface KataGoResponse {
   id?: string
@@ -282,10 +282,11 @@ export async function analyzePosition(
   moveNumber: number,
   maxVisits = 500
 ): Promise<KataGoMoveAnalysis> {
-  const game = findGame(gameId)
-  if (!game) {
+  const indexedGame = findGame(gameId)
+  if (!indexedGame) {
     throw new Error(`找不到棋谱: ${gameId}`)
   }
+  const game = await ensureFoxGameDownloaded(indexedGame)
   const record = readGameRecord(game)
   const currentMove = moveNumber > 0 ? record.moves[moveNumber - 1] : undefined
   const beforeMoves = record.moves.slice(0, Math.max(0, moveNumber - 1))
@@ -372,10 +373,11 @@ export async function analyzePositionWithProgress(
   onProgress?: (analysis: KataGoMoveAnalysis, isFinal: boolean) => void,
   reportDuringSearchEvery = 0.2
 ): Promise<KataGoMoveAnalysis> {
-  const game = findGame(gameId)
-  if (!game) {
+  const indexedGame = findGame(gameId)
+  if (!indexedGame) {
     throw new Error(`找不到棋谱: ${gameId}`)
   }
+  const game = await ensureFoxGameDownloaded(indexedGame)
   const record = readGameRecord(game)
   const currentMove = moveNumber > 0 ? record.moves[moveNumber - 1] : undefined
   const beforeMoves = record.moves.slice(0, Math.max(0, moveNumber - 1))
@@ -442,10 +444,11 @@ export async function analyzeGameQuick(
   maxVisits = 12,
   onProgress?: (progress: QuickProgress) => void
 ): Promise<KataGoMoveAnalysis[]> {
-  const game = findGame(gameId)
-  if (!game) {
+  const indexedGame = findGame(gameId)
+  if (!indexedGame) {
     throw new Error(`找不到棋谱: ${gameId}`)
   }
+  const game = await ensureFoxGameDownloaded(indexedGame)
 
   const record = readGameRecord(game)
   const normalizedKomi = normalizeKomi(record.komi)

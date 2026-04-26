@@ -675,17 +675,54 @@ label,
   transform: translateY(-1px);
 }
 
-.game-row span {
+.game-row__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.game-row__title span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 760;
 }
 
-.game-row small {
+.game-row__meta {
+  display: block;
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 10.5px;
   line-height: 1.25;
+}
+
+.game-row__badge {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, var(--line-strong) 72%, transparent);
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: rgb(255 255 255 / 0.035);
+  font-size: 9.5px;
+  font-style: normal;
+  font-weight: 760;
+}
+
+.game-row__badge--remote {
+  border-color: color-mix(in srgb, var(--accent-blue) 42%, var(--line-soft));
+  color: color-mix(in srgb, var(--accent-blue) 82%, var(--text-main));
+  background: color-mix(in srgb, var(--accent-blue) 9%, transparent);
+}
+
+.game-row__badge--downloaded {
+  border-color: color-mix(in srgb, var(--accent-green) 44%, var(--line-soft));
+  color: color-mix(in srgb, var(--accent-green) 82%, var(--text-main));
+  background: color-mix(in srgb, var(--accent-green) 9%, transparent);
 }
 
 .board-workspace {
@@ -2075,6 +2112,14 @@ label small {
 
 .game-row:hover:not(.is-active) {
   background: #fffaf0;
+}
+
+.game-row__meta {
+  color: var(--ks-text-muted);
+}
+
+.game-row__badge {
+  background: rgb(255 252 245 / 0.62);
 }
 
 .library-list-head {

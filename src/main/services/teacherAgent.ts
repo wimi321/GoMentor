@@ -22,6 +22,7 @@ import { analyzePosition } from './katago'
 import { searchKnowledge, searchKnowledgeMatches } from './knowledge'
 import { recommendedProblemsFromMatches } from './knowledge/matchEngine'
 import { readGameRecord } from './sgf'
+import { ensureFoxGameDownloaded } from './fox'
 import { callMultimodalTeacher, callTeacherText } from './llm'
 import { getStudentProfile, readStudentForGame, updateStudentProfile } from './studentProfile'
 import { runReview } from './review'
@@ -628,7 +629,8 @@ async function runCurrentMove(request: TeacherRunRequest, logs: TeacherToolLog[]
   if (!request.gameId) {
     throw new Error('当前手分析需要先选择棋谱。')
   }
-  const game = getGames().find((item) => item.id === request.gameId)
+  const indexedGame = getGames().find((item) => item.id === request.gameId)
+  const game = indexedGame ? await ensureFoxGameDownloaded(indexedGame) : undefined
   const boundProfile = readStudentForGame(request.gameId)
   const studentName = boundProfile?.displayName ?? detectStudentName(request, game)
   const profile = boundProfile ?? getStudentProfile(studentName)
@@ -918,10 +920,11 @@ async function runGameReview(request: TeacherRunRequest, logs: TeacherToolLog[],
   if (!request.gameId) {
     throw new Error('整盘分析需要先选择棋谱。')
   }
-  const game = getGames().find((item) => item.id === request.gameId)
-  if (!game) {
+  const indexedGame = getGames().find((item) => item.id === request.gameId)
+  if (!indexedGame) {
     throw new Error('找不到当前棋谱。')
   }
+  const game = await ensureFoxGameDownloaded(indexedGame)
   const boundProfile = readStudentForGame(game.id)
   const studentName = boundProfile?.displayName ?? detectStudentName(request, game)
   const profile = boundProfile ?? getStudentProfile(studentName)
@@ -1133,7 +1136,8 @@ async function runTrainingPlan(request: TeacherRunRequest, logs: TeacherToolLog[
 }
 
 async function runOpenEndedTask(request: TeacherRunRequest, logs: TeacherToolLog[], id: string, context?: TeacherRunContext): Promise<TeacherRunResult> {
-  const game = request.gameId ? getGames().find((item) => item.id === request.gameId) : undefined
+  const indexedGame = request.gameId ? getGames().find((item) => item.id === request.gameId) : undefined
+  const game = indexedGame ? await ensureFoxGameDownloaded(indexedGame) : undefined
   const studentName = detectStudentName(request, game)
   let environmentSummary: Record<string, unknown> | null = null
 

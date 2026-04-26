@@ -5,6 +5,7 @@ import { findGame, getSettings, reviewsDir } from '@main/lib/store'
 import type { ReviewArtifact, ReviewRequest, ReviewResult } from '@main/lib/types'
 import { resolveKataGoRuntime } from './katagoRuntime'
 import { ensurePythonRuntime } from './pythonRuntime'
+import { ensureFoxGameDownloaded } from './fox'
 
 interface PythonReviewOutput {
   markdown_path: string
@@ -13,10 +14,11 @@ interface PythonReviewOutput {
 }
 
 export async function runReview(request: ReviewRequest): Promise<ReviewResult> {
-  const game = findGame(request.gameId)
-  if (!game) {
+  const indexedGame = findGame(request.gameId)
+  if (!indexedGame) {
     throw new Error('找不到要复盘的棋谱')
   }
+  const game = await ensureFoxGameDownloaded(indexedGame)
 
   const settings = getSettings()
   const runtime = resolveKataGoRuntime(settings)

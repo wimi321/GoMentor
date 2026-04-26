@@ -123,6 +123,7 @@ const LIVE_ANALYSIS_TOTAL_VISIT_LIMIT = 5200
 const LIVE_ANALYSIS_BEST_VISIT_LIMIT = 1800
 const LIVE_ANALYSIS_TIME_LIMIT_MS = 150_000
 const LIVE_ANALYSIS_REPORT_INTERVAL_SECONDS = 0.2
+const LIBRARY_PAGE_SIZE = 10
 
 function safePlayerName(name: string | undefined, fallback: string): string {
   const value = (name ?? '').trim()
@@ -269,7 +270,16 @@ export function App(): ReactElement {
   }, [])
 
   const selectedGame = useMemo(
-    () => dashboard.games.find((game) => game.id === selectedId) ?? dashboard.games[0],
+    () => {
+      const exact = dashboard.games.find((game) => game.id === selectedId)
+      if (exact) {
+        return exact
+      }
+      if (!selectedId) {
+        return dashboard.games.find((game) => game.source !== 'fox' || game.downloadStatus === 'downloaded')
+      }
+      return dashboard.games[0]
+    },
     [dashboard.games, selectedId]
   )
   const keyMoveSummaries = useMemo(() => keyMoveSummariesFromEvaluations(evaluations), [evaluations])
@@ -351,6 +361,10 @@ export function App(): ReactElement {
   async function loadRecord(gameId: string): Promise<void> {
     try {
       const next = await window.gomentor.getGameRecord(gameId)
+      setDashboard((current) => ({
+        ...current,
+        games: current.games.map((game) => (game.id === next.game.id ? next.game : game))
+      }))
       userPausedLiveAnalysisRef.current = false
       setRecord(next)
       setMoveNumber(next.moves.length)
@@ -456,10 +470,8 @@ export function App(): ReactElement {
       setDashboard(next)
       setCurrentStudent(student ?? null)
       setFoxKeyword(result.nickname)
-      if (result.saved[0]) {
-        setSelectedId(result.saved[0].id)
-      } else if (next.games[0]) {
-        setSelectedId(next.games[0].id)
+      if (selectedId && !next.games.some((game) => game.id === selectedId)) {
+        setSelectedId('')
       }
     } catch (cause) {
       setError(String(cause))
@@ -1228,7 +1240,7 @@ export function App(): ReactElement {
               <div className="board-contextbar board-contextbar--empty">
                 <div className="board-contextbar__identity">
                   <h1>未选择棋谱</h1>
-                  <span>导入 SGF 或搜索野狐棋谱</span>
+                  <span>选择左侧棋谱，或导入新的 SGF</span>
                 </div>
               </div>
             )}
@@ -1244,7 +1256,7 @@ export function App(): ReactElement {
                 )}
               </div>
             ) : (
-              <div className="empty-board">导入 SGF 后开始复盘</div>
+              <div className="empty-board">选择左侧棋谱开始复盘</div>
             )}
           </section>
 
@@ -1357,7 +1369,6 @@ function LibraryPanel({
   onChangePlayerBinding: () => void
 }): ReactElement {
   const [page, setPage] = useState(1)
-  const pageSize = 14
   const keyword = foxKeyword.trim().toLowerCase()
   const visibleGames = useMemo(() => {
     if (!keyword) {
@@ -1375,9 +1386,11 @@ function LibraryPanel({
       return haystack.includes(keyword)
     })
   }, [dashboard.games, keyword])
-  const pageCount = Math.max(1, Math.ceil(visibleGames.length / pageSize))
+  const pageCount = Math.max(1, Math.ceil(visibleGames.length / LIBRARY_PAGE_SIZE))
   const safePage = Math.min(page, pageCount)
-  const pageGames = visibleGames.slice((safePage - 1) * pageSize, safePage * pageSize)
+  const pageGames = visibleGames.slice((safePage - 1) * LIBRARY_PAGE_SIZE, safePage * LIBRARY_PAGE_SIZE)
+  const pageStart = visibleGames.length === 0 ? 0 : (safePage - 1) * LIBRARY_PAGE_SIZE + 1
+  const pageEnd = Math.min(visibleGames.length, safePage * LIBRARY_PAGE_SIZE)
 
   useEffect(() => {
     setPage(1)
@@ -1406,13 +1419,24 @@ function LibraryPanel({
       />
       <div className="library-list-head">
         <span>{keyword ? '野狐棋谱' : '棋谱库'}</span>
-        <small>{visibleGames.length} 盘</small>
+        <small>{visibleGames.length} 盘 · {pageStart}-{pageEnd}</small>
       </div>
       <div className="game-list">
         {pageGames.map((game) => (
           <button key={game.id} className={`game-row ${selectedGame?.id === game.id ? 'is-active' : ''}`} onClick={() => onSelect(game.id)}>
-            <span>{gameDisplayName(game)}</span>
-            <small>{game.date || '未知日期'} · {game.result || '未知结果'} · {game.source === 'fox' ? 'Fox' : 'SGF'}</small>
+            <div className="game-row__title">
+              <span>{gameDisplayName(game)}</span>
+              {game.source === 'fox' ? (
+                <em className={`game-row__badge ${game.downloadStatus === 'downloaded' ? 'game-row__badge--downloaded' : 'game-row__badge--remote'}`}>
+                  {game.downloadStatus === 'downloaded' ? '已缓存' : '仅列表'}
+                </em>
+              ) : (
+                <em className="game-row__badge">本地</em>
+              )}
+            </div>
+            <small className="game-row__meta">
+              {game.date || '未知日期'} · {game.moveCount ? `${game.moveCount}手 · ` : ''}{game.result || '未知结果'}
+            </small>
           </button>
         ))}
         {pageGames.length === 0 ? <div className="empty-list">没有匹配的棋谱</div> : null}

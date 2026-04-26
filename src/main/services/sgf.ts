@@ -191,6 +191,11 @@ function sanitizeName(input: string): string {
   return input.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').toLowerCase()
 }
 
+export function foxSgfPathForGameId(gameId: string): string {
+  const targetDir = join(libraryDir, 'fox')
+  return join(targetDir, `${sanitizeName(gameId) || 'fox-game'}.sgf`)
+}
+
 export function importSgfFile(filePath: string, source: LibraryGame['source'], sourceLabel: string): LibraryGame {
   const content = readFileSync(filePath, 'utf8')
   const hash = createHash('sha1').update(content).digest('hex').slice(0, 12)
@@ -218,14 +223,17 @@ export function importSgfFile(filePath: string, source: LibraryGame['source'], s
   }
 }
 
-export function saveFoxSgf(content: string, title: string, sourceLabel: string): LibraryGame {
+export function saveFoxSgf(content: string, title: string, sourceLabel: string, baseGame?: Partial<LibraryGame>): LibraryGame {
   const hash = createHash('sha1').update(content).digest('hex').slice(0, 12)
+  const id = baseGame?.id || hash
   const targetDir = join(libraryDir, 'fox')
   mkdirSync(targetDir, { recursive: true })
-  const targetPath = join(targetDir, `${sanitizeName(title) || 'fox-game'}-${hash}.sgf`)
+  const targetPath = baseGame?.id
+    ? foxSgfPathForGameId(id)
+    : join(targetDir, `${sanitizeName(title) || 'fox-game'}-${hash}.sgf`)
   writeFileSync(targetPath, content, 'utf8')
   return {
-    id: hash,
+    id,
     title: sgfTitle(content, title),
     event: extract('EV', content),
     black: extract('PB', content),
@@ -235,7 +243,11 @@ export function saveFoxSgf(content: string, title: string, sourceLabel: string):
     source: 'fox',
     sourceLabel,
     filePath: targetPath,
-    createdAt: new Date().toISOString()
+    createdAt: baseGame?.createdAt || new Date().toISOString(),
+    downloadStatus: 'downloaded',
+    remoteId: baseGame?.remoteId,
+    remoteUid: baseGame?.remoteUid,
+    moveCount: baseGame?.moveCount
   }
 }
 

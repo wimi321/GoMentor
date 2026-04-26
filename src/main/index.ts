@@ -3,7 +3,7 @@ import { isAbsolute, relative, resolve, join } from 'node:path'
 import { appHome, findGame, getGames, getSettings, hasLlmApiKey, replaceSettings, setSettings, upsertGames } from './lib/store'
 import type { AnalyzeGameQuickRequest, AnalyzePositionRequest, AppSettings, DashboardData, FoxSyncRequest, KataGoBenchmarkRequest, LlmSettingsTestRequest, ReviewRequest, TeacherRunRequest } from './lib/types'
 import { importSgfFile, readGameRecord } from './services/sgf'
-import { syncFoxGames } from './services/fox'
+import { ensureFoxGameDownloaded, syncFoxGames } from './services/fox'
 import { runReview } from './services/review'
 import { applyDetectedDefaults, detectSystemProfile } from './services/systemProfile'
 import { runTeacherTask } from './services/teacherAgent'
@@ -235,7 +235,8 @@ app.whenReady().then(() => {
     if (!game) {
       throw new Error(`找不到棋谱: ${gameId}`)
     }
-    return readGameRecord(game)
+    const readyGame = await ensureFoxGameDownloaded(game)
+    return readGameRecord(readyGame)
   })
 
   ipcMain.handle('fox:sync', async (_event, payload: FoxSyncRequest) => {

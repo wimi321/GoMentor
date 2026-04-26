@@ -60,6 +60,10 @@ export interface LibraryGame {
   sourceLabel: string
   filePath: string
   createdAt: string
+  downloadStatus?: 'remote' | 'downloaded'
+  remoteId?: string
+  remoteUid?: string
+  moveCount?: number
 }
 
 export type StoneColor = 'B' | 'W'
