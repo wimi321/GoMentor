@@ -105,14 +105,14 @@
   stroke: rgba(19, 22, 25, 0.86);
 }
 
-.ks-candidate {
-  cursor: default;
-  pointer-events: auto;
-  transition: opacity var(--ks-motion-med, 180ms ease), transform var(--ks-motion-med, 180ms ease);
+.ks-candidates-layer {
+  pointer-events: none;
 }
 
-.ks-candidate:hover {
-  transform: translateY(-1.5px);
+.ks-candidate {
+  cursor: default;
+  pointer-events: none;
+  transition: opacity var(--ks-motion-med, 180ms ease);
 }
 
 .ks-candidate-soft-glow {
@@ -138,10 +138,6 @@
   opacity: 0.8;
 }
 
-.ks-candidate {
-  transition: opacity 120ms ease;
-}
-
 .ks-candidate--rank-3 {
   --ks-candidate-fill: #d3c052;
 }
@@ -158,7 +154,7 @@
 
 .ks-candidate-hitarea {
   fill: transparent;
-  pointer-events: fill;
+  pointer-events: none;
 }
 
 .ks-candidate-ring {
@@ -214,6 +210,20 @@
   fill: #b83328;
   font-size: 7.2px;
   font-weight: 560;
+}
+
+.ks-candidate--active .ks-candidate-soft-glow {
+  opacity: 0.82;
+}
+
+.ks-candidate--active .ks-candidate-ring {
+  stroke: rgba(255, 250, 232, 0.96);
+  stroke-width: 2;
+  filter: drop-shadow(0 4px 7px rgba(39, 25, 10, 0.26));
+}
+
+.ks-candidate--active .ks-candidate-disc {
+  stroke-width: 1.8;
 }
 
 .ks-variation-preview-layer {

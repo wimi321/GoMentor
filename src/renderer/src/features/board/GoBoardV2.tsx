@@ -151,14 +151,14 @@ function svgCursorPoint(event: BoardHoverEvent): { x: number; y: number } | null
 function CandidateMark({
   candidate,
   boardSize,
-  onHover
+  active = false
 }: {
   candidate: RenderCandidate
   boardSize: number
-  onHover?: (candidate: RenderCandidate | null, position?: CandidateTooltipPosition) => void
+  active?: boolean
 }): ReactElement {
   const p = xy(candidate, boardSize)
-  const className = `ks-candidate ks-candidate--${candidate.emphasis} ks-candidate--rank-${candidate.rank}`
+  const className = `ks-candidate ks-candidate--${candidate.emphasis} ks-candidate--rank-${candidate.rank}${active ? ' ks-candidate--active' : ''}`
   const scale = candidate.emphasis === 'primary' ? 1.02 : candidate.emphasis === 'secondary' ? 0.96 : 0.9
   const winrate = formatCandidateWinrate(candidate)
   const visits = formatCandidateVisits(candidate)
@@ -167,10 +167,6 @@ function CandidateMark({
     <g
       className={className}
       transform={`translate(${p.x} ${p.y}) scale(${scale})`}
-      onPointerEnter={(event) => {
-        const svg = event.currentTarget.ownerSVGElement
-        onHover?.(candidate, svg ? tooltipPosition(p, svg) : { x: p.x, y: p.y })
-      }}
     >
       <circle className="ks-candidate-hitarea" r="34" />
       <circle className="ks-candidate-soft-glow" r="25" />
@@ -195,12 +191,24 @@ function KeyMoveMark({ mark, boardSize }: { mark: RenderKeyMove; boardSize: numb
   )
 }
 
-function VariationPreview({ moves, boardSize }: { moves: RenderVariationMove[]; boardSize: number }): ReactElement | null {
+function VariationPreview({
+  moves,
+  boardSize,
+  anchor,
+  totalMoves
+}: {
+  moves: RenderVariationMove[]
+  boardSize: number
+  anchor?: BoardPoint | null
+  totalMoves?: number
+}): ReactElement | null {
   if (moves.length === 0) {
     return null
   }
   const points = moves.map((move) => xy(move, boardSize))
-  const path = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ')
+  const anchorPoint = anchor ? xy(anchor, boardSize) : null
+  const pathPoints = anchorPoint ? [anchorPoint, ...points] : points
+  const path = pathPoints.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ')
   const labelPoint = points[Math.min(points.length - 1, 1)] ?? points[0]
 
   return (
@@ -219,7 +227,7 @@ function VariationPreview({ moves, boardSize }: { moves: RenderVariationMove[]; 
       })}
       <g className="ks-variation-pv-label" transform={`translate(${Math.min(labelPoint.x + 32, VIEWBOX - 96)} ${Math.max(labelPoint.y - 30, 58)})`}>
         <rect x="-34" y="-13" width="68" height="26" rx="13" />
-        <text y="1">PV {moves.length}手</text>
+        <text y="1">PV {totalMoves ?? moves.length}手</text>
       </g>
     </g>
   )
@@ -256,6 +264,7 @@ export function GoBoardV2({ record, moveNumber, analysis = null, keyMoves = [], 
     () => activeCandidate ? candidateVariationMoves(activeCandidate.renderCandidate, boardSize, variationFirstColor) : [],
     [activeCandidate, boardSize, variationFirstColor]
   )
+  const variationPreviewMoves = useMemo(() => variationMoves.filter((move) => !move.isFirst), [variationMoves])
   const lastStone = stones[stones.length - 1]
   const letters = coordinateLetters(boardSize)
   const lines = Array.from({ length: boardSize }, (_, index) => index)
@@ -265,6 +274,26 @@ export function GoBoardV2({ record, moveNumber, analysis = null, keyMoves = [], 
     onCandidateHover?.(candidate)
   }
 
+  function sameCandidate(left: RenderCandidate | null | undefined, right: RenderCandidate | null | undefined): boolean {
+    return Boolean(left && right && left.rank === right.rank && left.label === right.label)
+  }
+
+  function cursorInActivePreview(cursor: { x: number; y: number }, cell: number): boolean {
+    if (!hoveredCandidate) {
+      return false
+    }
+    const activePoint = xy(hoveredCandidate.renderCandidate, boardSize)
+    const activeExitRadius = Math.max(54, cell * 1.03)
+    if (Math.hypot(activePoint.x - cursor.x, activePoint.y - cursor.y) <= activeExitRadius) {
+      return true
+    }
+    const variationStickyRadius = Math.max(28, cell * 0.52)
+    return variationPreviewMoves.some((move) => {
+      const point = xy(move, boardSize)
+      return Math.hypot(point.x - cursor.x, point.y - cursor.y) <= variationStickyRadius
+    })
+  }
+
   function handleBoardPointerMove(event: BoardHoverEvent): void {
     const cursor = svgCursorPoint(event)
     if (!cursor) {
@@ -272,6 +301,9 @@ export function GoBoardV2({ record, moveNumber, analysis = null, keyMoves = [], 
     }
     const cell = INNER / (boardSize - 1)
     const hitRadius = Math.max(38, cell * 0.78)
+    if (cursorInActivePreview(cursor, cell)) {
+      return
+    }
     let nearest: { candidate: RenderCandidate; point: { x: number; y: number }; distance: number } | null = null
     for (const candidate of candidates) {
       const point = xy(candidate, boardSize)
@@ -286,7 +318,7 @@ export function GoBoardV2({ record, moveNumber, analysis = null, keyMoves = [], 
       }
       return
     }
-    if (hoveredCandidate?.renderCandidate.rank === nearest.candidate.rank && hoveredCandidate.renderCandidate.label === nearest.candidate.label) {
+    if (sameCandidate(hoveredCandidate?.renderCandidate, nearest.candidate)) {
       return
     }
     handleCandidateHover(nearest.candidate, tooltipPosition(nearest.point, event.currentTarget))
@@ -422,13 +454,23 @@ export function GoBoardV2({ record, moveNumber, analysis = null, keyMoves = [], 
           })}
         </g>
 
-        <VariationPreview moves={variationMoves} boardSize={boardSize} />
-
         <g className="ks-candidates-layer">
           {candidates.map((candidate) => (
-            <CandidateMark key={`${candidate.rank}-${candidate.label}`} candidate={candidate} boardSize={boardSize} onHover={handleCandidateHover} />
+            <CandidateMark
+              key={`${candidate.rank}-${candidate.label}`}
+              candidate={candidate}
+              boardSize={boardSize}
+              active={sameCandidate(activeCandidate?.renderCandidate, candidate)}
+            />
           ))}
         </g>
+
+        <VariationPreview
+          moves={variationPreviewMoves}
+          boardSize={boardSize}
+          anchor={activeCandidate?.renderCandidate ?? null}
+          totalMoves={variationMoves.length}
+        />
 
         {playedMove ? (
           <g className="ks-played-move-layer">
