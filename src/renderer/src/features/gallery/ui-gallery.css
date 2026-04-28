@@ -102,11 +102,14 @@
 }
 
 .ui-gallery__panel-head strong {
+  color: rgb(248 244 235 / 0.94);
   font-size: 14px;
+  font-weight: 850;
+  letter-spacing: 0;
 }
 
 .ui-gallery__panel-head span {
-  color: var(--ks-text-faint);
+  color: rgb(232 219 190 / 0.72);
   font-size: 12px;
   font-weight: 800;
 }

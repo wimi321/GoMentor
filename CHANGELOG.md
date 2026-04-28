@@ -4,6 +4,17 @@ All notable changes to GoMentor will be documented here.
 
 This project follows semantic versioning once public releases begin.
 
+## 0.3.1 - Teacher Smoke Fixes
+
+### Fixed
+
+- Teacher structured-result parsing now handles JSON followed by evidence verification notes.
+- Pure JSON teacher responses are converted into readable markdown instead of being shown as raw JSON.
+- Natural markdown teacher responses now populate a structured headline from the first meaningful line.
+- Teacher runtime now supplies fallback training problem recommendations from weak or joseki-linked matches when strong tactical matches do not provide drills.
+- Teacher LLM smoke now validates the evidence verifier happy path and no longer depends on removed legacy prompt wording.
+- UI Gallery dark panel headers now have sufficient contrast for visual QA screenshots.
+
 ## 0.3.0 - Teaching Knowledge v5
 
 ### Added

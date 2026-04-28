@@ -573,7 +573,7 @@ async function runCurrentMove(request: TeacherRunRequest, logs: TeacherToolLog[]
     maxResults: 4
   }
   const knowledgeMatches = searchKnowledgeMatches({ ...knowledgeQuery, maxResults: 8 })
-  const recommendedProblems = recommendedProblemsFromMatches(knowledgeMatches, 3)
+  const recommendedProblems = recommendedProblemsFromMatches(knowledgeMatches, 3, { includeWeakFallback: true, includeJosekiFallback: true, includeDrillFallback: true })
   const knowledge = searchKnowledge(knowledgeQuery)
   const recognizedMotifs = recognizeTeachingMotifs({ ...knowledgeQuery, maxResults: 8 }, analysis, knowledgeMatches, knowledge)
   const teachingEvidence = buildTeachingEvidence(request, analysis, knowledge, profile, knowledgeMatches, recommendedProblems, recognizedMotifs)
@@ -779,7 +779,7 @@ async function runBatchReview(request: TeacherRunRequest, logs: TeacherToolLog[]
     maxResults: 4
   }
   const knowledgeMatches = searchKnowledgeMatches({ ...knowledgeQuery, maxResults: 8 })
-  const recommendedProblems = recommendedProblemsFromMatches(knowledgeMatches, 3)
+  const recommendedProblems = recommendedProblemsFromMatches(knowledgeMatches, 3, { includeWeakFallback: true, includeJosekiFallback: true, includeDrillFallback: true })
   const knowledge = searchKnowledge(knowledgeQuery)
   if (knowledgeMatches.some((match) => match.confidence !== 'weak')) {
     profileUpdate = updateStudentProfile(studentName, {
@@ -918,7 +918,7 @@ async function runGameReview(request: TeacherRunRequest, logs: TeacherToolLog[],
     maxResults: 4
   }
   const knowledgeMatches = searchKnowledgeMatches({ ...knowledgeQuery, maxResults: 8 })
-  const recommendedProblems = recommendedProblemsFromMatches(knowledgeMatches, 3)
+  const recommendedProblems = recommendedProblemsFromMatches(knowledgeMatches, 3, { includeWeakFallback: true, includeJosekiFallback: true, includeDrillFallback: true })
   const knowledge = searchKnowledge(knowledgeQuery)
   if (knowledgeMatches.some((match) => match.confidence !== 'weak')) {
     updatedProfile = updateStudentProfile(studentName, {
@@ -1013,7 +1013,7 @@ async function runTrainingPlan(request: TeacherRunRequest, logs: TeacherToolLog[
     maxResults: 4
   }
   const knowledgeMatches = searchKnowledgeMatches({ ...knowledgeQuery, maxResults: 8 })
-  const recommendedProblems = recommendedProblemsFromMatches(knowledgeMatches, 3)
+  const recommendedProblems = recommendedProblemsFromMatches(knowledgeMatches, 3, { includeWeakFallback: true, includeJosekiFallback: true, includeDrillFallback: true })
   const knowledge = searchKnowledge(knowledgeQuery)
   finishTool(knowledgeLog, 'done', `选中 ${knowledge.length} 条知识卡片，匹配 ${knowledgeMatches.length} 个训练主题，推荐 ${recommendedProblems.length} 道题。`)
   emitToolState(context, logs, '训练主题知识卡片已就绪。')
@@ -1185,7 +1185,7 @@ async function runOpenEndedTask(request: TeacherRunRequest, logs: TeacherToolLog
     contextTags: [...themesFromProfile(profile), ...request.prompt.split(/[，。！？\s,.!?]/).filter((token) => token.length >= 2).slice(0, 8)],
     maxResults: 8
   })
-  const recommendedProblems = recommendedProblemsFromMatches(knowledgeMatches, 3)
+  const recommendedProblems = recommendedProblemsFromMatches(knowledgeMatches, 3, { includeWeakFallback: true, includeJosekiFallback: true, includeDrillFallback: true })
   finishTool(knowledgeLog, 'done', `选中 ${knowledge.length} 条知识卡片，匹配 ${knowledgeMatches.length} 个棋形，推荐 ${recommendedProblems.length} 道题。`)
   emitToolState(context, logs, '本地知识卡片已选好。')
 

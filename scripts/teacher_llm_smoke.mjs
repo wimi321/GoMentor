@@ -65,8 +65,8 @@ async function startMockLlmServer(port) {
         keyMistakes: [{
           moveNumber: 8,
           color: 'W',
-          played: 'Q4',
-          recommended: 'D16',
+          played: 'R3',
+          recommended: 'P4',
           errorType: '方向',
           severity: 'mistake',
           evidence: 'mock LLM 已收到 KataGo facts、知识卡和棋盘图片。',
@@ -300,7 +300,7 @@ async function main() {
     assert.ok(result.knowledgeMatchCount >= 1, 'Teacher runtime should return structured knowledge matches')
     assert.ok(result.recommendedProblemCount >= 1, 'Teacher runtime should return recommended training problems')
     assert.ok(result.markdown.includes('本手要先抢全局最大点') || result.markdown.includes('KataGo'), 'Teacher markdown should be visible')
-    for (const tool of ['board.captureTeachingImage', 'katago.analyzePosition', 'knowledge.searchLocal', 'llm.multimodalTeacher', 'studentProfile.write']) {
+    for (const tool of ['board.captureTeachingImage', 'katago.analyzePosition', 'knowledge.searchLocal', 'llm.multimodalTeacher', 'teacher.verifyEvidence', 'studentProfile.write']) {
       assert.equal(result.toolLogs.find((log) => log.name === tool)?.status, 'done', `${tool} should finish`)
     }
     assert.ok(result.reportPath, 'Teacher runtime should persist a report')
@@ -319,7 +319,7 @@ async function main() {
     assert.match(teacherPayload, /knowledgePacket/)
     assert.match(teacherPayload, /knowledgeMatches/)
     assert.match(teacherPayload, /recommendedProblems/)
-    assert.match(teacherPayload, /partial 匹配只能说/)
+    assert.match(teacherPayload, /confidence|置信度|不能当成事实/)
     assert.match(teacherPayload, /studentProfile/)
 
     console.log('Teacher LLM smoke passed')

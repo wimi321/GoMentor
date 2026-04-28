@@ -941,21 +941,60 @@ export function searchKnowledgeMatchEngine(dataRoot: string, query: KnowledgeMat
     .slice(0, query.maxResults ?? 8)
 }
 
-export function recommendedProblemsFromMatches(matches: KnowledgeMatch[], limit = 3): RecommendedProblem[] {
-  const seen = new Set<string>()
-  const problems: RecommendedProblem[] = []
+interface RecommendedProblemOptions {
+  includeWeakFallback?: boolean
+  includeJosekiFallback?: boolean
+  includeDrillFallback?: boolean
+}
+
+function collectRelatedProblems(
+  matches: KnowledgeMatch[],
+  limit: number,
+  predicate: (match: KnowledgeMatch) => boolean,
+  seen: Set<string>,
+  problems: RecommendedProblem[]
+): boolean {
   for (const match of matches) {
-    if (match.confidence === 'weak' || match.matchType === 'joseki') {
-      continue
-    }
+    if (!predicate(match)) continue
     for (const problem of match.relatedProblems) {
       if (!seen.has(problem.id)) {
         seen.add(problem.id)
         problems.push(problem)
       }
-      if (problems.length >= limit) {
-        return problems
-      }
+      if (problems.length >= limit) return true
+    }
+  }
+  return false
+}
+
+export function recommendedProblemsFromMatches(matches: KnowledgeMatch[], limit = 3, options: RecommendedProblemOptions = {}): RecommendedProblem[] {
+  const seen = new Set<string>()
+  const problems: RecommendedProblem[] = []
+  if (collectRelatedProblems(matches, limit, (match) => match.confidence !== 'weak' && match.matchType !== 'joseki', seen, problems)) return problems
+  if (options.includeWeakFallback) {
+    if (collectRelatedProblems(matches, limit, (match) => match.confidence === 'weak' && match.matchType !== 'joseki', seen, problems)) return problems
+  }
+  if (options.includeJosekiFallback) {
+    if (collectRelatedProblems(matches, limit, (match) => match.matchType === 'joseki', seen, problems)) return problems
+  }
+  if (options.includeDrillFallback) {
+    for (const match of matches) {
+      const drill = match.teachingPayload.drills.find(Boolean)
+      if (!drill) continue
+      const id = `drill-${match.id}`
+      if (seen.has(id)) continue
+      seen.add(id)
+      problems.push({
+        id,
+        title: `${match.title}：专项训练`,
+        problemType: match.matchType === 'life_death' ? 'life_death' : 'tesuji',
+        difficulty: match.confidence === 'exact' || match.confidence === 'strong' ? 'standard' : 'review',
+        objective: match.teachingPayload.correctIdea || match.teachingPayload.summary,
+        firstHint: match.teachingPayload.memoryCue || match.teachingPayload.recognition,
+        answerSummary: drill,
+        tags: [match.matchType, ...match.reason.slice(0, 4)]
+      })
+      if (problems.length >= limit) return problems
     }
   }
   return problems
