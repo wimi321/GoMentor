@@ -4,6 +4,20 @@ All notable changes to GoMentor will be documented here.
 
 This project follows semantic versioning once public releases begin.
 
+## 0.3.3 - Teacher Pacing Control
+
+### Added
+
+- Current-move teacher analysis now includes internal pacing advice so common joseki can be explained briefly while middle-game fights receive deeper human-style commentary.
+- Added teaching density modes: `minimal`, `branch`, `detailed`, and `caution`.
+- Added variation teaching hints that tell the LLM when to explain purpose, expected reply, PV continuation, and practical result.
+
+### Improved
+
+- Current-move prompt now explicitly asks the teacher to control explanation length: say less for routine joseki, show key branches for joseki variations, and explain purpose/reply/follow-up for middle-game fighting.
+- KataGo and knowledge tool results now carry `teachingPacing` to the agent without changing the visible UI into a report.
+- Real LLM smoke now validates the agent runtime output instead of expecting the removed legacy `llm.multimodalTeacher` log.
+
 ## 0.3.2 - Agent Runtime and Analysis Polish
 
 ### Added

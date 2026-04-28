@@ -39,14 +39,14 @@ GoMentor là ứng dụng desktop local-first cho người học và giáo viên
 
 Bản phát hành công khai:
 
-[GoMentor v0.3.2](https://github.com/wimi321/GoMentor/releases/tag/v0.3.2)
+[GoMentor v0.3.3](https://github.com/wimi321/GoMentor/releases/tag/v0.3.3)
 
 | Nền tảng | Tải xuống |
 | --- | --- |
-| macOS Apple Silicon | [DMG](https://github.com/wimi321/GoMentor/releases/download/v0.3.2/GoMentor-0.3.2-mac-arm64.dmg) |
-| macOS Intel | [DMG](https://github.com/wimi321/GoMentor/releases/download/v0.3.2/GoMentor-0.3.2-mac-x64.dmg) |
-| Windows x64 portable ZIP | [ZIP](https://github.com/wimi321/GoMentor/releases/download/v0.3.2/GoMentor-0.3.2-win-x64-portable.zip) |
-| Windows x64 installer | [EXE](https://github.com/wimi321/GoMentor/releases/download/v0.3.2/GoMentor-0.3.2-win-x64.exe) |
+| macOS Apple Silicon | [DMG](https://github.com/wimi321/GoMentor/releases/download/v0.3.3/GoMentor-0.3.3-mac-arm64.dmg) |
+| macOS Intel | [DMG](https://github.com/wimi321/GoMentor/releases/download/v0.3.3/GoMentor-0.3.3-mac-x64.dmg) |
+| Windows x64 portable ZIP | [ZIP](https://github.com/wimi321/GoMentor/releases/download/v0.3.3/GoMentor-0.3.3-win-x64-portable.zip) |
+| Windows x64 installer | [EXE](https://github.com/wimi321/GoMentor/releases/download/v0.3.3/GoMentor-0.3.3-win-x64.exe) |
 
 Lưu ý: bản phát hành hiện chưa được ký và notarize trên macOS, cũng chưa được code-sign trên Windows, vì vậy hệ điều hành có thể hiển thị cảnh báo bảo mật.
 

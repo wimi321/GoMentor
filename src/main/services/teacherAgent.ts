@@ -14,6 +14,7 @@ import type {
   ReviewArtifact,
   StructuredTeacherResult,
   StudentProfile,
+  TeachingPacingAdvice,
   TeacherRunRequest,
   TeacherRunProgress,
   TeacherRunResult,
@@ -30,6 +31,7 @@ import { runReview } from './review'
 import { applyDetectedDefaults, detectSystemProfile } from './systemProfile'
 import { parseStructuredTeacherResult } from './teacher/structuredResultParser'
 import { classifyTeacherIntent, type TeacherIntent } from './teacher/intentClassifier'
+import { buildTeachingPacingAdvice } from './teacher/teachingEvidence'
 import { streamOpenAICompatibleToolTurn } from './llm/openaiCompatibleProvider'
 
 type TeacherProgressEmitter = (progress: TeacherRunProgress) => void
@@ -286,6 +288,8 @@ function systemPrompt(level: CoachUserLevel): string {
     '工具结果和 KataGo 是事实依据。',
     '不要编造坐标、胜率、PV、定式名或来源。',
     '强匹配才能明确说定式、死活型或手筋名；相似匹配只能说“像某某型”。',
+    '把握讲解火候：常规定式少讲，分支列变化，中盘战详细讲目的和后续。',
+    '如果工具结果给出 teachingDensity，就按它控制详略：minimal 很短，branch 讲 1-2 个关键变化，detailed 讲目的、应手、后续变化和实战评价，caution 只说倾向。',
     '像老师讲棋：先帮学生看懂棋形和判断方法，再自然引用必要证据；不要按固定栏目或机器报告口吻堆字段。',
     `学生水平：${level}。`
   ].join('\n')
@@ -363,6 +367,7 @@ interface TeacherAgentSessionState {
   knowledge: KnowledgePacket[]
   knowledgeMatches: KnowledgeMatch[]
   recommendedProblems: RecommendedProblem[]
+  teachingPacing?: TeachingPacingAdvice
   finalMarkdown: string
 }
 
@@ -511,6 +516,7 @@ function initialAgentUserMessage(state: TeacherAgentSessionState): ChatMessage {
   const text = [
     '任务说明：请根据 intent 完成用户请求。',
     '如果 intent 是 current-move，请先观察随消息附带的棋盘图片，再调用 KataGo 和知识库工具核对事实。',
+    '当前手讲解要按工具返回的 teachingDensity 掌握详略：常规定式少讲；定式分支或相似型列关键变化；中盘战、攻杀、转换要讲目的、对方应手、后续变化和实战评价。',
     'boardImageAttached=true 表示本轮用户消息已附棋盘图，请把图片中的棋形、厚薄、急所和全局方向作为局面判断依据。',
     'prefetchedAnalysisAvailable=true 表示 katago.analyzePosition 可复用已缓存的 KataGo 分析结果。',
     '上下文JSON：',
@@ -543,6 +549,7 @@ function summarizeGames(games: LibraryGame[]): Array<Pick<LibraryGame, 'id' | 't
 }
 
 function compactAnalysis(analysis: KataGoMoveAnalysis): JsonObject {
+  const teachingPacing = buildTeachingPacingAdvice(analysis)
   return {
     gameId: analysis.gameId,
     moveNumber: analysis.moveNumber,
@@ -559,7 +566,8 @@ function compactAnalysis(analysis: KataGoMoveAnalysis): JsonObject {
       scoreLead: analysis.after.scoreLead,
       topMoves: analysis.after.topMoves.slice(0, 5)
     },
-    playedMove: analysis.playedMove
+    playedMove: analysis.playedMove,
+    teachingPacing
   }
 }
 
@@ -567,6 +575,7 @@ async function knowledgeBundleForState(state: TeacherAgentSessionState, input: J
   knowledge: KnowledgePacket[]
   knowledgeMatches: KnowledgeMatch[]
   recommendedProblems: RecommendedProblem[]
+  teachingPacing?: TeachingPacingAdvice
 }> {
   const record = await ensureSessionRecord(state).catch(() => undefined)
   const analysis = state.lastAnalysis
@@ -603,10 +612,12 @@ async function knowledgeBundleForState(state: TeacherAgentSessionState, input: J
   const knowledgeMatches = searchKnowledgeMatches({ ...query, maxResults: 8 })
   const recommendedProblems = recommendedProblemsFromMatches(knowledgeMatches, 3, { includeWeakFallback: true, includeJosekiFallback: true, includeDrillFallback: true })
   const knowledge = searchKnowledge(query)
+  const teachingPacing = analysis ? buildTeachingPacingAdvice(analysis, knowledgeMatches) : undefined
   state.knowledge = knowledge
   state.knowledgeMatches = knowledgeMatches
   state.recommendedProblems = recommendedProblems
-  return { knowledge, knowledgeMatches, recommendedProblems }
+  state.teachingPacing = teachingPacing
+  return { knowledge, knowledgeMatches, recommendedProblems, teachingPacing }
 }
 
 function dangerousShellCommand(command: string): string | null {
@@ -761,6 +772,7 @@ function createTeacherAgentTools(state: TeacherAgentSessionState): TeacherAgentT
           ? prefetched
           : await analyzePosition(gameId, moveNumber, numberInput(input, 'maxVisits', 520, 40, 3000))
         state.lastAnalysis = analysis
+        state.teachingPacing = buildTeachingPacingAdvice(analysis)
         return compactAnalysis(analysis)
       }
     },
@@ -1041,6 +1053,7 @@ async function runTeacherAgentSession(
   }
   if (request.prefetchedAnalysis) {
     state.lastAnalysis = request.prefetchedAnalysis
+    state.teachingPacing = buildTeachingPacingAdvice(request.prefetchedAnalysis)
   }
 
   const settings = providerSettingsFromApp()
@@ -1112,6 +1125,7 @@ async function runTeacherAgentSession(
     knowledge: state.knowledge,
     knowledgeMatches: state.knowledgeMatches,
     recommendedProblems: state.recommendedProblems,
+    teachingPacing: state.teachingPacing,
     studentProfile: state.profile,
     structured
   })
@@ -1125,6 +1139,7 @@ async function runTeacherAgentSession(
     knowledge: state.knowledge,
     knowledgeMatches: state.knowledgeMatches,
     recommendedProblems: state.recommendedProblems,
+    teachingPacing: state.teachingPacing,
     studentProfile: state.profile,
     structured,
     structuredResult: structured,

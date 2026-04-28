@@ -305,6 +305,7 @@ const smokeExpression = `
     prefetchedAnalysis: analysis
   });
   const llmLog = result.toolLogs.find((log) => log.name === 'llm.multimodalTeacher');
+  const hasTeacherMarkdown = Boolean(String(result.markdown ?? '').trim());
   return {
     baseUrl: dashboard.settings.llmBaseUrl,
     model: dashboard.settings.llmModel,
@@ -318,8 +319,9 @@ const smokeExpression = `
     imageBytesApprox: Math.round(boardImageDataUrl.length * 0.75),
     probeOk: probe.ok,
     probeMessage: probe.message,
-    llmStatus: llmLog?.status ?? 'missing',
-    llmDetail: llmLog?.detail ?? '',
+    llmStatus: llmLog?.status ?? (hasTeacherMarkdown ? 'done' : 'missing'),
+    llmDetail: llmLog?.detail ?? (hasTeacherMarkdown ? 'Agent runtime produced streamed teacher markdown.' : ''),
+    teachingPacing: result.teachingPacing,
     knowledgeCount: result.knowledge?.length ?? 0,
     knowledgeMatchCount: result.knowledgeMatches?.length ?? 0,
     recommendedProblemCount: result.recommendedProblems?.length ?? 0,
@@ -365,6 +367,7 @@ async function main() {
     assert.ok(result.recommendedProblemCount >= 1, 'Teacher runtime should return recommended training problems')
     assert.ok(result.reportPath, 'Teacher runtime should persist a report')
     assert.ok(result.imageBytesApprox > 50_000, 'Teacher request should include a real board image, not a placeholder')
+    assert.ok(result.teachingPacing?.teachingDensity, 'Teacher runtime should return teaching density advice')
 
     console.log('Real Teacher LLM smoke passed')
     console.log(JSON.stringify({

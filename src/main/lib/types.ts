@@ -284,6 +284,25 @@ export interface KnowledgeMatch {
   relatedProblems: RecommendedProblem[]
 }
 
+export type TeachingDensity = 'minimal' | 'branch' | 'detailed' | 'caution'
+export type TeachingFocus = 'joseki-normal' | 'joseki-branch' | 'middlegame-fight' | 'life-death' | 'tesuji' | 'endgame' | 'general-shape'
+
+export interface VariationTeachingHint {
+  move: string
+  purpose: string
+  expectedReply?: string
+  pv: string[]
+  result: string
+  confidence: 'high' | 'medium' | 'low'
+}
+
+export interface TeachingPacingAdvice {
+  teachingDensity: TeachingDensity
+  teachingFocus: TeachingFocus
+  whyThisMuchExplanation: string
+  variationTeachingHints: VariationTeachingHint[]
+}
+
 export interface KataGoCandidate {
   move: string
   winrate: number
@@ -467,6 +486,7 @@ export interface TeacherRunResult {
   toolLogs: TeacherToolLog[]
   analysis?: KataGoMoveAnalysis
   teachingEvidence?: unknown
+  teachingPacing?: TeachingPacingAdvice
   verification?: unknown
   knowledge: KnowledgePacket[]
   knowledgeMatches?: KnowledgeMatch[]

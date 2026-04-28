@@ -7,6 +7,9 @@ import type {
   RecommendedProblem,
   StoneColor,
   StudentProfile,
+  TeachingDensity,
+  TeachingFocus,
+  TeachingPacingAdvice,
   TeacherRunRequest
 } from '@main/lib/types'
 import type { RecognizedTeachingMotif } from '../knowledge/motifRecognizer'
@@ -81,6 +84,10 @@ export interface TeachingEvidence {
     whyMatched: string
   }>
   recommendedProblems: RecommendedProblem[]
+  teachingDensity: TeachingDensity
+  teachingFocus: TeachingFocus
+  whyThisMuchExplanation: string
+  variationTeachingHints: TeachingPacingAdvice['variationTeachingHints']
   student: {
     id?: string
     level: CoachUserLevel
@@ -188,6 +195,128 @@ function labelCandidate(index: number): TeachingEvidenceCandidate['humanLabel'] 
   return 'variation'
 }
 
+function strongMatch(match: KnowledgeMatch | undefined): boolean {
+  return Boolean(match && (match.confidence === 'exact' || match.confidence === 'strong'))
+}
+
+function matchByType(matches: KnowledgeMatch[], type: KnowledgeMatch['matchType']): KnowledgeMatch | undefined {
+  return matches.find((match) => match.matchType === type)
+}
+
+function recognizedJoseki(motifs: RecognizedTeachingMotif[]): RecognizedTeachingMotif | undefined {
+  return motifs.find((motif) => motif.motifType.startsWith('joseki:') && (motif.confidence === 'strong' || motif.confidence === 'medium'))
+}
+
+function focusFromEvidence(
+  phase: TeachingPhase,
+  loss: number,
+  knowledgeMatches: KnowledgeMatch[],
+  recognizedMotifs: RecognizedTeachingMotif[]
+): TeachingFocus {
+  const lifeDeath = matchByType(knowledgeMatches, 'life_death')
+  if (strongMatch(lifeDeath)) return 'life-death'
+
+  const tesuji = matchByType(knowledgeMatches, 'tesuji')
+  if (strongMatch(tesuji)) return 'tesuji'
+
+  const joseki = matchByType(knowledgeMatches, 'joseki')
+  if (phase === 'opening' && (strongMatch(joseki) || recognizedJoseki(recognizedMotifs))) {
+    return loss < 2 ? 'joseki-normal' : 'joseki-branch'
+  }
+  if (joseki?.confidence === 'partial') return 'joseki-branch'
+  if (phase === 'middle') return 'middlegame-fight'
+  if (phase === 'endgame') return 'endgame'
+  return 'general-shape'
+}
+
+function candidateConfidence(visits: number): 'high' | 'medium' | 'low' {
+  if (visits >= 250) return 'high'
+  if (visits >= 80) return 'medium'
+  return 'low'
+}
+
+function hintPurpose(label: TeachingEvidenceCandidate['humanLabel'], focus: TeachingFocus, isActual: boolean): string {
+  if (isActual) return '实战选择，用来检验对方正常应对后为什么会稍亏或可行。'
+  if (label === 'best') {
+    if (focus === 'middlegame-fight') return '首选变化，用来说明这手的作战目的和后续攻防收益。'
+    if (focus === 'joseki-branch') return '首选分支，用来比较这个定式/布局选择的方向。'
+    if (focus === 'life-death' || focus === 'tesuji') return '首选急所，用来读清局部成立的第一步。'
+    return '首选变化，用来校准全局方向。'
+  }
+  return '可下分支，用来说明选择条件和代价。'
+}
+
+function uniqueHintCandidates(analysis: KataGoMoveAnalysis): TeachingEvidenceCandidate[] {
+  const candidates = (analysis.before.topMoves ?? []).slice(0, 3).map((move, index) => ({
+    move: move.move,
+    winrate: round(move.winrate, 2),
+    scoreLead: round(move.scoreLead, 2),
+    visits: move.visits ?? 0,
+    order: move.order,
+    pv: (move.pv ?? []).slice(0, 8),
+    rank: index + 1,
+    humanLabel: labelCandidate(index)
+  }))
+  const actualMove = analysis.playedMove?.move
+  const playedCandidate = actualMove ? candidates.find((candidate) => candidate.move === actualMove) : undefined
+  const selected = [candidates[0], playedCandidate, candidates[1]].filter(Boolean) as TeachingEvidenceCandidate[]
+  return selected.filter((candidate, index, all) => all.findIndex((item) => item.move === candidate.move) === index).slice(0, 3)
+}
+
+export function buildTeachingPacingAdvice(
+  analysis: KataGoMoveAnalysis,
+  knowledgeMatches: KnowledgeMatch[] = [],
+  recognizedMotifs: RecognizedTeachingMotif[] = []
+): TeachingPacingAdvice {
+  const phase = inferPhase(analysis.moveNumber)
+  const winrateLoss = round(analysis.playedMove?.winrateLoss ?? 0, 2)
+  const scoreLoss = round(analysis.playedMove?.scoreLoss ?? 0, 2)
+  const severity = inferSeverity(winrateLoss, scoreLoss, analysis.judgement)
+  const confidence = inferConfidence(analysis, severity)
+  const focus = focusFromEvidence(phase, winrateLoss, knowledgeMatches, recognizedMotifs)
+  const joseki = matchByType(knowledgeMatches, 'joseki')
+  const tactical = strongMatch(matchByType(knowledgeMatches, 'life_death')) || strongMatch(matchByType(knowledgeMatches, 'tesuji'))
+  const hasJosekiBranch = Boolean(joseki && (joseki.confidence === 'partial' || (joseki.teachingPayload?.keyVariations?.length ?? 0) > 0 || winrateLoss >= 2))
+
+  let teachingDensity: TeachingDensity = 'branch'
+  let whyThisMuchExplanation = '局面需要说明选择条件，但不必展开成完整报告。'
+
+  if (confidence.confidence === 'low') {
+    teachingDensity = 'caution'
+    whyThisMuchExplanation = 'KataGo 搜索或实战手证据还不够强，只能讲判断倾向，不能下绝对结论。'
+  } else if (tactical || phase === 'middle' || severity === 'mistake' || severity === 'blunder' || winrateLoss >= 7 || scoreLoss >= 4) {
+    teachingDensity = 'detailed'
+    whyThisMuchExplanation = '这是中盘战、急所计算或明显损失局面，需要讲清这手目的、对方应手、PV 后续和实战代价。'
+  } else if (hasJosekiBranch || focus === 'joseki-branch' || (phase === 'opening' && winrateLoss >= 2)) {
+    teachingDensity = 'branch'
+    whyThisMuchExplanation = '这是定式分支、布局选择或相似型局面，适合列 1-2 个关键变化和选择条件。'
+  } else if ((focus === 'joseki-normal' && winrateLoss < 2) || (severity === 'good' && winrateLoss < 2)) {
+    teachingDensity = 'minimal'
+    whyThisMuchExplanation = '这是常规定式或损失很小的正常选择，只点明棋形方向即可，不需要长篇讲解。'
+  }
+
+  const actualMove = analysis.playedMove?.move
+  const variationTeachingHints = uniqueHintCandidates(analysis).map((candidate) => {
+    const expectedReply = candidate.pv.find((move) => move !== candidate.move)
+    const isActual = Boolean(actualMove && candidate.move === actualMove)
+    return {
+      move: candidate.move,
+      purpose: hintPurpose(candidate.humanLabel, focus, isActual),
+      expectedReply,
+      pv: candidate.pv.slice(0, 6),
+      result: `胜率 ${round(candidate.winrate, 1)}%，目差 ${round(candidate.scoreLead, 1)}，搜索 ${candidate.visits}。`,
+      confidence: candidateConfidence(candidate.visits)
+    }
+  })
+
+  return {
+    teachingDensity,
+    teachingFocus: focus,
+    whyThisMuchExplanation,
+    variationTeachingHints
+  }
+}
+
 function knowledgeWhy(match: KnowledgeMatch, knowledge: KnowledgePacket[]): string {
   const packet = knowledge.find((card) => card.id === match.id || card.title === match.title)
   const reasons = [...(match.reason ?? []), match.teachingPayload?.recognition, packet?.summary].filter(Boolean).slice(0, 3)
@@ -226,6 +355,7 @@ export function buildTeachingEvidence(
   const scoreLoss = round(analysis.playedMove?.scoreLoss ?? 0, 2)
   const severity = inferSeverity(winrateLoss, scoreLoss, analysis.judgement)
   const confidence = inferConfidence(analysis, severity)
+  const teachingPacing = buildTeachingPacingAdvice(analysis, knowledgeMatches, recognizedMotifs)
 
   const bestCandidates = (analysis.before.topMoves ?? []).slice(0, 5).map((move, index) => ({
     move: move.move,
@@ -300,6 +430,10 @@ export function buildTeachingEvidence(
       whyMatched: knowledgeWhy(match, knowledge)
     })),
     recommendedProblems,
+    teachingDensity: teachingPacing.teachingDensity,
+    teachingFocus: teachingPacing.teachingFocus,
+    whyThisMuchExplanation: teachingPacing.whyThisMuchExplanation,
+    variationTeachingHints: teachingPacing.variationTeachingHints,
     student: {
       id: profile?.id,
       level: profile?.userLevel ?? 'intermediate',
