@@ -6,7 +6,11 @@
     "license": "MIT-style LICENSE in repository",
     "status": "taxonomy-reference-only",
     "why": "The repository documents a large tsumego app and exposes useful training categories, but its problem folders reference classic book collections. GoMentor should not import raw positions from those books without a separate rights review.",
-    "usedFor": ["life-death taxonomy", "difficulty ladder", "training-card coverage planning"]
+    "usedFor": [
+      "life-death taxonomy",
+      "difficulty ladder",
+      "training-card coverage planning"
+    ]
   },
   {
     "id": "github_szalonysamuraj_joseki_master",
@@ -15,7 +19,11 @@
     "license": "MIT",
     "status": "safe-for-structural-reference",
     "why": "The repository is MIT licensed and its collection names give a compact joseki training taxonomy. GoMentor uses original teaching summaries rather than copying collection data verbatim.",
-    "usedFor": ["star-point joseki families", "komoku joseki families", "joseki training taxonomy"]
+    "usedFor": [
+      "star-point joseki families",
+      "komoku joseki families",
+      "joseki training taxonomy"
+    ]
   },
   {
     "id": "github_billyellow_kogo",
@@ -24,7 +32,9 @@
     "license": "not found",
     "status": "do-not-import",
     "why": "The repository contains a translated SGF but no explicit license. It is useful only as a reminder that joseki content needs careful licensing.",
-    "usedFor": ["source-risk review"]
+    "usedFor": [
+      "source-risk review"
+    ]
   },
   {
     "id": "github_online_go_godojo",
@@ -33,7 +43,10 @@
     "license": "not found",
     "status": "do-not-import",
     "why": "The README identifies it as a server for OGS joseki features, but no license was found during review.",
-    "usedFor": ["source-risk review", "future integration idea"]
+    "usedFor": [
+      "source-risk review",
+      "future integration idea"
+    ]
   },
   {
     "id": "github_kovarex_tsumego_hero",
@@ -42,7 +55,10 @@
     "license": "not found",
     "status": "architecture-reference-only",
     "why": "The repository is a modernized tsumego-hero codebase. It is useful for product and data-flow ideas, not for importing problem data.",
-    "usedFor": ["tsumego product architecture", "source-risk review"]
+    "usedFor": [
+      "tsumego product architecture",
+      "source-risk review"
+    ]
   },
   {
     "id": "web_josekipedia_games",
@@ -51,7 +67,10 @@
     "license": "Creative Commons stated for game database",
     "status": "future-import-candidate",
     "why": "Josekipedia states that its game database is freely distributed under a Creative Commons License and discards comments/variations. This may be useful for future joseki frequency mining, but GoMentor currently only records it as a potential source until the exact CC terms and attribution path are reviewed.",
-    "usedFor": ["future joseki frequency mining", "license review"]
+    "usedFor": [
+      "future joseki frequency mining",
+      "license review"
+    ]
   },
   {
     "id": "web_wikipedia_life_death",
@@ -60,7 +79,10 @@
     "license": "CC BY-SA 4.0",
     "status": "concept-reference-only",
     "why": "The page summarizes fundamental life-and-death concepts such as two eyes, dead groups, unsettled groups, and eye-space. GoMentor uses original teaching text and does not copy article prose.",
-    "usedFor": ["life-death concept coverage", "beginner terminology checks"]
+    "usedFor": [
+      "life-death concept coverage",
+      "beginner terminology checks"
+    ]
   },
   {
     "id": "web_wikipedia_go_rules",
@@ -69,7 +91,10 @@
     "license": "CC BY-SA 4.0",
     "status": "concept-reference-only",
     "why": "The article summarizes life status, semeai, corners/sides opening priority, joseki, ko, and seki. GoMentor uses it only to cross-check broad coverage.",
-    "usedFor": ["rules terminology", "strategy coverage checklist"]
+    "usedFor": [
+      "rules terminology",
+      "strategy coverage checklist"
+    ]
   },
   {
     "id": "web_goproblems_best_practices",
@@ -78,7 +103,10 @@
     "license": "not found",
     "status": "taxonomy-reference-only",
     "why": "The page describes common problem classes such as life-and-death and tesuji. It is useful as a taxonomy reference, but GoMentor does not import problem text or diagrams.",
-    "usedFor": ["problem taxonomy", "training UX terminology"]
+    "usedFor": [
+      "problem taxonomy",
+      "training UX terminology"
+    ]
   },
   {
     "id": "web_ogs_cc_discussion",
@@ -87,7 +115,9 @@
     "license": "forum content, not a data source",
     "status": "source-risk-reference",
     "why": "The discussion highlights that Internet availability and archive copies do not imply Creative Commons rights. GoMentor uses this as a policy reminder to avoid importing classic book scans or problem collections without explicit permission.",
-    "usedFor": ["copyright review policy"]
+    "usedFor": [
+      "copyright review policy"
+    ]
   },
   {
     "id": "gomentor_original_training_catalog",
@@ -96,6 +126,156 @@
     "license": "MIT project content",
     "status": "original-common-pattern",
     "why": "The catalog contains original teaching reconstructions of common joseki, life-and-death, and tesuji patterns. It deliberately avoids copying book diagrams, problem ordering, SGF comments, or website explanations.",
-    "usedFor": ["joseki matching", "life-death training recommendations", "tesuji training recommendations", "teacher explanation payloads"]
+    "usedFor": [
+      "joseki matching",
+      "life-death training recommendations",
+      "tesuji training recommendations",
+      "teacher explanation payloads"
+    ]
+  },
+  {
+    "id": "katago-analysis-engine-docs",
+    "name": "KataGo Analysis Engine documentation",
+    "url": "https://github.com/lightvector/KataGo/blob/master/docs/Analysis_Engine.md",
+    "license": "KataGo project license; documentation used as API reference",
+    "status": "engine-api-reference",
+    "why": "Primary source for KataGo analysis JSON fields.",
+    "usedFor": [
+      "KataGo analysis JSON interpretation",
+      "teacher evidence validation"
+    ]
+  },
+  {
+    "id": "katago-project-readme",
+    "name": "KataGo project README",
+    "url": "https://github.com/lightvector/KataGo",
+    "license": "KataGo project license",
+    "status": "engine-capability-reference",
+    "why": "Primary source for KataGo capabilities such as score/territory estimation and JSON analysis engine.",
+    "usedFor": [
+      "KataGo capability reference",
+      "release documentation"
+    ]
+  },
+  {
+    "id": "wikibooks-go",
+    "name": "Wikibooks: Go",
+    "url": "https://en.wikibooks.org/wiki/Go",
+    "license": "Creative Commons Attribution-ShareAlike License unless otherwise noted by Wikibooks",
+    "status": "concept-reference-only",
+    "why": "Wikibooks has Go lessons including joseki and strategy topics.",
+    "usedFor": [
+      "Go terminology coverage",
+      "concept taxonomy"
+    ]
+  },
+  {
+    "id": "kogo-joseki-dictionary",
+    "name": "Kogo's Joseki Dictionary",
+    "url": "https://waterfire.us/joseki.htm",
+    "license": "Free download stated by publisher page; redistribution and derivative-use terms are not explicitly clear in the public page",
+    "status": "do-not-import",
+    "why": "Public page describes KJD as an extensive SGF joseki dictionary and says it was last updated in 2014.",
+    "usedFor": [
+      "source-risk review",
+      "future licensed joseki comparison"
+    ]
+  },
+  {
+    "id": "eidogo-kogo",
+    "name": "EidoGo Kogo joseki viewer",
+    "url": "https://eidogo.com/",
+    "license": "Site/source terms should be reviewed before reuse",
+    "status": "do-not-import",
+    "why": "Useful for human verification of joseki direction, not a bundled data source.",
+    "usedFor": [
+      "source-risk review",
+      "external study reference"
+    ]
+  },
+  {
+    "id": "pachi-joseki-readme",
+    "name": "Pachi joseki module README",
+    "url": "https://github.com/pasky/pachi/blob/master/joseki/README",
+    "license": "GPLv2 for Pachi project",
+    "status": "engineering-reference-only",
+    "why": "Describes radius-based local pattern matching, ignored/bad moves, and simple joseki conventions.",
+    "usedFor": [
+      "joseki pattern matching architecture",
+      "source-risk review"
+    ]
+  },
+  {
+    "id": "pachi-josekifix-readme",
+    "name": "Pachi josekifix README",
+    "url": "https://github.com/pasky/pachi/blob/master/josekifix/README.md",
+    "license": "GPLv2 for Pachi project",
+    "status": "engineering-reference-only",
+    "why": "Describes matching by local pattern around last move and optional external joseki engine.",
+    "usedFor": [
+      "pattern matcher architecture",
+      "source-risk review"
+    ]
+  },
+  {
+    "id": "josekle-project",
+    "name": "Josekle project",
+    "url": "https://github.com/okonomichiyaki/josekle",
+    "license": "MIT for project code; upstream OGS joseki data access and commentary terms should be reviewed separately",
+    "status": "safe-for-structural-reference",
+    "why": "Useful for UX and quiz design, not as authoritative joseki truth.",
+    "usedFor": [
+      "joseki training UX reference",
+      "MIT dictionary source review"
+    ]
+  },
+  {
+    "id": "gogod-commercial-db",
+    "name": "GoGoD database",
+    "url": "https://gogodonline.co.uk/",
+    "license": "Commercial/proprietary purchase",
+    "status": "do-not-import",
+    "why": "Commercial game database; useful for future paid data QA, not included in GoMentor data.",
+    "usedFor": [
+      "future licensed validation source",
+      "source-risk review"
+    ]
+  },
+  {
+    "id": "gomentor-curated-original",
+    "name": "GoMentor curated original teaching cards",
+    "url": "local:data/knowledge",
+    "license": "Project license for GoMentor repository",
+    "status": "original-common-pattern",
+    "why": "Cards are not copied from books or joseki dictionaries. They encode common teaching patterns and should be continuously reviewed by human coaches.",
+    "usedFor": [
+      "teaching heuristics",
+      "motif recognition",
+      "joseki matching"
+    ]
+  },
+  {
+    "id": "pachi-joseki-gpl2",
+    "name": "Pachi joseki SGF set",
+    "url": "https://github.com/pasky/pachi/tree/master/joseki",
+    "license": "GPL-2.0-only",
+    "status": "bundled-third-party-gpl-data",
+    "why": "Bundled as third-party GPL joseki SGF data with COPYING preserved. Teacher output treats matches as hypotheses and still defers final recommendations to KataGo evidence.",
+    "usedFor": [
+      "bundled SGF joseki tree matching",
+      "joseki motif recognition"
+    ]
+  },
+  {
+    "id": "josekle-mit-dictionary",
+    "name": "Josekle dictionary SGF",
+    "url": "https://github.com/okonomichiyaki/josekle/tree/master/sgf",
+    "license": "MIT",
+    "status": "bundled-third-party-mit-data",
+    "why": "Bundled as third-party MIT joseki SGF data with LICENSE preserved. Used for SGF-derived prefix cards and joseki-tree hypotheses.",
+    "usedFor": [
+      "bundled SGF joseki tree matching",
+      "joseki motif recognition"
+    ]
   }
 ]

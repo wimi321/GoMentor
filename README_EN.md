@@ -47,18 +47,18 @@ KataGo is the source of truth. The LLM is the teacher that turns those facts int
 
 ## Downloads
 
-Current public beta:
+Current release:
 
-[GoMentor v0.2.0-beta.1](https://github.com/wimi321/GoMentor/releases/tag/v0.2.0-beta.1)
+[GoMentor v0.3.0](https://github.com/wimi321/GoMentor/releases/tag/v0.3.0)
 
 | Platform | Download |
 | --- | --- |
-| macOS Apple Silicon | [GoMentor-0.2.0-beta.1-mac-arm64.dmg](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-mac-arm64.dmg) |
-| macOS Intel | [GoMentor-0.2.0-beta.1-mac-x64.dmg](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-mac-x64.dmg) |
-| Windows x64 portable ZIP | [GoMentor-0.2.0-beta.1-win-x64-portable.zip](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-win-x64-portable.zip) |
-| Windows x64 installer | [GoMentor-0.2.0-beta.1-win-x64.exe](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-win-x64.exe) |
+| macOS Apple Silicon | [GoMentor-0.3.0-mac-arm64.dmg](https://github.com/wimi321/GoMentor/releases/download/v0.3.0/GoMentor-0.3.0-mac-arm64.dmg) |
+| macOS Intel | [GoMentor-0.3.0-mac-x64.dmg](https://github.com/wimi321/GoMentor/releases/download/v0.3.0/GoMentor-0.3.0-mac-x64.dmg) |
+| Windows x64 portable ZIP | [GoMentor-0.3.0-win-x64-portable.zip](https://github.com/wimi321/GoMentor/releases/download/v0.3.0/GoMentor-0.3.0-win-x64-portable.zip) |
+| Windows x64 installer | [GoMentor-0.3.0-win-x64.exe](https://github.com/wimi321/GoMentor/releases/download/v0.3.0/GoMentor-0.3.0-win-x64.exe) |
 
-Beta caveats:
+Release caveats:
 
 - macOS packages are not yet Developer ID signed or notarized.
 - Windows packages are unsigned and may trigger SmartScreen.

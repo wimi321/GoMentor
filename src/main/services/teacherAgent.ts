@@ -28,8 +28,17 @@ import { getStudentProfile, readStudentForGame, updateStudentProfile } from './s
 import { runReview } from './review'
 import { applyDetectedDefaults, detectSystemProfile } from './systemProfile'
 import { parseStructuredTeacherResult } from './teacher/structuredResultParser'
+import { classifyTeacherIntent, type TeacherIntent } from './teacher/intentClassifier'
+import {
+  buildHumanTeacherInstruction,
+  buildTeachingEvidence,
+  buildVerificationNote,
+  friendlyTeacherFallback,
+  verifyTeacherMarkdown,
+  type TeachingEvidence
+} from './teacher/teachingEvidence'
+import { formatRecognizedMotifsForPrompt, recognizeTeachingMotifs, type RecognizedTeachingMotif } from './knowledge/motifRecognizer'
 
-type TeacherIntent = 'current-move' | 'game-review' | 'batch-review' | 'training-plan' | 'open-ended'
 type TeacherProgressEmitter = (progress: TeacherRunProgress) => void
 
 interface TeacherRunContext {
@@ -161,26 +170,6 @@ function emitAssistantDelta(context: TeacherRunContext | undefined, delta: strin
     stage: 'assistant-delta',
     markdownDelta: delta
   })
-}
-
-function classifyIntent(request: TeacherRunRequest): TeacherIntent {
-  if (request.mode === 'current-move') {
-    return 'current-move'
-  }
-  const prompt = request.prompt
-  if (/最近|多盘|批量|常犯|画像|弱点|情况|\d+\s*盘|十盘/.test(prompt)) {
-    return 'batch-review'
-  }
-  if (request.gameId && /整盘|全盘|整局|本局|这盘|全局/.test(prompt)) {
-    return 'game-review'
-  }
-  if (/训练|计划|一周|每日/.test(prompt)) {
-    return 'training-plan'
-  }
-  if (/当前手|这手|这一手|本手|第\s*\d+\s*手/.test(prompt) && request.gameId) {
-    return 'current-move'
-  }
-  return 'open-ended'
 }
 
 function inferCount(prompt: string): number {
@@ -397,20 +386,11 @@ function knowledgeFocusFromMatches(matches: KnowledgeMatch[], problems: Recommen
 }
 
 function systemPrompt(level: CoachUserLevel): string {
-  const levelLine: Record<CoachUserLevel, string> = {
-    beginner: '学生是入门水平，少用术语。',
-    intermediate: '学生是业余中级，讲清判断顺序。',
-    advanced: '学生是业余高级，可以直接讲厚薄、目差和变化。',
-    dan: '学生是高段水平，简洁精确。'
-  }
   return [
-    '你是 GoMentor 的围棋老师。',
-    'KataGo 数据是事实依据；截图只辅助看棋；知识库只用于解释。',
-    '不要编造坐标、胜率、目差、定式名或变化。',
-    '像真人老师一样自然讲棋，不套固定栏目。',
-    '数据点到为止，少写报告腔。',
-    levelLine[level],
-    '输出中文。'
+    buildHumanTeacherInstruction(level, getSettings().reviewLanguage),
+    'KataGo 数据是事实依据；知识库和棋形识别只负责解释，不能反过来否定当前证据。',
+    '像真人老师一样自然讲棋：先讲判断顺序，再用必要的 KataGo 数字做证据。',
+    '输出前请先在内部核对 TeachingEvidence：坐标、手数、候选手、胜率/目差都必须能追溯。'
   ].join('\n')
 }
 
@@ -428,7 +408,9 @@ function currentMovePayload(
   knowledge: KnowledgePacket[],
   profile: StudentProfile,
   knowledgeMatches: KnowledgeMatch[] = [],
-  recommendedProblems: RecommendedProblem[] = []
+  recommendedProblems: RecommendedProblem[] = [],
+  recognizedMotifs: RecognizedTeachingMotif[] = [],
+  teachingEvidence: TeachingEvidence = buildTeachingEvidence(request, analysis, knowledge, profile, knowledgeMatches, recommendedProblems, recognizedMotifs)
 ): string {
   return JSON.stringify({
     task: 'analyze_current_move',
@@ -440,6 +422,16 @@ function currentMovePayload(
       rawScoreLead: 'BLACK',
       displayedCandidateValues: 'current_player_to_move',
       problemMoveBasis: 'best_before_move_value_minus_played_move_value_from_current_player_perspective'
+    },
+    teachingEvidence,
+    recognizedMotifs,
+    recognizedMotifsForTeacher: formatRecognizedMotifsForPrompt(recognizedMotifs),
+    teacherContract: {
+      evidenceFirst: true,
+      forbidden: ['invented coordinates', 'invented winrate/scoreLead', 'unsupported joseki names', 'unsupported PV lines'],
+      desiredShape: ['one-sentence judgement', 'why', 'correct thinking order', 'small drill or next-game reminder'],
+      confidencePolicy: 'If teachingEvidence.loss.confidence is medium/low, explain as preference/hypothesis and avoid absolute words.',
+      motifPolicy: 'Use only the top one or two strong/medium recognizedMotifs. Weak motifs are hypotheses, not facts.'
     },
     katagoFacts: analysis,
     studentProfile: profile,
@@ -566,7 +558,7 @@ async function runCurrentMove(request: TeacherRunRequest, logs: TeacherToolLog[]
     moveNumber,
     totalMoves: record?.moves.length ?? moveNumber,
     boardSize: record?.boardSize ?? analysis.boardSize,
-    recentMoves: record?.moves.slice(Math.max(0, moveNumber - 5), moveNumber) ?? [],
+    recentMoves: record?.moves.slice(Math.max(0, moveNumber - 40), moveNumber) ?? [],
     userLevel: profile.userLevel,
     studentLevel: profile.userLevel,
     playerColor: analysis.currentMove?.color,
@@ -583,7 +575,9 @@ async function runCurrentMove(request: TeacherRunRequest, logs: TeacherToolLog[]
   const knowledgeMatches = searchKnowledgeMatches({ ...knowledgeQuery, maxResults: 8 })
   const recommendedProblems = recommendedProblemsFromMatches(knowledgeMatches, 3)
   const knowledge = searchKnowledge(knowledgeQuery)
-  finishTool(knowledgeLog, 'done', `选中 ${knowledge.length} 条知识卡片，匹配 ${knowledgeMatches.length} 个定式/死活/手筋型，推荐 ${recommendedProblems.length} 道训练题。`)
+  const recognizedMotifs = recognizeTeachingMotifs({ ...knowledgeQuery, maxResults: 8 }, analysis, knowledgeMatches, knowledge)
+  const teachingEvidence = buildTeachingEvidence(request, analysis, knowledge, profile, knowledgeMatches, recommendedProblems, recognizedMotifs)
+  finishTool(knowledgeLog, 'done', `选中 ${knowledge.length} 条知识卡片，匹配 ${knowledgeMatches.length} 个定式/死活/手筋型，识别 ${recognizedMotifs.length} 个棋形，推荐 ${recommendedProblems.length} 道训练题。`)
   emitToolState(context, logs, '本地知识卡片已选好，准备交给老师组织讲解。')
 
   const webSnippets = await maybeSearchWeb(request.prompt, logs)
@@ -600,16 +594,27 @@ async function runCurrentMove(request: TeacherRunRequest, logs: TeacherToolLog[]
       markdown = await callMultimodalTeacher(
         getSettings(),
         systemPrompt(profile.userLevel),
-        currentMovePayload(request, analysis, knowledge, profile, knowledgeMatches, recommendedProblems) + (webSnippets.length ? `\n\n外部资料标题:\n${webSnippets.join('\n')}` : ''),
+        currentMovePayload(request, analysis, knowledge, profile, knowledgeMatches, recommendedProblems, recognizedMotifs, teachingEvidence) + (webSnippets.length ? `\n\n外部资料标题:\n${webSnippets.join('\n')}` : ''),
         request.boardImageDataUrl,
         (delta) => emitAssistantDelta(context, delta)
       )
       finishTool(llmLog, 'done', '老师讲解已生成。')
     } catch (error) {
-      markdown = `多模态 LLM 暂时不可用：${String(error)}`
+      markdown = friendlyTeacherFallback(error, teachingEvidence, getSettings().reviewLanguage)
       finishTool(llmLog, 'error', markdown)
     }
   }
+  const verification = verifyTeacherMarkdown(markdown, teachingEvidence)
+  const verificationNote = buildVerificationNote(verification, teachingEvidence, getSettings().reviewLanguage)
+  markdown = `${markdown.trim()}\n\n${verificationNote}`
+  emitAssistantDelta(context, `\n\n${verificationNote}`)
+  const verifyLog = startTool(
+    logs,
+    'teacher.verifyEvidence',
+    '讲解事实校验',
+    '检查坐标、推荐手、胜率/目差信息是否能追溯到 KataGo 证据。'
+  )
+  finishTool(verifyLog, verification.ok ? 'done' : 'error', verification.ok ? '讲解通过证据校验。' : '讲解含有需要人工复核的证据风险。')
   emitToolState(context, logs, llmLog.status === 'done' ? '老师讲解已生成。' : '老师讲解没有完成，保留当前错误说明。')
 
   let updatedProfile = updateStudentProfile(studentName, {
@@ -646,7 +651,7 @@ async function runCurrentMove(request: TeacherRunRequest, logs: TeacherToolLog[]
     recommendedProblems
   )
   markdown = structured.markdown || markdown
-  const reportPath = saveReport(id, title, markdown, { analysis, knowledge, knowledgeMatches, recommendedProblems, studentProfile: updatedProfile, structured })
+  const reportPath = saveReport(id, title, markdown, { analysis, knowledge, knowledgeMatches, recognizedMotifs, recommendedProblems, teachingEvidence, verification, studentProfile: updatedProfile, structured })
   return {
     id,
     mode: 'current-move',
@@ -654,6 +659,8 @@ async function runCurrentMove(request: TeacherRunRequest, logs: TeacherToolLog[]
     markdown,
     toolLogs: logs,
     analysis,
+    teachingEvidence,
+    verification,
     knowledge,
     knowledgeMatches,
     recommendedProblems,
@@ -1249,23 +1256,33 @@ async function runOpenEndedTask(request: TeacherRunRequest, logs: TeacherToolLog
 export async function runTeacherTask(request: TeacherRunRequest, onProgress?: TeacherProgressEmitter): Promise<TeacherRunResult> {
   const id = request.runId || randomUUID()
   const logs: TeacherToolLog[] = []
-  const intent = classifyIntent(request)
+  const intentClassification = classifyTeacherIntent(request)
+  const intent = intentClassification.intent
   const context: TeacherRunContext = {
     runId: id,
     emit: onProgress
   }
 
   emitProgress(context, {
-    stage: 'queued',
-    message: intent === 'current-move'
-      ? '收到当前手分析任务。'
+      stage: 'queued',
+      message: intent === 'current-move'
+        ? '收到当前手分析任务。'
       : intent === 'game-review'
         ? '收到整盘复盘任务。'
         : intent === 'batch-review'
           ? '收到最近对局分析任务。'
           : intent === 'training-plan'
             ? '收到训练计划任务。'
-            : '收到开放式任务。'
+            : '收到开放式任务。',
+      toolLogs: [{
+        id: randomUUID(),
+        name: 'teacher.classifyIntent',
+        label: '任务识别',
+        detail: `${intentClassification.intent} · ${intentClassification.confidence} · ${intentClassification.rationale}`,
+        status: 'done',
+        startedAt: new Date().toISOString(),
+        endedAt: new Date().toISOString()
+      }]
   })
 
   try {

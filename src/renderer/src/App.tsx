@@ -35,6 +35,7 @@ import { StudentBindingDialog } from './features/student/StudentBindingDialog'
 import { StudentRailCard } from './features/student/StudentRailCard'
 import { KataGoAssetsPanel } from './features/settings/KataGoAssetsPanel'
 import { TeacherComposerPro } from './features/teacher/TeacherComposerPro'
+import { createUiTranslator, humanizeUiError, normalizeUiLocale, SUPPORTED_UI_LOCALES } from './i18n'
 import './features/diagnostics/diagnostics.css'
 import './features/student/student.css'
 import './features/teacher/teacher-run-card.css'
@@ -331,6 +332,8 @@ export function App(): ReactElement {
   const moveNumberRef = useRef(moveNumber)
   const selectedGameIdRef = useRef('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const t = useMemo(() => createUiTranslator(dashboard.settings.reviewLanguage), [dashboard.settings.reviewLanguage])
+  const uiError = (cause: unknown, context?: string): string => humanizeUiError(cause, dashboard.settings.reviewLanguage, context)
 
   useEffect(() => {
     void refresh()
@@ -630,12 +633,13 @@ export function App(): ReactElement {
       const formData = new FormData(form)
       const next = await window.gomentor.updateSettings({
         katagoModelPreset: String(formData.get('katagoModelPreset') ?? dashboard.settings.katagoModelPreset) as KataGoModelPresetId,
+        reviewLanguage: normalizeUiLocale(String(formData.get('reviewLanguage') ?? dashboard.settings.reviewLanguage)),
         llmBaseUrl: String(formData.get('llmBaseUrl') ?? ''),
         llmApiKey: String(formData.get('llmApiKey') ?? ''),
         llmModel: String(formData.get('llmModel') ?? '')
       })
       setDashboard(next)
-      setLlmTestMessage('配置已保存')
+      setLlmTestMessage(t('settingsSaved'))
       void refreshKataGoAssets()
       if (selectedGame && record) {
         setAnalysis(null)
@@ -643,7 +647,7 @@ export function App(): ReactElement {
         void warmupEvaluationGraph(selectedGame.id, moveNumber)
       }
     } catch (cause) {
-      setError(String(cause))
+      setError(uiError(cause, 'settings'))
     } finally {
       setBusy('')
     }
@@ -661,7 +665,7 @@ export function App(): ReactElement {
       })
       setLlmTestMessage(result.message)
     } catch (cause) {
-      setLlmTestMessage(String(cause))
+      setLlmTestMessage(uiError(cause, 'llm-test'))
     } finally {
       setBusy('')
     }
@@ -669,7 +673,7 @@ export function App(): ReactElement {
 
   async function runKataGoBenchmark(): Promise<void> {
     setBusy('katago-benchmark')
-    setKataGoBenchmarkMessage('正在调用 KataGo 官方 benchmark，通常需要几十秒。')
+    setKataGoBenchmarkMessage(t('benchmarkStarting'))
     setError('')
     try {
       if (typeof window.gomentor.benchmarkKataGo !== 'function') {
@@ -690,8 +694,7 @@ export function App(): ReactElement {
         }
       }
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : String(cause)
-      setKataGoBenchmarkMessage(`KataGo 测速失败：${message}`)
+      setKataGoBenchmarkMessage(uiError(cause, 'katago-benchmark'))
     } finally {
       setBusy('')
     }
@@ -700,8 +703,8 @@ export function App(): ReactElement {
   async function installOfficialKataGoModel(presetId: KataGoModelPresetId): Promise<void> {
     setBusy('katago-install')
     setError('')
-    setKataGoInstallProgress({ stage: 'discovering', message: '正在准备 KataGo 官方权重安装。' })
-    setKataGoInstallMessage('正在准备 KataGo 官方权重安装。')
+    setKataGoInstallProgress({ stage: 'discovering', message: t('katagoInstallPreparing') })
+    setKataGoInstallMessage(t('katagoInstallPreparing'))
     try {
       const result = await window.gomentor.installKataGoOfficialModel({ presetId })
       setKataGoInstallMessage(result.detail)
@@ -718,8 +721,8 @@ export function App(): ReactElement {
         }
       }
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : String(cause)
-      setKataGoInstallMessage(`KataGo 官方权重安装失败：${message}`)
+      const message = uiError(cause, 'katago-install')
+      setKataGoInstallMessage(message)
       setKataGoInstallProgress({ stage: 'error', message })
     } finally {
       setBusy('')
@@ -761,7 +764,7 @@ export function App(): ReactElement {
         return {
           ...message,
           status: 'error',
-          content: message.content || `任务失败：${progress.error ?? '未知错误'}`,
+          content: message.content || `${t('taskFailed')}：${humanizeUiError(progress.error ?? t('unknownError'), dashboard.settings.reviewLanguage, 'teacher-task')}`,
           toolLogs: progress.toolLogs ?? message.toolLogs
         }
       }
@@ -800,7 +803,7 @@ export function App(): ReactElement {
       updateMessage(assistantMessageId, (message) => ({
         ...message,
         status: 'error',
-        content: message.content || `任务失败：${String(cause)}`
+        content: message.content || `${t('taskFailed')}：${uiError(cause, 'teacher-task')}`
       }))
       throw cause
     } finally {
@@ -1166,7 +1169,7 @@ export function App(): ReactElement {
       updateMessage(assistantMessageId, (message) => ({
         ...message,
         status: 'error',
-        content: message.content || `任务失败：${String(cause)}`
+        content: message.content || `${t('taskFailed')}：${uiError(cause, 'teacher-task')}`
       }))
     } finally {
       setLiveAnalysis((current) => current.status === '老师讲解中，暂停精读'
@@ -2051,6 +2054,8 @@ function SettingsDrawer({
   const modelPresets = dashboard.systemProfile.katagoModelPresets
   const [selectedPresetId, setSelectedPresetId] = useState<KataGoModelPresetId>(dashboard.settings.katagoModelPreset)
   const selectedPreset = modelPresets.find((preset) => preset.id === selectedPresetId) ?? modelPresets[0]
+  const t = useMemo(() => createUiTranslator(dashboard.settings.reviewLanguage), [dashboard.settings.reviewLanguage])
+  const localeOptions = SUPPORTED_UI_LOCALES
   const llmModelOptions = Array.from(new Set([
     selectedLlmModel,
     dashboard.settings.llmModel,
@@ -2171,7 +2176,7 @@ function SettingsDrawer({
 
   return (
     <form
-      key={`${dashboard.settings.katagoModelPreset}|${dashboard.settings.llmBaseUrl}|${dashboard.settings.llmModel}`}
+      key={`${dashboard.settings.katagoModelPreset}|${dashboard.settings.llmBaseUrl}|${dashboard.settings.llmModel}|${dashboard.settings.reviewLanguage}`}
       className="settings-drawer"
       onSubmit={(event) => {
         event.preventDefault()
@@ -2222,6 +2227,20 @@ function SettingsDrawer({
         }}
       />
       {releaseReadinessError ? <div className="test-message">{releaseReadinessError}</div> : null}
+      <section className="settings-section settings-section-language">
+        <h3>{t('languageLabel')}</h3>
+        <p>{t('languageHelp')}</p>
+        <label>
+          <span>{t('reviewLanguage')}</span>
+          <select name="reviewLanguage" defaultValue={dashboard.settings.reviewLanguage}>
+            {localeOptions.map((locale) => (
+              <option key={locale.value} value={locale.value}>
+                {locale.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </section>
       <label>
         LLM Base URL
         <input name="llmBaseUrl" defaultValue={dashboard.settings.llmBaseUrl} />

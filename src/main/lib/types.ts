@@ -16,7 +16,7 @@ export interface AppSettings {
   llmBaseUrl: string
   llmApiKey: string
   llmModel: string
-  reviewLanguage: 'zh-CN' | 'en-US' | 'ja-JP' | 'ko-KR'
+  reviewLanguage: 'zh-CN' | 'en-US' | 'ja-JP' | 'ko-KR' | 'th-TH' | 'vi-VN'
   defaultPlayerName: string
 }
 
@@ -455,6 +455,8 @@ export interface TeacherRunResult {
   markdown: string
   toolLogs: TeacherToolLog[]
   analysis?: KataGoMoveAnalysis
+  teachingEvidence?: unknown
+  verification?: unknown
   knowledge: KnowledgePacket[]
   knowledgeMatches?: KnowledgeMatch[]
   recommendedProblems?: RecommendedProblem[]
