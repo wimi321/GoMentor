@@ -47,18 +47,18 @@ KataGo 是事实裁判，LLM 是讲棋老师。GoMentor 的目标是让学生不
 
 ## 下载
 
-当前公开测试版：
+当前发布版本：
 
-[GoMentor v0.2.0-beta.1](https://github.com/wimi321/GoMentor/releases/tag/v0.2.0-beta.1)
+[GoMentor v0.3.0](https://github.com/wimi321/GoMentor/releases/tag/v0.3.0)
 
 | 平台 | 下载 |
 | --- | --- |
-| macOS Apple Silicon | [GoMentor-0.2.0-beta.1-mac-arm64.dmg](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-mac-arm64.dmg) |
-| macOS Intel | [GoMentor-0.2.0-beta.1-mac-x64.dmg](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-mac-x64.dmg) |
-| Windows x64 免安装 ZIP | [GoMentor-0.2.0-beta.1-win-x64-portable.zip](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-win-x64-portable.zip) |
-| Windows x64 安装版 | [GoMentor-0.2.0-beta.1-win-x64.exe](https://github.com/wimi321/GoMentor/releases/download/v0.2.0-beta.1/GoMentor-0.2.0-beta.1-win-x64.exe) |
+| macOS Apple Silicon | [GoMentor-0.3.0-mac-arm64.dmg](https://github.com/wimi321/GoMentor/releases/download/v0.3.0/GoMentor-0.3.0-mac-arm64.dmg) |
+| macOS Intel | [GoMentor-0.3.0-mac-x64.dmg](https://github.com/wimi321/GoMentor/releases/download/v0.3.0/GoMentor-0.3.0-mac-x64.dmg) |
+| Windows x64 免安装 ZIP | [GoMentor-0.3.0-win-x64-portable.zip](https://github.com/wimi321/GoMentor/releases/download/v0.3.0/GoMentor-0.3.0-win-x64-portable.zip) |
+| Windows x64 安装版 | [GoMentor-0.3.0-win-x64.exe](https://github.com/wimi321/GoMentor/releases/download/v0.3.0/GoMentor-0.3.0-win-x64.exe) |
 
-Beta 说明：
+发布说明：
 
 - macOS 包目前未完成 Developer ID 签名和公证，首次打开可能出现 Gatekeeper 提示。
 - Windows 包目前未签名，可能出现 SmartScreen 提示。
@@ -107,16 +107,24 @@ Beta 说明：
 
 LLM 负责把这些事实讲成人能听懂、能执行的复盘建议。
 
+### 内置定式与棋形知识
+
+- 内置高频定式、棋形、手筋和死活型教学卡。
+- 本地识别角部定式、局部棋形和常见问题手类型。
+- 老师讲棋时会引用匹配到的知识，但仍以 KataGo 当前局面判断为准。
+- 匹配不够强时会明确说“类似某个棋形”，避免机械套定式。
+
 ## 项目状态
 
-GoMentor 目前处于早期公开 Beta：
+GoMentor 目前处于公开发布早期：
 
 - 已打通三栏桌面工作台。
 - 已支持野狐公开棋谱同步和本地 SGF 导入。
 - 已接入 KataGo 当前手、整盘和多盘分析链路。
 - 已支持 OpenAI-compatible 多模态 LLM 配置。
 - 已加入本地知识库、学生画像、诊断页和 release readiness 检查。
-- 正在继续打磨 UI、签名/公证、自动更新和多语言 UI。
+- 已加入定式数据库、棋形识别、讲棋证据校验和多语言 UI 入口。
+- 正在继续打磨签名/公证、自动更新、更多语言文本和真实教练验收。
 
 ## 架构
 

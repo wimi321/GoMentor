@@ -8,7 +8,7 @@ const args = new Set(process.argv.slice(2))
 const modeArg = process.argv.find((arg) => arg.startsWith('--mode='))
 const mode = modeArg ? modeArg.split('=')[1] : (args.has('--release') ? 'release' : 'dev')
 const json = args.has('--json')
-const p0BetaVersion = '0.2.0-beta.1'
+const p0BetaVersion = process.env.GOMENTOR_RELEASE_VERSION ?? JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version
 
 const results = []
 
@@ -175,7 +175,7 @@ function checkDocs() {
     'docs/WINDOWS_CODE_SIGNING.md',
     'docs/WINDOWS_SMOKE_TEST.md',
     'docs/VISUAL_QA_EVIDENCE_TEMPLATE.md',
-    'docs/RELEASE_NOTES_v0.2.0-beta.1.md'
+    `docs/RELEASE_NOTES_v${p0BetaVersion}.md`
   ]
   for (const path of docs) file(path, { required: false })
   file('docs/RC_RELEASE_GUIDE.md', { required: false })

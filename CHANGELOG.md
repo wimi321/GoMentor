@@ -4,6 +4,29 @@ All notable changes to GoMentor will be documented here.
 
 This project follows semantic versioning once public releases begin.
 
+## 0.3.0 - Teaching Knowledge v5
+
+### Added
+
+- Built-in joseki database bundle with source manifest and licensing notes.
+- Motif and joseki recognition services for stronger knowledge matching.
+- Teacher evidence validation so LLM explanations stay tied to KataGo candidates, board state, and matched knowledge.
+- Multilingual UI language option for Chinese, English, Japanese, Korean, Thai, and Vietnamese.
+- Additional elite pattern and joseki knowledge cards for professional teaching explanations.
+- Joseki bundle inspection script for release checks.
+
+### Improved
+
+- Current-move teacher analysis now includes recognized motifs, teaching evidence, and verification metadata in saved reports.
+- Teacher prompts are shorter, more human, and grounded by evidence instead of rigid templates.
+- Local knowledge source registry now records bundled joseki data sources and source-risk decisions.
+
+### Known Issues
+
+- Bundled KataGo binaries and models are still distributed through release assets/build preparation, not normal Git files.
+- macOS packages may still require manual trust if unsigned/not notarized.
+- Windows packages may still trigger SmartScreen when unsigned.
+
 ## 0.2.0-beta.1 - P0 Beta Candidate
 
 ### Added
