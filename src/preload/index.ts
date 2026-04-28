@@ -15,6 +15,8 @@ import type {
   KataGoAssetStatus,
   KataGoBenchmarkRequest,
   KataGoBenchmarkResult,
+  KataGoCancelAnalysisRequest,
+  KataGoCancelAnalysisResult,
   LibraryImportResult,
   LlmModelsListRequest,
   LlmModelsListResult,
@@ -54,6 +56,7 @@ const api = {
   analyzePosition: (payload: AnalyzePositionRequest): Promise<KataGoMoveAnalysis> => ipcRenderer.invoke('katago:analyze-position', payload),
   analyzePositionStream: (payload: AnalyzePositionRequest): Promise<KataGoMoveAnalysis> => ipcRenderer.invoke('katago:analyze-position-stream', payload),
   analyzeGameQuick: (payload: AnalyzeGameQuickRequest): Promise<KataGoMoveAnalysis[]> => ipcRenderer.invoke('katago:analyze-game-quick', payload),
+  cancelKataGoAnalysis: (payload: KataGoCancelAnalysisRequest): Promise<KataGoCancelAnalysisResult> => ipcRenderer.invoke('katago:cancel-analysis', payload),
   benchmarkKataGo: (payload?: KataGoBenchmarkRequest): Promise<KataGoBenchmarkResult> => ipcRenderer.invoke('katago:benchmark', payload ?? {}),
   onAnalyzePositionProgress: (handler: (payload: AnalyzePositionProgress) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: AnalyzePositionProgress): void => handler(payload)

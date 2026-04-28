@@ -316,41 +316,6 @@ export function buildTeachingEvidence(
   }
 }
 
-export function buildHumanTeacherInstruction(level: CoachUserLevel, localeInput: unknown = 'zh-CN'): string {
-  const locale = normalizeLocale(localeInput)
-  const languageLine: Record<Locale, string> = {
-    'zh-CN': '默认用简体中文输出；如果用户明确要求其他语言，则遵从用户。',
-    'en-US': 'Default to concise, natural English unless the user explicitly asks for another language.',
-    'ja-JP': '既定では自然な日本語で出力してください。ユーザーが別言語を明示した場合はそれに従ってください。',
-    'ko-KR': '기본적으로 자연스러운 한국어로 답하세요. 사용자가 다른 언어를 명시하면 그 언어를 따르세요.',
-    'th-TH': 'ตอบเป็นภาษาไทยอย่างเป็นธรรมชาติเป็นค่าเริ่มต้น เว้นแต่ผู้ใช้จะระบุภาษาอื่นชัดเจน',
-    'vi-VN': 'Mặc định trả lời bằng tiếng Việt tự nhiên, trừ khi người dùng yêu cầu ngôn ngữ khác.'
-  }
-  const levelLine: Record<CoachUserLevel, string> = {
-    beginner: '学生是入门/级位水平：少用术语，先讲“看哪里、为什么、下一盘怎么避免”。',
-    intermediate: '学生是业余中级：讲清判断顺序，可以使用常见术语但必须解释。',
-    advanced: '学生是业余高级：可以讲厚薄、转换、目差、先后手，但仍要给出可执行思路。',
-    dan: '学生是高段水平：简洁、精确，重点讲方向、效率、风险与读秒下的选择。'
-  }
-
-  return [
-    '你是 GoMentor 的围棋老师。你的职责不是复述 KataGo 数字，而是把证据讲成棋手能执行的思考顺序。',
-    '事实优先级必须固定：① KataGo/TeachingEvidence 事实 ② recognizedMotifs 棋形/定式识别 ③ 本地知识卡解释 ④ 截图辅助。不要反过来用定式记忆否定 KataGo 当前证据。',
-    '输出前先做内部三步核对：A. 我提到的坐标是否在 evidence/PV/candidate/截图里；B. 我说的定式/棋形是否在 recognizedMotifs 里；C. 我的结论是否和 confidence 匹配。',
-    '如果 recognizedMotifs.confidence 为 strong/medium，可以把它作为“棋形/棋理标签”；如果为 weak，只能作为可能方向，不能当成事实。',
-    '只有当 recognizedMotifs 中存在 joseki:* 且 confidence 为 strong/medium 时，才可以说“这是某某定式/定式族”；否则只能说“像某类角上变化”。',
-    '定式讲解必须讲“为什么这一分支适合本局”，不能只背变化；若有 expectedNextMoves，只能把它们说成常见分支，最终仍以 KataGo 候选为准。',
-    '严禁编造坐标、胜率、目差、定式名称、职业棋手说法、资料来源、PV 变化或训练题来源。sourceRefs 只是追溯标签，不代表可以引用原文。',
-    '默认输出采用“短讲解卡”：①一句话判断 ②为什么 ③正确思路/判断顺序 ④一个小练习或下一盘提醒。用户要求长报告时再展开。',
-    '如果 TeachingEvidence.loss.confidence 不是 high，请使用“AI 更倾向/更像是/不必当成绝对错手”等降调表达。',
-    '如果多个候选手接近，请明确这是方向或风格选择，不要把用户的手强行说成恶手。',
-    '讲棋时优先选择 1-2 个最强 recognizedMotifs，不要把所有知识卡堆给用户；新手最多讲一个核心问题。',
-    '不要默认输出长报告；每段都要短、准、能落地。',
-    levelLine[level],
-    languageLine[locale]
-  ].join('\n')
-}
-
 function allowedMoves(evidence: TeachingEvidence): string[] {
   const moves = new Set<string>()
   if (evidence.actualMove) moves.add(evidence.actualMove)
@@ -442,31 +407,4 @@ export function buildVerificationNote(verification: TeacherMarkdownVerification,
 
 export function appendVerificationNote(markdown: string, verification: TeacherMarkdownVerification, evidence: TeachingEvidence, localeInput: unknown = 'zh-CN'): string {
   return `${markdown.trim()}\n\n${buildVerificationNote(verification, evidence, localeInput)}`
-}
-
-export function friendlyTeacherFallback(error: unknown, evidence: TeachingEvidence, localeInput: unknown = 'zh-CN'): string {
-  const locale = normalizeLocale(localeInput)
-  const best = evidence.bestCandidates[0]
-  const actual = evidence.actualMove ?? '这手'
-  const reason = error instanceof Error ? error.message : String(error)
-  if (locale === 'en-US') {
-    return [
-      'The full AI teacher is temporarily unavailable, so here is a safe KataGo-based summary.',
-      `Move ${evidence.moveNumber}: the played move was ${actual}; KataGo's top candidate is ${best?.move ?? 'unknown'}.`,
-      `The estimated loss is ${round(evidence.loss.winrateLoss, 1)}% winrate and about ${round(evidence.loss.scoreLoss, 1)} points, with ${evidence.loss.confidence} confidence.`,
-      evidence.loss.confidence === 'high'
-        ? 'Treat this as a real review point: compare the played move with the top candidate and ask what direction or tactical point changed.'
-        : 'Treat this as a direction preference rather than an absolute mistake; deeper analysis may be needed.',
-      `Technical note: ${reason}`
-    ].join('\n\n')
-  }
-  return [
-    'AI 老师暂时没能完整生成讲解，我先给你一版基于 KataGo 证据的安全说明。',
-    `第 ${evidence.moveNumber} 手：实战是 ${actual}，KataGo 首选是 ${best?.move ?? '未知'}。`,
-    `估计损失：胜率约 ${round(evidence.loss.winrateLoss, 1)}%，目差约 ${round(evidence.loss.scoreLoss, 1)}，置信度 ${evidence.loss.confidence}。`,
-    evidence.loss.confidence === 'high'
-      ? '这手可以当作本盘重点复盘：请重点比较实战和首选手在攻击方向、先后手、形势转换上的差异。'
-      : '这更像是方向选择或需要加深分析的局面，不建议把它简单理解成“绝对错手”。',
-    `技术提示：${reason}`
-  ].join('\n\n')
 }

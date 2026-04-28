@@ -1,6 +1,7 @@
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { findGame, getSettings } from '@main/lib/store'
-import type { GameMove, KataGoCandidate, KataGoMoveAnalysis } from '@main/lib/types'
+import type { GameMove, KataGoAnalysisGroup, KataGoCandidate, KataGoMoveAnalysis } from '@main/lib/types'
 import { readGameRecord } from './sgf'
 import { resolveKataGoRuntime } from './katagoRuntime'
 import { ensureFoxGameDownloaded } from './fox'
@@ -47,11 +48,39 @@ interface QuickProgress {
   totalPositions: number
 }
 
+interface QueryBatchOptions {
+  runId?: string
+  group?: KataGoAnalysisGroup
+  replaceGroup?: boolean
+}
+
+interface ActiveKataGoProcess {
+  child: ChildProcessWithoutNullStreams
+  group?: KataGoAnalysisGroup
+  cancelled: boolean
+}
+
 const QUICK_ANALYSIS_FAST_VISITS = 25
 const QUICK_ANALYSIS_REFINE_VISITS = 120
 const QUICK_ANALYSIS_REFINE_TOP_N = 18
 const QUICK_ANALYSIS_REFINE_MIN_LOSS = 4
 const QUICK_ANALYSIS_WIDE_ROOT_NOISE = 0.04
+const activeKataGoProcesses = new Map<string, ActiveKataGoProcess>()
+
+export function cancelKataGoAnalysis(filter: { runId?: string; group?: KataGoAnalysisGroup }): { cancelled: number } {
+  let cancelled = 0
+  for (const [id, entry] of activeKataGoProcesses.entries()) {
+    const matchesRun = filter.runId ? id === filter.runId : true
+    const matchesGroup = filter.group ? entry.group === filter.group : true
+    if (!matchesRun || !matchesGroup) {
+      continue
+    }
+    entry.cancelled = true
+    cancelled += 1
+    entry.child.kill()
+  }
+  return { cancelled }
+}
 
 function moveHistory(moves: GameMove[]): Array<[string, string]> {
   return moves.filter((move) => !move.pass).map((move) => [move.color, move.gtp])
@@ -216,7 +245,8 @@ function playedLoss(
 
 async function queryKataGoBatch(
   queries: AnalysisQuery[],
-  onResponse?: (response: KataGoResponse) => void
+  onResponse?: (response: KataGoResponse) => void,
+  options: QueryBatchOptions = {}
 ): Promise<Map<string, KataGoResponse>> {
   if (queries.length === 0) {
     return new Map()
@@ -225,6 +255,9 @@ async function queryKataGoBatch(
   const runtime = resolveKataGoRuntime(settings)
   if (!runtime.ready) {
     throw new Error(`${runtime.status}: ${runtime.notes.join('；')}`)
+  }
+  if (options.replaceGroup && options.group) {
+    cancelKataGoAnalysis({ group: options.group })
   }
 
   const child = spawn(runtime.katagoBin, [
@@ -238,6 +271,21 @@ async function queryKataGoBatch(
   })
 
   let stderr = ''
+  const processRunId = options.runId || randomUUID()
+  const activeEntry: ActiveKataGoProcess = {
+    child,
+    group: options.group,
+    cancelled: false
+  }
+  activeKataGoProcesses.set(processRunId, activeEntry)
+
+  function cleanup(): void {
+    const current = activeKataGoProcesses.get(processRunId)
+    if (current === activeEntry) {
+      activeKataGoProcesses.delete(processRunId)
+    }
+  }
+
   child.stderr.on('data', (chunk) => {
     stderr += String(chunk)
   })
@@ -252,6 +300,7 @@ async function queryKataGoBatch(
       }
       settled = true
       child.kill()
+      cleanup()
       reject(new Error('KataGo 分析超时'))
     }, Math.max(120_000, queries.length * 2500))
 
@@ -280,6 +329,7 @@ async function queryKataGoBatch(
           settled = true
           clearTimeout(timer)
           child.kill()
+          cleanup()
           reject(new Error(`无法解析 KataGo 输出: ${String(error)}\n${line.slice(0, 500)}`))
           return
         }
@@ -287,6 +337,7 @@ async function queryKataGoBatch(
           settled = true
           clearTimeout(timer)
           child.kill()
+          cleanup()
           resolve(results)
           return
         }
@@ -299,6 +350,7 @@ async function queryKataGoBatch(
       }
       settled = true
       clearTimeout(timer)
+      cleanup()
       reject(error)
     })
 
@@ -308,6 +360,11 @@ async function queryKataGoBatch(
       }
       settled = true
       clearTimeout(timer)
+      cleanup()
+      if (activeEntry.cancelled) {
+        reject(new Error('KataGo 分析已取消'))
+        return
+      }
       if (code !== 0 && code !== null) {
         reject(new Error(stderr.trim() || `KataGo exited with ${code}`))
         return
@@ -518,6 +575,10 @@ export async function analyzePositionWithProgress(
         const partial = buildMoveAnalysis(gameId, moveNumber, record.boardSize, currentMove, latestBefore, latestAfter, latestActual)
         onProgress?.(partial, !latestBefore.isDuringSearch && !latestAfter.isDuringSearch && !latestActual?.isDuringSearch)
       }
+    }, {
+      runId: `${gameId}-live-${moveNumber}`,
+      group: 'live',
+      replaceGroup: true
     })
   } catch (error) {
     if (String(error).includes('KataGo 分析超时') && latestBefore?.rootInfo && latestAfter?.rootInfo) {
@@ -545,6 +606,7 @@ export async function analyzeGameQuick(
   options: {
     refineVisits?: number
     refineTopN?: number
+    runId?: string
   } = {}
 ): Promise<KataGoMoveAnalysis[]> {
   const indexedGame = findGame(gameId)
@@ -561,6 +623,8 @@ export async function analyzeGameQuick(
   const quickOverrideSettings = { wideRootNoise: QUICK_ANALYSIS_WIDE_ROOT_NOISE }
   const rootPositionCount = moves.length + 1
 
+  // Build the visible winrate line first. Forced actual-move queries are queued
+  // after the root sweep so the graph appears quickly, then issue labels refine.
   for (let moveNumber = 0; moveNumber <= moves.length; moveNumber += 1) {
     queries.push({
       id: `${gameId}-quick-${moveNumber}`,
@@ -570,6 +634,9 @@ export async function analyzeGameQuick(
       maxVisits: quickVisits,
       overrideSettings: quickOverrideSettings
     })
+  }
+
+  for (let moveNumber = 0; moveNumber < moves.length; moveNumber += 1) {
     const currentMove = moves[moveNumber]
     const actualQuery = forcePlayedMoveQuery(
       `${gameId}-quick-actual-${moveNumber + 1}`,
@@ -589,7 +656,7 @@ export async function analyzeGameQuick(
   const roots = new Map<number, { winrate: number; scoreLead: number }>()
   const topMovesByPosition = new Map<number, KataGoCandidate[]>()
   const actualCandidatesByMove = new Map<number, KataGoCandidate>()
-  const emitted = new Set<number>()
+  const emittedQuality = new Map<number, number>()
   const idPrefix = `${gameId}-quick-`
   const actualIdPrefix = `${gameId}-quick-actual-`
 
@@ -604,9 +671,6 @@ export async function analyzeGameQuick(
     const currentMove = moves[moveNumber - 1]
     const forcedActual = actualCandidatesByMove.get(moveNumber)
     const playedCandidate = findPlayedCandidate(currentMove, beforeTopMoves).candidate
-    if (currentMove && !currentMove.pass && !playedCandidate && !forcedActual) {
-      return null
-    }
     const displayBeforeMoves = mergePlayedCandidateIntoTopMoves(beforeTopMoves, currentMove, forcedActual)
     const best = beforeTopMoves[0] ?? displayBeforeMoves[0]
     const actual = playedMoveValue(currentMove, beforeTopMoves, after, forcedActual)
@@ -640,15 +704,27 @@ export async function analyzeGameQuick(
     }
   }
 
+  function evaluationProgressQuality(evaluation: KataGoMoveAnalysis): number {
+    if (evaluation.playedMove?.source === 'forced') return 3
+    if (evaluation.playedMove?.source === 'candidate') return 2
+    if (evaluation.playedMove?.source === 'after-root') return 1
+    return 0
+  }
+
   function emitIfReady(moveNumber: number): void {
-    if (!onProgress || emitted.has(moveNumber)) {
+    if (!onProgress) {
       return
     }
     const evaluation = buildEvaluation(moveNumber)
     if (!evaluation) {
       return
     }
-    emitted.add(moveNumber)
+    const quality = evaluationProgressQuality(evaluation)
+    const previousQuality = emittedQuality.get(moveNumber) ?? -1
+    if (quality <= previousQuality) {
+      return
+    }
+    emittedQuality.set(moveNumber, quality)
     onProgress({
       evaluation,
       analyzedPositions: Math.min(roots.size, rootPositionCount),
@@ -656,6 +732,7 @@ export async function analyzeGameQuick(
     })
   }
 
+  const runId = options.runId || `${gameId}-quick-${Date.now()}`
   const responses = await queryKataGoBatch(queries, (response) => {
     if (response.id?.startsWith(actualIdPrefix)) {
       const moveNumber = Number.parseInt(response.id.slice(actualIdPrefix.length), 10)
@@ -683,6 +760,10 @@ export async function analyzeGameQuick(
     } catch {
       // Keep the quick graph resilient: one invalid branch point should not block the rest.
     }
+  }, {
+    runId: `${runId}-root`,
+    group: 'quick',
+    replaceGroup: true
   })
 
   for (let moveNumber = 0; moveNumber <= moves.length; moveNumber += 1) {
@@ -776,7 +857,10 @@ export async function analyzeGameQuick(
     }
   }
 
-  const refinedResponses = await queryKataGoBatch(refineQueries)
+  const refinedResponses = await queryKataGoBatch(refineQueries, undefined, {
+    runId: `${runId}-refine`,
+    group: 'quick'
+  })
   const byMove = new Map(evaluations.map((item) => [item.moveNumber, item]))
   let refinedCount = 0
   for (const moveNumber of refineMoveNumbers) {

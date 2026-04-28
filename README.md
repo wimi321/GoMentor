@@ -49,14 +49,14 @@ KataGo 是事实裁判，LLM 是讲棋老师。GoMentor 的目标是让学生不
 
 当前发布版本：
 
-[GoMentor v0.3.1](https://github.com/wimi321/GoMentor/releases/tag/v0.3.1)
+[GoMentor v0.3.2](https://github.com/wimi321/GoMentor/releases/tag/v0.3.2)
 
 | 平台 | 下载 |
 | --- | --- |
-| macOS Apple Silicon | [GoMentor-0.3.1-mac-arm64.dmg](https://github.com/wimi321/GoMentor/releases/download/v0.3.1/GoMentor-0.3.1-mac-arm64.dmg) |
-| macOS Intel | [GoMentor-0.3.1-mac-x64.dmg](https://github.com/wimi321/GoMentor/releases/download/v0.3.1/GoMentor-0.3.1-mac-x64.dmg) |
-| Windows x64 免安装 ZIP | [GoMentor-0.3.1-win-x64-portable.zip](https://github.com/wimi321/GoMentor/releases/download/v0.3.1/GoMentor-0.3.1-win-x64-portable.zip) |
-| Windows x64 安装版 | [GoMentor-0.3.1-win-x64.exe](https://github.com/wimi321/GoMentor/releases/download/v0.3.1/GoMentor-0.3.1-win-x64.exe) |
+| macOS Apple Silicon | [GoMentor-0.3.2-mac-arm64.dmg](https://github.com/wimi321/GoMentor/releases/download/v0.3.2/GoMentor-0.3.2-mac-arm64.dmg) |
+| macOS Intel | [GoMentor-0.3.2-mac-x64.dmg](https://github.com/wimi321/GoMentor/releases/download/v0.3.2/GoMentor-0.3.2-mac-x64.dmg) |
+| Windows x64 免安装 ZIP | [GoMentor-0.3.2-win-x64-portable.zip](https://github.com/wimi321/GoMentor/releases/download/v0.3.2/GoMentor-0.3.2-win-x64-portable.zip) |
+| Windows x64 安装版 | [GoMentor-0.3.2-win-x64.exe](https://github.com/wimi321/GoMentor/releases/download/v0.3.2/GoMentor-0.3.2-win-x64.exe) |
 
 发布说明：
 

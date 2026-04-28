@@ -342,8 +342,9 @@
 }
 
 .ks-tool-log-pro__row {
-  display: grid;
-  gap: 2px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
   padding: 8px 9px;
   border-left: 3px solid var(--ks-green, #63d18c);
   border-radius: 8px;
@@ -355,14 +356,37 @@
   border-left-color: var(--ks-red, #ed6b61);
 }
 
+.ks-tool-log-pro__row--running {
+  border-left-color: var(--ks-gold, #d8b567);
+  background: linear-gradient(90deg, rgb(216 181 103 / 0.13), rgb(0 0 0 / 0.12));
+}
+
 .ks-tool-log-pro__row strong {
   color: var(--ks-text-main, #f4efe7);
   font-size: 12px;
 }
 
 .ks-tool-log-pro__row span {
-  color: var(--ks-text-muted, #a9b2bb);
-  font-size: 12px;
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--ks-green, #63d18c);
+  box-shadow: 0 0 0 3px rgb(99 209 140 / 0.12);
+}
+
+.ks-tool-log-pro__row--running span {
+  background: var(--ks-gold, #d8b567);
+  animation: codex-tool-dot-pulse 1.35s ease-in-out infinite;
+}
+
+.ks-tool-log-pro__row--running strong {
+  background: linear-gradient(90deg, var(--ks-text-main, #f4efe7), var(--ks-gold, #d8b567), var(--ks-text-main, #f4efe7));
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: codex-tool-title-shimmer 1.8s ease-in-out infinite;
 }
 
 .ks-composer-pro {

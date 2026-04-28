@@ -61,6 +61,11 @@
   transition: opacity var(--ks-motion-fast, 120ms ease), transform var(--ks-motion-fast, 120ms ease);
 }
 
+.ks-stone--previous .ks-stone-body {
+  stroke-width: 1.35;
+  filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.36));
+}
+
 .ks-stone-shadow {
   fill: rgba(0, 0, 0, 0.28);
   transform: translate(1.6px, 3px);
@@ -91,18 +96,44 @@
   opacity: 0.24;
 }
 
-.ks-last-move {
+.ks-previous-move {
+  pointer-events: none;
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.3));
+}
+
+.ks-previous-move-shadow {
+  fill: rgba(0, 0, 0, 0.18);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.ks-previous-move-gem {
+  fill: var(--ks-previous-fill);
+  stroke: var(--ks-previous-stroke);
+  stroke-width: 1.35;
+  paint-order: stroke;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.ks-previous-move-glint {
   fill: none;
-  stroke-width: 3.2;
-  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.28));
+  stroke: var(--ks-previous-glint);
+  stroke-width: 1.35;
+  stroke-linecap: round;
+  opacity: 0.78;
 }
 
-.ks-last-move--B {
-  stroke: rgba(246, 239, 226, 0.9);
+.ks-previous-move--B {
+  --ks-previous-fill: rgba(255, 247, 220, 0.94);
+  --ks-previous-stroke: rgba(35, 29, 21, 0.42);
+  --ks-previous-glint: rgba(115, 91, 58, 0.82);
 }
 
-.ks-last-move--W {
-  stroke: rgba(19, 22, 25, 0.86);
+.ks-previous-move--W {
+  --ks-previous-fill: rgba(22, 25, 27, 0.9);
+  --ks-previous-stroke: rgba(255, 248, 226, 0.72);
+  --ks-previous-glint: rgba(255, 248, 226, 0.88);
 }
 
 .ks-candidates-layer {
@@ -190,26 +221,26 @@
 
 .ks-candidate-rank {
   fill: #fffaf0;
-  font-size: 7.6px;
+  font-size: 8.4px;
   font-weight: 620;
 }
 
 .ks-candidate-winrate {
   fill: var(--ks-candidate-ink, #071314);
-  font-size: 8.8px;
-  font-weight: 620;
+  font-size: 12.8px;
+  font-weight: 560;
 }
 
 .ks-candidate-visits {
   fill: color-mix(in srgb, var(--ks-candidate-ink, #071314) 82%, transparent);
-  font-size: 7.1px;
-  font-weight: 540;
+  font-size: 9.8px;
+  font-weight: 500;
 }
 
 .ks-candidate-score {
   fill: #b83328;
-  font-size: 7.2px;
-  font-weight: 560;
+  font-size: 9.9px;
+  font-weight: 520;
 }
 
 .ks-candidate--active .ks-candidate-soft-glow {
@@ -404,14 +435,14 @@
 
 .ks-played-move-label {
   fill: #fff7df;
-  font-size: 7.3px;
-  font-weight: 760;
+  font-size: 8px;
+  font-weight: 640;
 }
 
 .ks-played-move-rank {
   fill: rgba(35, 25, 11, 0.86);
-  font-size: 7px;
-  font-weight: 780;
+  font-size: 7.7px;
+  font-weight: 650;
   paint-order: stroke;
   stroke: rgba(255, 248, 226, 0.9);
   stroke-width: 2px;
@@ -419,20 +450,20 @@
 
 .ks-played-move-winrate {
   fill: #fff9e8;
-  font-size: 8.7px;
-  font-weight: 660;
+  font-size: 12.6px;
+  font-weight: 560;
 }
 
 .ks-played-move-visits {
   fill: rgba(255, 249, 232, 0.82);
-  font-size: 7.1px;
-  font-weight: 560;
+  font-size: 9.6px;
+  font-weight: 500;
 }
 
 .ks-played-move-score {
   fill: #ffd575;
-  font-size: 7.2px;
-  font-weight: 620;
+  font-size: 9.8px;
+  font-weight: 540;
 }
 
 .ks-board-tooltip {

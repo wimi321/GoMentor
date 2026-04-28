@@ -448,6 +448,17 @@ export interface AnalyzeGameQuickProgress {
   totalPositions: number
 }
 
+export type KataGoAnalysisGroup = 'quick' | 'live' | 'single' | 'batch'
+
+export interface KataGoCancelAnalysisRequest {
+  runId?: string
+  group?: KataGoAnalysisGroup
+}
+
+export interface KataGoCancelAnalysisResult {
+  cancelled: number
+}
+
 export interface TeacherRunResult {
   id: string
   mode: TeacherRunMode

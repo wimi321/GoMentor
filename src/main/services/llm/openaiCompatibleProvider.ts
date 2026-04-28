@@ -8,7 +8,18 @@ import {
   type ChatChoice,
   type ChatResponse
 } from '../llmResponse'
-import type { ChatDelta, ChatInput, ChatMessage, ChatResult, LlmProvider, ProviderProbeResult, ProviderSettings } from './provider'
+import type {
+  ChatDelta,
+  ChatInput,
+  ChatMessage,
+  ChatResult,
+  ChatTool,
+  ChatToolCall,
+  ChatTurnResult,
+  LlmProvider,
+  ProviderProbeResult,
+  ProviderSettings
+} from './provider'
 
 const tinyPng =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAeklEQVR42u3SMQ0AIAwAwcrBAQ7wLwEHTMxtsEFv+vmTi7Fm3rOza6Pz/GsQQAABBBBAAAEEEEAAAQQQQAABBBBAAAEEEEAAAQQQQAABBBBAAAEEEEAAAQQQQAABBBBAAAEEEEAAAQQQQAABBBBAAAEEEEAAAQQQ8EELinI6hhXFUGQAAAAASUVORK5CYII='
@@ -42,8 +53,18 @@ function isReasoningModel(model: string): boolean {
   return /(^|[-_.:/])gpt-5($|[-_.:/])|^o\d|[-_.:/]o\d|claude|reason|r1/i.test(model)
 }
 
-function requestBodies(model: string, messages: ChatMessage[], maxTokens: number): Array<Record<string, unknown>> {
-  const base = { model, messages }
+function requestBodies(
+  model: string,
+  messages: ChatMessage[],
+  maxTokens: number,
+  tools?: ChatTool[],
+  toolChoice: 'auto' | 'none' = tools?.length ? 'auto' : 'none'
+): Array<Record<string, unknown>> {
+  const base = {
+    model,
+    messages,
+    ...(tools?.length ? { tools, tool_choice: toolChoice } : {})
+  }
   const reasoning = isReasoningModel(model)
   const variants = reasoning
     ? [
@@ -130,9 +151,43 @@ function emptyResponseError(json: ChatResponse, model: string): Error {
     diagnostics.push('仅返回了 reasoning_content，没有最终讲解文本')
   }
   if (hasToolCall(json)) {
-    diagnostics.push('模型返回了 tool_calls，但当前接口需要最终自然语言文本')
+    diagnostics.push('模型返回了 tool_calls，需要通过 Agent Runtime 执行工具后继续对话')
   }
   return new Error(`LLM 没有返回文本内容（model=${model}，${diagnostics.join('，')}）。如果 finish_reason 是 length，说明输出预算被推理过程耗尽。`)
+}
+
+function normalizeToolCall(value: unknown, index: number): ChatToolCall | null {
+  if (!value || typeof value !== 'object') {
+    return null
+  }
+  const record = value as Record<string, unknown>
+  const fn = record.function && typeof record.function === 'object'
+    ? record.function as Record<string, unknown>
+    : record
+  const name = typeof fn.name === 'string'
+    ? fn.name
+    : typeof record.name === 'string'
+      ? record.name
+      : ''
+  if (!name.trim()) {
+    return null
+  }
+  const rawArguments = fn.arguments ?? record.arguments ?? '{}'
+  return {
+    id: typeof record.id === 'string' && record.id.trim() ? record.id : `call_${index}`,
+    type: 'function',
+    function: {
+      name: name.trim(),
+      arguments: typeof rawArguments === 'string' ? rawArguments : JSON.stringify(rawArguments ?? {})
+    }
+  }
+}
+
+function extractToolCalls(json: ChatResponse): ChatToolCall[] {
+  const raw = json.choices?.[0]?.message?.tool_calls
+  return Array.isArray(raw)
+    ? raw.map(normalizeToolCall).filter((call): call is ChatToolCall => Boolean(call))
+    : []
 }
 
 type ChatAttemptResult =
@@ -184,6 +239,57 @@ async function attemptOpenAICompatibleChat(
   return { kind: 'error', error: new Error(`LLM 没有返回文本内容。${lastError}`) }
 }
 
+async function attemptOpenAICompatibleToolTurn(
+  settings: ProviderSettings,
+  messages: ChatMessage[],
+  tools: ChatTool[],
+  maxTokens = 4096
+): Promise<ChatTurnResult> {
+  let lastError = ''
+  let lastEmptyResponse: ChatResponse | null = null
+  const budgets = Array.from(new Set([maxTokens, Math.min(Math.max(maxTokens * 2, maxTokens + 1024), 8192)]))
+  for (const budget of budgets) {
+    const bodies = requestBodies(settings.llmModel, messages, budget, tools, tools.length ? 'auto' : 'none')
+    for (const body of bodies) {
+      const response = await fetch(endpoint(settings), {
+        method: 'POST',
+        headers: headers(settings),
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(180_000)
+      })
+      if (!response.ok) {
+        const text = await response.text().catch(() => '')
+        if (retryableParameterError(response.status, text)) {
+          lastError = `${response.status} ${text.slice(0, 240)}`
+          continue
+        }
+        throw new Error(`LLM 工具请求失败: ${response.status} ${text.slice(0, 240)}`)
+      }
+      const json = (await response.json()) as ChatResponse
+      const text = extractText(json)
+      const toolCalls = extractToolCalls(json)
+      if (text || toolCalls.length > 0) {
+        return {
+          text,
+          toolCalls,
+          raw: json,
+          finishReason: finishReason(json)
+        }
+      }
+      lastEmptyResponse = json
+      lastError = `empty response: finish_reason=${finishReason(json)} ${formatUsage(json.usage)}`
+      if (budget < budgets[budgets.length - 1] && shouldRetryBudgetAfterEmpty(json, budget)) {
+        break
+      }
+      throw emptyResponseError(json, settings.llmModel)
+    }
+  }
+  if (lastEmptyResponse) {
+    throw emptyResponseError(lastEmptyResponse, settings.llmModel)
+  }
+  throw new Error(`LLM 工具请求没有返回内容。${lastError}`)
+}
+
 function streamDeltaText(json: ChatResponse): string {
   const choice = json.choices?.[0] as (ChatChoice & {
     delta?: {
@@ -199,6 +305,60 @@ function streamDeltaText(json: ChatResponse): string {
     }
   }
   return ''
+}
+
+interface ToolCallDraft {
+  id: string
+  type: 'function'
+  name: string
+  arguments: string
+}
+
+function mergeDeltaToolCalls(drafts: Map<number, ToolCallDraft>, json: ChatResponse): void {
+  const choice = json.choices?.[0] as (ChatChoice & {
+    delta?: {
+      tool_calls?: Array<{
+        index?: number
+        id?: string
+        type?: string
+        function?: {
+          name?: string
+          arguments?: string
+        }
+      }>
+    }
+  }) | undefined
+  const calls = choice?.delta?.tool_calls
+  if (!Array.isArray(calls)) {
+    return
+  }
+  for (const call of calls) {
+    const index = typeof call.index === 'number' ? call.index : drafts.size
+    const current = drafts.get(index) ?? {
+      id: call.id || `call_${index}`,
+      type: 'function' as const,
+      name: '',
+      arguments: ''
+    }
+    if (call.id) current.id = call.id
+    if (call.function?.name) current.name += call.function.name
+    if (call.function?.arguments) current.arguments += call.function.arguments
+    drafts.set(index, current)
+  }
+}
+
+function finalizeToolCallDrafts(drafts: Map<number, ToolCallDraft>): ChatToolCall[] {
+  return [...drafts.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([, draft], index) => ({
+      id: draft.id || `call_${index}`,
+      type: 'function' as const,
+      function: {
+        name: draft.name.trim(),
+        arguments: draft.arguments || '{}'
+      }
+    }))
+    .filter((call) => call.function.name)
 }
 
 async function readStreamText(response: Response, onDelta?: (delta: string) => void): Promise<string> {
@@ -240,6 +400,54 @@ async function readStreamText(response: Response, onDelta?: (delta: string) => v
   return text.trim()
 }
 
+async function readStreamTurn(response: Response, onDelta?: (delta: string) => void): Promise<ChatTurnResult> {
+  if (!response.body) {
+    return { text: '', toolCalls: [] }
+  }
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  const toolDrafts = new Map<number, ToolCallDraft>()
+  let buffer = ''
+  let text = ''
+  let finalReason = ''
+  for (;;) {
+    const { value, done } = await reader.read()
+    if (done) {
+      break
+    }
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split(/\r?\n/)
+    buffer = lines.pop() ?? ''
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed.startsWith('data:')) {
+        continue
+      }
+      const payload = trimmed.replace(/^data:\s*/, '')
+      if (!payload || payload === '[DONE]') {
+        continue
+      }
+      try {
+        const json = JSON.parse(payload) as ChatResponse
+        finalReason = finishReason(json) !== 'unknown' ? finishReason(json) : finalReason
+        mergeDeltaToolCalls(toolDrafts, json)
+        const delta = streamDeltaText(json)
+        if (delta) {
+          text += delta
+          onDelta?.(delta)
+        }
+      } catch {
+        // Ignore malformed SSE keepalive chunks from compatible proxies.
+      }
+    }
+  }
+  return {
+    text: text.trim(),
+    toolCalls: finalizeToolCallDrafts(toolDrafts),
+    finishReason: finalReason || undefined
+  }
+}
+
 async function attemptOpenAICompatibleStream(
   settings: ProviderSettings,
   messages: ChatMessage[],
@@ -270,6 +478,42 @@ async function attemptOpenAICompatibleStream(
     lastError = 'stream completed without visible content'
   }
   return { kind: 'error', error: new Error(`LLM 流式请求没有返回文本内容。${lastError}`) }
+}
+
+async function attemptOpenAICompatibleToolStream(
+  settings: ProviderSettings,
+  messages: ChatMessage[],
+  tools: ChatTool[],
+  maxTokens = 4096,
+  onDelta?: (delta: string) => void
+): Promise<ChatTurnResult | null> {
+  let lastError = ''
+  const bodies = requestBodies(settings.llmModel, messages, maxTokens, tools, tools.length ? 'auto' : 'none')
+  for (const body of bodies) {
+    const response = await fetch(endpoint(settings), {
+      method: 'POST',
+      headers: headers(settings),
+      body: JSON.stringify({ ...body, stream: true }),
+      signal: AbortSignal.timeout(180_000)
+    })
+    if (!response.ok) {
+      const text = await response.text().catch(() => '')
+      if (retryableParameterError(response.status, text)) {
+        lastError = `${response.status} ${text.slice(0, 240)}`
+        continue
+      }
+      throw new Error(`LLM 工具流式请求失败: ${response.status} ${text.slice(0, 240)}`)
+    }
+    const turn = await readStreamTurn(response, onDelta)
+    if (turn.text || turn.toolCalls.length > 0) {
+      return turn
+    }
+    lastError = 'stream completed without visible content'
+  }
+  if (lastError) {
+    return null
+  }
+  return null
 }
 
 export async function streamOpenAICompatibleChat(
@@ -353,6 +597,29 @@ export async function postOpenAICompatibleChat(
   }
 
   throw emptyResponseError(firstAttempt.json, settings.llmModel)
+}
+
+export async function postOpenAICompatibleToolTurn(
+  settings: ProviderSettings,
+  messages: ChatMessage[],
+  tools: ChatTool[],
+  maxTokens = 4096
+): Promise<ChatTurnResult> {
+  return attemptOpenAICompatibleToolTurn(settings, messages, tools, maxTokens)
+}
+
+export async function streamOpenAICompatibleToolTurn(
+  settings: ProviderSettings,
+  messages: ChatMessage[],
+  tools: ChatTool[],
+  maxTokens = 4096,
+  onDelta?: (delta: string) => void
+): Promise<ChatTurnResult> {
+  const streamed = await attemptOpenAICompatibleToolStream(settings, messages, tools, maxTokens, onDelta)
+  if (streamed && (streamed.text || streamed.toolCalls.length > 0)) {
+    return streamed
+  }
+  return postOpenAICompatibleToolTurn(settings, messages, tools, maxTokens)
 }
 
 export async function probeOpenAICompatibleProvider(settings: ProviderSettings): Promise<ProviderProbeResult> {

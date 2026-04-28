@@ -58,6 +58,27 @@ async function startMockLlmServer(port) {
       requests.push(body)
       const allText = (body.messages ?? []).map(textFromMessage).join('\n')
       const isProbe = allText.includes('请只回答 OK') || allText.includes('只输出 OK')
+      const toolMessages = (body.messages ?? []).filter((message) => message.role === 'tool')
+      const needsTools = !isProbe && Array.isArray(body.tools) && toolMessages.length === 0
+      if (needsTools) {
+        response.writeHead(200, { 'Content-Type': 'application/json' })
+        response.end(JSON.stringify({
+          choices: [{
+            finish_reason: 'tool_calls',
+            message: {
+              content: '',
+              tool_calls: [
+                { id: 'call_board', type: 'function', function: { name: 'board_captureTeachingImage', arguments: '{}' } },
+                { id: 'call_katago', type: 'function', function: { name: 'katago_analyzePosition', arguments: '{"moveNumber":8,"maxVisits":24}' } },
+                { id: 'call_knowledge', type: 'function', function: { name: 'knowledge_searchLocal', arguments: '{"text":"布局方向 大场 当前手","moveNumber":8,"maxResults":4}' } },
+                { id: 'call_profile', type: 'function', function: { name: 'studentProfile_write', arguments: '{"reviewedGames":1,"mistakeTags":["方向"],"recentPatterns":["第8手方向选择"],"trainingFocus":["布局方向感"]}' } }
+              ]
+            }
+          }],
+          usage: { prompt_tokens: 800, completion_tokens: 80, total_tokens: 880 }
+        }))
+        return
+      }
       const content = isProbe ? 'OK' : JSON.stringify({
         taskType: 'current-move',
         headline: '本手要先抢全局最大点',
@@ -263,6 +284,38 @@ async function main() {
           boardImageDataUrl: tinyPng,
           prefetchedAnalysis: analysis
         });
+        async function waitForUi(label, predicate, timeoutMs = 180000) {
+          const started = Date.now();
+          while (Date.now() - started < timeoutMs) {
+            const value = predicate();
+            if (value) return value;
+            await new Promise((resolve) => setTimeout(resolve, 250));
+          }
+          throw new Error(label + ' timed out');
+        }
+        await waitForUi('board render', () => document.querySelector('.board-table--v2 svg'));
+        const analyzeButton = await waitForUi('analyze current button', () =>
+          [...document.querySelectorAll('button')]
+            .find((button) => button.textContent?.trim() === '分析当前手' && !button.disabled && button.getClientRects().length > 0)
+        );
+        analyzeButton.click();
+        const uiAnalyze = await waitForUi('UI current-move analysis', () => {
+          const body = document.body.innerText || '';
+          const errorLine = document.querySelector('.error-line')?.textContent || '';
+          const hasAssetFailure = body.includes('无法加载棋盘素材') || body.includes('无法加载棋谱素材') || errorLine.includes('无法加载棋盘素材') || errorLine.includes('无法加载棋谱素材');
+          const hasTaskFailure = body.includes('任务失败') || errorLine.includes('任务失败');
+          const hasAnswer = body.includes('本手要先抢全局最大点') || body.includes('KataGo 证据显示');
+          if (hasAssetFailure || hasTaskFailure || hasAnswer) {
+            return {
+              hasAnswer,
+              hasAssetFailure,
+              hasTaskFailure,
+              errorLine,
+              tail: body.slice(-1800)
+            };
+          }
+          return null;
+        });
         return {
           probe,
           gameTitle: game.title,
@@ -286,7 +339,8 @@ async function main() {
             difficulty: problem.difficulty
           })),
           toolLogs: result.toolLogs.map((log) => ({ name: log.name, status: log.status, detail: log.detail })),
-          reportPath: result.reportPath || ''
+          reportPath: result.reportPath || '',
+          uiAnalyze
         };
       })()
     `)
@@ -300,7 +354,10 @@ async function main() {
     assert.ok(result.knowledgeMatchCount >= 1, 'Teacher runtime should return structured knowledge matches')
     assert.ok(result.recommendedProblemCount >= 1, 'Teacher runtime should return recommended training problems')
     assert.ok(result.markdown.includes('本手要先抢全局最大点') || result.markdown.includes('KataGo'), 'Teacher markdown should be visible')
-    for (const tool of ['board.captureTeachingImage', 'katago.analyzePosition', 'knowledge.searchLocal', 'llm.multimodalTeacher', 'teacher.verifyEvidence', 'studentProfile.write']) {
+    assert.equal(result.uiAnalyze.hasAssetFailure, false, 'UI current-move analysis should not fail while loading board assets')
+    assert.equal(result.uiAnalyze.hasTaskFailure, false, `UI current-move analysis should not fail: ${result.uiAnalyze.errorLine || result.uiAnalyze.tail}`)
+    assert.equal(result.uiAnalyze.hasAnswer, true, 'UI current-move analysis should render the teacher answer')
+    for (const tool of ['board.captureTeachingImage', 'katago.analyzePosition', 'knowledge.searchLocal', 'studentProfile.write']) {
       assert.equal(result.toolLogs.find((log) => log.name === tool)?.status, 'done', `${tool} should finish`)
     }
     assert.ok(result.reportPath, 'Teacher runtime should persist a report')
@@ -310,17 +367,17 @@ async function main() {
       const text = textFromMessage(message)
       return text.includes('请只回答 OK') || text.includes('只输出 OK')
     }))
-    const teacherRequest = mock.requests.find((body) => (body.messages ?? []).some((message) => textFromMessage(message).includes('katagoFacts')))
+    const teacherRequest = mock.requests.find((body) => (body.messages ?? []).some((message) => message.role === 'tool' && textFromMessage(message).includes('knowledgeMatches')))
     assert.ok(probeRequest, 'Mock LLM should receive probe request')
-    assert.ok(teacherRequest, 'Mock LLM should receive teacher request with KataGo facts')
+    assert.ok(teacherRequest, 'Mock LLM should receive teacher request with tool results')
     assert.ok((teacherRequest.messages ?? []).some(hasImage), 'Teacher request should include board image')
     const teacherPayload = (teacherRequest.messages ?? []).map(textFromMessage).join('\n')
-    assert.match(teacherPayload, /katagoFacts/)
-    assert.match(teacherPayload, /knowledgePacket/)
+    assert.match(teacherPayload, /katago\.analyzePosition/)
+    assert.match(teacherPayload, /knowledge/)
     assert.match(teacherPayload, /knowledgeMatches/)
     assert.match(teacherPayload, /recommendedProblems/)
-    assert.match(teacherPayload, /confidence|置信度|不能当成事实/)
-    assert.match(teacherPayload, /studentProfile/)
+    assert.match(teacherPayload, /studentProfile\.write/)
+    assert.ok(teacherRequest.tools.some((tool) => tool.function?.name === 'shell_exec'), 'Tool schema should expose shell.exec')
 
     console.log('Teacher LLM smoke passed')
     console.log(JSON.stringify({
@@ -333,7 +390,12 @@ async function main() {
       recommendedProblemCount: result.recommendedProblemCount,
       knowledgeMatches: result.knowledgeMatches,
       recommendedProblems: result.recommendedProblems,
-      toolLogs: result.toolLogs
+      toolLogs: result.toolLogs,
+      uiAnalyze: {
+        hasAnswer: result.uiAnalyze.hasAnswer,
+        hasAssetFailure: result.uiAnalyze.hasAssetFailure,
+        hasTaskFailure: result.uiAnalyze.hasTaskFailure
+      }
     }, null, 2))
   } finally {
     child.kill()

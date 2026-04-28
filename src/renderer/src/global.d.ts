@@ -14,6 +14,8 @@ import type {
   KataGoAssetStatus,
   KataGoBenchmarkRequest,
   KataGoBenchmarkResult,
+  KataGoCancelAnalysisRequest,
+  KataGoCancelAnalysisResult,
   LibraryImportResult,
   LlmModelsListRequest,
   LlmModelsListResult,
@@ -55,6 +57,7 @@ declare global {
       analyzePosition: (payload: AnalyzePositionRequest) => Promise<KataGoMoveAnalysis>
       analyzePositionStream: (payload: AnalyzePositionRequest) => Promise<KataGoMoveAnalysis>
       analyzeGameQuick: (payload: AnalyzeGameQuickRequest) => Promise<KataGoMoveAnalysis[]>
+      cancelKataGoAnalysis: (payload: KataGoCancelAnalysisRequest) => Promise<KataGoCancelAnalysisResult>
       benchmarkKataGo: (payload?: KataGoBenchmarkRequest) => Promise<KataGoBenchmarkResult>
       onAnalyzePositionProgress: (handler: (payload: AnalyzePositionProgress) => void) => () => void
       onAnalyzeGameQuickProgress: (handler: (payload: AnalyzeGameQuickProgress) => void) => () => void

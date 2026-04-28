@@ -81,7 +81,7 @@ test('life-and-death and tesuji problems include answer and failure explanations
   }
 })
 
-test('matching engine and teacher runtime expose knowledge matches and training recommendations', async () => {
+test('matching engine feeds knowledge matches to the agent without forcing UI templates', async () => {
   const types = await readFile(new URL('../src/main/lib/types.ts', import.meta.url), 'utf8')
   const knowledge = await readFile(new URL('../src/main/services/knowledge.ts', import.meta.url), 'utf8')
   const engine = await readFile(new URL('../src/main/services/knowledge/matchEngine.ts', import.meta.url), 'utf8')
@@ -95,10 +95,12 @@ test('matching engine and teacher runtime expose knowledge matches and training 
   assert.match(engine, /recommendedProblemsFromMatches/)
   assert.match(teacher, /knowledgeMatches/)
   assert.match(teacher, /recommendedProblems/)
-  assert.match(teacher, /KataGo 数据是事实依据/)
+  assert.match(teacher, /工具结果和 KataGo 是事实依据/)
   assert.doesNotMatch(teacher, /partial 匹配只能说/)
-  assert.match(card, /知识匹配/)
-  assert.match(card, /关联训练题/)
+  assert.match(card, /ks-teacher-pro-markdown/)
+  assert.match(card, /查看工具调用/)
+  assert.doesNotMatch(card, /知识匹配/)
+  assert.doesNotMatch(card, /关联训练题/)
 })
 
 test('matching engine ranks exact joseki, life-death, and tesuji matches ahead of broad patterns', () => {

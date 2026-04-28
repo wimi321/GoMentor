@@ -4,6 +4,30 @@ All notable changes to GoMentor will be documented here.
 
 This project follows semantic versioning once public releases begin.
 
+## 0.3.2 - Agent Runtime and Analysis Polish
+
+### Added
+
+- Teacher runtime now follows a Claude Code-style tool loop: tool calls are executed, returned to the model, and the model continues until the final answer.
+- Current-move teacher prompt now lightly requires board-image reading, KataGo evidence, and local knowledge matching without forcing a fixed report template.
+- Teacher replies can be selected and copied, with a lightweight copy button on each assistant response.
+- Tool calls in the teacher thread now show clean step titles with running-state animation instead of verbose engineering details.
+- KataGo analysis runs can now be cancelled when the user changes game, move, or analysis mode.
+
+### Improved
+
+- Fast winrate graph generation uses a KaTrain-style low-visit sweep and refines suspected mistakes without blocking the first curve.
+- KataGo candidate loss and issue ranking use first-choice versus played-move winrate loss from the player-to-move perspective.
+- Board markers now distinguish the current move from the previous move with a subtler professional marker.
+- Candidate overlays and variation preview behavior are more stable during hover.
+- LLM provider handling now accepts tool-call turns and streamed tool-call deltas instead of treating empty text plus tools as an error.
+
+### Fixed
+
+- Teacher analysis no longer falls back to deterministic pseudo-explanations when the LLM fails.
+- Teacher tool trace no longer exposes long result summaries, shell output, or implementation detail in the main chat.
+- Right-side assistant output keeps auto-scroll behavior and supports copying during normal streamed answers.
+
 ## 0.3.1 - Teacher Smoke Fixes
 
 ### Fixed

@@ -1,14 +1,14 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron'
 import { isAbsolute, relative, resolve, join } from 'node:path'
 import { appHome, findGame, getGames, getSettings, hasLlmApiKey, replaceSettings, setSettings, upsertGames } from './lib/store'
-import type { AnalyzeGameQuickRequest, AnalyzePositionRequest, AppSettings, DashboardData, FoxSyncRequest, KataGoAssetInstallRequest, KataGoBenchmarkRequest, LlmModelsListRequest, LlmSettingsTestRequest, ReviewRequest, TeacherRunRequest } from './lib/types'
+import type { AnalyzeGameQuickRequest, AnalyzePositionRequest, AppSettings, DashboardData, FoxSyncRequest, KataGoAssetInstallRequest, KataGoBenchmarkRequest, KataGoCancelAnalysisRequest, LlmModelsListRequest, LlmSettingsTestRequest, ReviewRequest, TeacherRunRequest } from './lib/types'
 import { importSgfFile, readGameRecord } from './services/sgf'
 import { ensureFoxGameDownloaded, syncFoxGames } from './services/fox'
 import { runReview } from './services/review'
 import { applyDetectedDefaults, detectSystemProfile } from './services/systemProfile'
 import { runTeacherTask } from './services/teacherAgent'
 import { listLlmModels, testLlmSettings } from './services/llm'
-import { analyzeGameQuick, analyzePosition, analyzePositionWithProgress } from './services/katago'
+import { analyzeGameQuick, analyzePosition, analyzePositionWithProgress, cancelKataGoAnalysis } from './services/katago'
 import { benchmarkKataGo } from './services/katagoBenchmark'
 import { collectDiagnostics } from './services/diagnostics'
 import { searchKnowledgeCards } from './services/knowledge/searchLocal'
@@ -303,8 +303,12 @@ app.whenReady().then(() => {
       })
     }, {
       refineVisits: payload.refineVisits,
-      refineTopN: payload.refineTopN
+      refineTopN: payload.refineTopN,
+      runId: payload.runId
     })
+  )
+  ipcMain.handle('katago:cancel-analysis', async (_event, payload: KataGoCancelAnalysisRequest) =>
+    cancelKataGoAnalysis(payload)
   )
   ipcMain.handle('katago:benchmark', async (_event, payload: KataGoBenchmarkRequest | undefined) => benchmarkKataGo(payload ?? {}))
   ipcMain.handle('teacher:run', async (event, payload: TeacherRunRequest) =>

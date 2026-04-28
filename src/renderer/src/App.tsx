@@ -86,9 +86,15 @@ type ChatMessage = {
   toolLogs?: TeacherRunResult['toolLogs']
 }
 
+type TeacherTraceLog = NonNullable<TeacherRunResult['toolLogs']>[number]
 type EvaluationByMove = Record<number, KataGoMoveAnalysis>
 type StatusTone = 'good' | 'warn' | 'neutral'
 type TimelineIssueColor = 'B' | 'W'
+type BoardPngAssets = {
+  boardTexture: HTMLImageElement | null
+  blackStone: HTMLImageElement | null
+  whiteStone: HTMLImageElement | null
+}
 
 interface StatusPill {
   label: string
@@ -141,6 +147,10 @@ const QUICK_GRAPH_REFINE_VISITS = 120
 const QUICK_GRAPH_REFINE_TOP_N = 18
 const LIBRARY_PAGE_SIZE = 10
 const TIMELINE_ISSUE_MIN_LOSS = 1
+const ANALYSIS_CACHE_PREFIX = 'gomentor.analysisCache.v2.'
+const ANALYSIS_CACHE_INDEX_KEY = 'gomentor.analysisCache.v2.index'
+const ANALYSIS_CACHE_MAX_GAMES = 8
+const ANALYSIS_CACHE_COMPLETE_RATIO = 0.9
 
 function safePlayerName(name: string | undefined, fallback: string): string {
   const value = (name ?? '').trim()
@@ -195,6 +205,133 @@ function quickGraphFastVisits(visitsPerSecond: number): number {
     return QUICK_GRAPH_FAST_VISITS
   }
   return visitsPerSecond >= 450 ? QUICK_GRAPH_FAST_VISITS_STRONG : QUICK_GRAPH_FAST_VISITS
+}
+
+function analysisQuality(analysis: KataGoMoveAnalysis | null | undefined): number {
+  if (!analysis) {
+    return 0
+  }
+  const beforeCandidateCount = analysis.before.topMoves.length
+  const afterCandidateCount = analysis.after.topMoves.length
+  const actualSource = analysis.playedMove?.source
+  const actualBonus = actualSource === 'forced' ? 9000 : actualSource === 'candidate' ? 7000 : actualSource === 'after-root' ? 1500 : 0
+  return (
+    (analysisHasCandidates(analysis) ? 1_000_000 : 0) +
+    candidateBestVisits(analysis) * 5 +
+    candidateVisitsTotal(analysis) +
+    beforeCandidateCount * 60 +
+    afterCandidateCount * 20 +
+    actualBonus
+  )
+}
+
+function preferAnalysis(current: KataGoMoveAnalysis | null | undefined, incoming: KataGoMoveAnalysis | null | undefined): KataGoMoveAnalysis | null {
+  if (!current) {
+    return incoming ?? null
+  }
+  if (!incoming) {
+    return current
+  }
+  if (current.gameId !== incoming.gameId || current.moveNumber !== incoming.moveNumber) {
+    return incoming
+  }
+  if (!analysisHasCandidates(current) && analysisHasCandidates(incoming)) {
+    return incoming
+  }
+  if (analysisHasCandidates(current) && !analysisHasCandidates(incoming)) {
+    return current
+  }
+  return analysisQuality(incoming) >= analysisQuality(current) ? incoming : current
+}
+
+function mergeEvaluations(current: EvaluationByMove, incoming: KataGoMoveAnalysis[]): EvaluationByMove {
+  const merged: EvaluationByMove = { ...current }
+  for (const item of incoming) {
+    merged[item.moveNumber] = preferAnalysis(merged[item.moveNumber], item) ?? item
+  }
+  return merged
+}
+
+function hasCompleteEvaluationGraph(evaluations: EvaluationByMove, totalMoves: number): boolean {
+  if (totalMoves <= 0) {
+    return false
+  }
+  const analyzed = Object.values(evaluations).filter(analysisHasCandidates).length
+  return analyzed >= Math.ceil(totalMoves * ANALYSIS_CACHE_COMPLETE_RATIO)
+}
+
+function readAnalysisCacheIndex(): string[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(ANALYSIS_CACHE_INDEX_KEY) ?? '[]')
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function writeAnalysisCacheIndex(keys: string[]): void {
+  try {
+    localStorage.setItem(ANALYSIS_CACHE_INDEX_KEY, JSON.stringify(keys.slice(0, ANALYSIS_CACHE_MAX_GAMES)))
+  } catch {
+    // Best-effort cache only.
+  }
+}
+
+function loadStoredEvaluations(cacheKey: string): EvaluationByMove {
+  try {
+    const raw = localStorage.getItem(`${ANALYSIS_CACHE_PREFIX}${cacheKey}`)
+    if (!raw) {
+      return {}
+    }
+    const parsed = JSON.parse(raw) as { evaluations?: unknown }
+    const values = Array.isArray(parsed.evaluations)
+      ? parsed.evaluations
+      : typeof parsed.evaluations === 'object' && parsed.evaluations !== null
+        ? Object.values(parsed.evaluations)
+        : []
+    const restored: EvaluationByMove = {}
+    for (const value of values) {
+      const item = value as Partial<KataGoMoveAnalysis>
+      if (typeof item.moveNumber === 'number' && typeof item.gameId === 'string') {
+        restored[item.moveNumber] = item as KataGoMoveAnalysis
+      }
+    }
+    return restored
+  } catch {
+    return {}
+  }
+}
+
+function persistStoredEvaluations(cacheKey: string, evaluations: EvaluationByMove): void {
+  const entries = Object.values(evaluations)
+  if (entries.length === 0) {
+    return
+  }
+  const itemKey = `${ANALYSIS_CACHE_PREFIX}${cacheKey}`
+  const payload = JSON.stringify({
+    updatedAt: new Date().toISOString(),
+    evaluations: entries
+  })
+  const fullIndex = [cacheKey, ...readAnalysisCacheIndex().filter((item) => item !== cacheKey)]
+  const retainedIndex = fullIndex.slice(0, ANALYSIS_CACHE_MAX_GAMES)
+
+  function write(): void {
+    localStorage.setItem(itemKey, payload)
+    writeAnalysisCacheIndex(retainedIndex)
+  }
+
+  try {
+    write()
+  } catch {
+    for (const staleKey of fullIndex.slice(ANALYSIS_CACHE_MAX_GAMES)) {
+      localStorage.removeItem(`${ANALYSIS_CACHE_PREFIX}${staleKey}`)
+    }
+    try {
+      write()
+    } catch {
+      // If the browser quota is still full, keep the in-memory cache only.
+    }
+  }
 }
 
 function sleep(ms: number): Promise<void> {
@@ -331,9 +468,57 @@ export function App(): ReactElement {
   const userPausedLiveAnalysisRef = useRef(false)
   const moveNumberRef = useRef(moveNumber)
   const selectedGameIdRef = useRef('')
+  const selectedEvaluationCacheKeyRef = useRef('')
+  const evaluationCacheRef = useRef<Record<string, EvaluationByMove>>({})
+  const evaluationPersistTimersRef = useRef<Record<string, number>>({})
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const t = useMemo(() => createUiTranslator(dashboard.settings.reviewLanguage), [dashboard.settings.reviewLanguage])
   const uiError = (cause: unknown, context?: string): string => humanizeUiError(cause, dashboard.settings.reviewLanguage, context)
+
+  async function cancelKataGoWork(payload: Parameters<typeof window.gomentor.cancelKataGoAnalysis>[0]): Promise<void> {
+    await window.gomentor.cancelKataGoAnalysis(payload).catch(() => undefined)
+  }
+
+  function analysisCacheKeyForGame(gameId: string): string {
+    const modelKey =
+      dashboard.settings.katagoModelPreset ||
+      dashboard.systemProfile.katagoModelPreset ||
+      dashboard.settings.katagoModel ||
+      dashboard.systemProfile.katagoModel ||
+      'default-model'
+    return `${gameId}::${modelKey}`
+  }
+
+  function schedulePersistEvaluations(cacheKey: string): void {
+    const existingTimer = evaluationPersistTimersRef.current[cacheKey]
+    if (existingTimer) {
+      window.clearTimeout(existingTimer)
+    }
+    evaluationPersistTimersRef.current[cacheKey] = window.setTimeout(() => {
+      delete evaluationPersistTimersRef.current[cacheKey]
+      persistStoredEvaluations(cacheKey, evaluationCacheRef.current[cacheKey] ?? {})
+    }, 450)
+  }
+
+  function cachedEvaluationsForGame(gameId: string): EvaluationByMove {
+    const cacheKey = analysisCacheKeyForGame(gameId)
+    if (!evaluationCacheRef.current[cacheKey]) {
+      evaluationCacheRef.current[cacheKey] = loadStoredEvaluations(cacheKey)
+    }
+    return evaluationCacheRef.current[cacheKey]
+  }
+
+  function cachedAnalysisForGameMove(gameId: string, targetMove: number): KataGoMoveAnalysis | null {
+    return cachedEvaluationsForGame(gameId)[targetMove] ?? null
+  }
+
+  function commitEvaluations(cacheKey: string, next: EvaluationByMove): void {
+    evaluationCacheRef.current[cacheKey] = next
+    schedulePersistEvaluations(cacheKey)
+    if (selectedEvaluationCacheKeyRef.current === cacheKey) {
+      setEvaluations(next)
+    }
+  }
 
   useEffect(() => {
     void refresh()
@@ -345,6 +530,17 @@ export function App(): ReactElement {
       setKataGoInstallProgress(progress)
       setKataGoInstallMessage(progress.message)
     })
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      for (const timer of Object.values(evaluationPersistTimersRef.current)) {
+        window.clearTimeout(timer)
+      }
+      for (const [cacheKey, cached] of Object.entries(evaluationCacheRef.current)) {
+        persistStoredEvaluations(cacheKey, cached)
+      }
+    }
   }, [])
 
   const selectedGame = useMemo(
@@ -375,10 +571,8 @@ export function App(): ReactElement {
   )
   const currentAnalysis = useMemo(() => {
     const cached = evaluations[moveNumber] ?? null
-    if (analysis?.moveNumber === moveNumber && (analysisHasCandidates(analysis) || !analysisHasCandidates(cached))) {
-      return analysis
-    }
-    return cached
+    const active = analysis?.moveNumber === moveNumber ? analysis : null
+    return preferAnalysis(cached, active)
   }, [analysis, evaluations, moveNumber])
 
   useEffect(() => {
@@ -393,7 +587,8 @@ export function App(): ReactElement {
 
   useEffect(() => {
     selectedGameIdRef.current = selectedGame?.id ?? ''
-  }, [selectedGame?.id])
+    selectedEvaluationCacheKeyRef.current = selectedGame ? analysisCacheKeyForGame(selectedGame.id) : ''
+  }, [selectedGame?.id, dashboard.settings.katagoModelPreset, dashboard.settings.katagoModel])
 
   useEffect(() => {
     if (!selectedGame) {
@@ -449,17 +644,35 @@ export function App(): ReactElement {
 
   async function loadRecord(gameId: string): Promise<void> {
     try {
+      void cancelKataGoWork({ group: 'quick' })
       const next = await window.gomentor.getGameRecord(gameId)
       setDashboard((current) => ({
         ...current,
         games: current.games.map((game) => (game.id === next.game.id ? next.game : game))
       }))
+      const cacheKey = analysisCacheKeyForGame(gameId)
+      selectedEvaluationCacheKeyRef.current = cacheKey
+      const cachedEvaluations = cachedEvaluationsForGame(gameId)
+      const cachedCurrent = cachedEvaluations[next.moves.length] ?? null
       userPausedLiveAnalysisRef.current = false
       setRecord(next)
       setMoveNumber(next.moves.length)
-      setAnalysis(null)
-      setEvaluations({})
-      void warmupEvaluationGraph(gameId, next.moves.length)
+      setAnalysis(cachedCurrent)
+      setEvaluations(cachedEvaluations)
+      if (hasCompleteEvaluationGraph(cachedEvaluations, next.moves.length)) {
+        setGraphBusy(false)
+        setGraphProgress('')
+        setLiveAnalysis((current) => ({
+          ...current,
+          running: false,
+          status: '已载入胜率缓存',
+          visits: candidateVisitsTotal(cachedCurrent),
+          bestVisits: candidateBestVisits(cachedCurrent),
+          targetMoveNumber: next.moves.length
+        }))
+      } else {
+        void warmupEvaluationGraph(gameId, next.moves.length)
+      }
       queueAutoLiveAnalysis(gameId, next, next.moves.length, 120)
     } catch (cause) {
       setError(String(cause))
@@ -482,6 +695,7 @@ export function App(): ReactElement {
 
   async function warmupEvaluationGraph(gameId: string, defaultMoveNumber: number): Promise<void> {
     const runId = crypto.randomUUID()
+    const cacheKey = analysisCacheKeyForGame(gameId)
     graphRunId.current = runId
     setGraphBusy(true)
     setGraphProgress('启动快速胜率图')
@@ -493,10 +707,11 @@ export function App(): ReactElement {
       setGraphProgress(`${done}/${progress.totalPositions} 局面`)
       rememberEvaluation(progress.evaluation)
       if (progress.evaluation.moveNumber === defaultMoveNumber) {
-        setAnalysis((current) => analysisHasCandidates(current) ? current : progress.evaluation)
+        setAnalysis((current) => preferAnalysis(current, progress.evaluation))
       }
     })
     try {
+      await cancelKataGoWork({ group: 'quick' })
       const fastVisits = quickGraphFastVisits(dashboard.settings.katagoBenchmarkVisitsPerSecond)
       const quickEvaluations = await window.gomentor.analyzeGameQuick({
         gameId,
@@ -509,17 +724,11 @@ export function App(): ReactElement {
         return
       }
       const nextMap = Object.fromEntries(quickEvaluations.map((item) => [item.moveNumber, item]))
-      setEvaluations((current) => {
-        const merged = { ...current }
-        for (const item of quickEvaluations) {
-          if (!analysisHasCandidates(merged[item.moveNumber])) {
-            merged[item.moveNumber] = item
-          }
-        }
-        return merged
-      })
-      const preferred = nextMap[defaultMoveNumber] ?? quickEvaluations[quickEvaluations.length - 1] ?? null
-      setAnalysis((current) => analysisHasCandidates(current) ? current : preferred)
+      const base = evaluationCacheRef.current[cacheKey] ?? cachedEvaluationsForGame(gameId)
+      const merged = mergeEvaluations(base, quickEvaluations)
+      commitEvaluations(cacheKey, merged)
+      const preferred = nextMap[defaultMoveNumber] ?? merged[defaultMoveNumber] ?? quickEvaluations[quickEvaluations.length - 1] ?? null
+      setAnalysis((current) => preferAnalysis(current, preferred))
     } catch (cause) {
       if (graphRunId.current === runId) {
         setError(`胜率图生成失败: ${String(cause)}`)
@@ -812,20 +1021,29 @@ export function App(): ReactElement {
   }
 
   function rememberEvaluation(nextAnalysis: KataGoMoveAnalysis): void {
-    setEvaluations((current) => ({
-      ...current,
-      [nextAnalysis.moveNumber]: analysisHasCandidates(current[nextAnalysis.moveNumber]) && !analysisHasCandidates(nextAnalysis)
-        ? current[nextAnalysis.moveNumber]
-        : nextAnalysis
-    }))
+    const cacheKey = analysisCacheKeyForGame(nextAnalysis.gameId)
+    setEvaluations((current) => {
+      const isCurrentGame = selectedEvaluationCacheKeyRef.current === cacheKey
+      const base = isCurrentGame ? current : (evaluationCacheRef.current[cacheKey] ?? loadStoredEvaluations(cacheKey))
+      const preferred = preferAnalysis(base[nextAnalysis.moveNumber], nextAnalysis) ?? nextAnalysis
+      if (base[nextAnalysis.moveNumber] === preferred) {
+        evaluationCacheRef.current[cacheKey] = base
+        return current
+      }
+      const merged = {
+        ...base,
+        [nextAnalysis.moveNumber]: preferred
+      }
+      evaluationCacheRef.current[cacheKey] = merged
+      schedulePersistEvaluations(cacheKey)
+      return isCurrentGame ? merged : current
+    })
   }
 
   function analysisForMove(targetMove: number): KataGoMoveAnalysis | null {
     const cached = evaluations[targetMove] ?? null
-    if (analysis?.moveNumber === targetMove && (analysisHasCandidates(analysis) || !analysisHasCandidates(cached))) {
-      return analysis
-    }
-    return cached
+    const active = analysis?.moveNumber === targetMove ? analysis : null
+    return preferAnalysis(cached, active)
   }
 
   function queueAutoLiveAnalysis(gameId: string, targetRecord: GameRecord, targetMove: number, delay = 80): void {
@@ -869,6 +1087,7 @@ export function App(): ReactElement {
     }
     autoAnalysisRequestId.current = crypto.randomUUID()
     liveAnalysisRunId.current = crypto.randomUUID()
+    void cancelKataGoWork({ group: 'live' })
     setLiveAnalysis((current) => ({
       ...current,
       running: false,
@@ -899,14 +1118,35 @@ export function App(): ReactElement {
     ) {
       return
     }
+    const cachedAnalysis = cachedAnalysisForGameMove(gameId, targetMove) ?? (selectedGameIdRef.current === gameId ? analysisForMove(targetMove) : null)
+    const cachedVisits = candidateVisitsTotal(cachedAnalysis)
+    const cachedBestVisits = candidateBestVisits(cachedAnalysis)
+    if (
+      cachedAnalysis &&
+      (cachedBestVisits >= LIVE_ANALYSIS_BEST_VISIT_LIMIT || cachedVisits >= LIVE_ANALYSIS_TOTAL_VISIT_LIMIT)
+    ) {
+      setMoveNumber(targetMove)
+      setAnalysis(cachedAnalysis)
+      setLiveAnalysis({
+        running: false,
+        status: `已复用缓存 ${formatVisits(cachedVisits)}`,
+        visits: cachedVisits,
+        bestVisits: cachedBestVisits,
+        visitsPerSecond: dashboard.settings.katagoBenchmarkVisitsPerSecond,
+        targetMoveNumber: targetMove,
+        round: 0
+      })
+      return
+    }
     const runId = crypto.randomUUID()
     const startedAt = Date.now()
     let lastSampleAt = performance.now()
-    const cachedAnalysis = options.record ? null : analysisForMove(targetMove)
-    let lastVisitSample = candidateVisitsTotal(cachedAnalysis)
-    let lastEffectiveVisitSample = lastVisitSample
+    const cachedVisitSeed = candidateVisitsTotal(cachedAnalysis)
+    let lastVisitSample = 0
+    let lastEffectiveVisitSample = 0
     const benchmarkSpeed = dashboard.settings.katagoBenchmarkVisitsPerSecond
     let lastSpeedSample = benchmarkSpeed
+    await cancelKataGoWork({ group: 'live' })
     liveAnalysisRunId.current = runId
     setError('')
     setMoveNumber(targetMove)
@@ -914,7 +1154,7 @@ export function App(): ReactElement {
     setLiveAnalysis({
       running: true,
       status: `精读第 ${targetMove} 手`,
-      visits: lastVisitSample,
+      visits: cachedVisitSeed,
       bestVisits: candidateBestVisits(cachedAnalysis),
       visitsPerSecond: benchmarkSpeed,
       targetMoveNumber: targetMove,
@@ -933,19 +1173,21 @@ export function App(): ReactElement {
           return
         }
         const nextAnalysis = progress.analysis
-        const totalVisits = candidateVisitsTotal(nextAnalysis)
-        const bestVisits = candidateBestVisits(nextAnalysis)
+        const displayedAnalysis = preferAnalysis(cachedAnalysisForGameMove(gameId, targetMove), nextAnalysis) ?? nextAnalysis
+        const progressVisits = candidateVisitsTotal(nextAnalysis)
+        const totalVisits = candidateVisitsTotal(displayedAnalysis)
+        const bestVisits = candidateBestVisits(displayedAnalysis)
         const sampledAt = performance.now()
         const sampleSeconds = Math.max(0.1, (sampledAt - lastSampleAt) / 1000)
-        const visitsDelta = Math.max(0, totalVisits - lastVisitSample)
+        const visitsDelta = Math.max(0, progressVisits - lastVisitSample)
         const measuredSpeed = visitsDelta > 0 ? visitsDelta / sampleSeconds : lastSpeedSample
         lastSpeedSample = measuredSpeed > 0 ? Math.max(lastSpeedSample, measuredSpeed) : lastSpeedSample
         const visitsPerSecond = lastSpeedSample || measuredSpeed
-        lastVisitSample = Math.max(lastVisitSample, totalVisits)
+        lastVisitSample = Math.max(lastVisitSample, progressVisits)
         lastSampleAt = sampledAt
         rememberEvaluation(nextAnalysis)
         if (moveNumberRef.current === targetMove) {
-          setAnalysis(nextAnalysis)
+          setAnalysis((current) => preferAnalysis(current, nextAnalysis))
         }
         setLiveAnalysis({
           running: !progress.isFinal,
@@ -970,11 +1212,12 @@ export function App(): ReactElement {
         if (liveAnalysisRunId.current !== runId || selectedGameIdRef.current !== gameId) {
           return
         }
-        const totalVisits = candidateVisitsTotal(finalAnalysis)
-        const bestVisits = candidateBestVisits(finalAnalysis)
+        const displayedFinal = preferAnalysis(cachedAnalysisForGameMove(gameId, targetMove), finalAnalysis) ?? finalAnalysis
+        const totalVisits = candidateVisitsTotal(displayedFinal)
+        const bestVisits = candidateBestVisits(displayedFinal)
         rememberEvaluation(finalAnalysis)
         if (moveNumberRef.current === targetMove) {
-          setAnalysis(finalAnalysis)
+          setAnalysis((current) => preferAnalysis(current, finalAnalysis))
         }
         setLiveAnalysis((current) => ({
           ...current,
@@ -992,7 +1235,7 @@ export function App(): ReactElement {
             setLiveAnalysis((current) => ({
               ...current,
               running: false,
-              status: `已保留 ${formatVisits(current.visits || lastVisitSample)}`
+              status: `已保留 ${formatVisits(current.visits || cachedVisitSeed || lastVisitSample)}`
             }))
           } else if (message.includes('KataGo 分析超时')) {
             try {
@@ -1004,11 +1247,12 @@ export function App(): ReactElement {
               if (liveAnalysisRunId.current !== runId || selectedGameIdRef.current !== gameId) {
                 return
               }
-              const totalVisits = candidateVisitsTotal(quickAnalysis)
-              const bestVisits = candidateBestVisits(quickAnalysis)
+              const displayedQuick = preferAnalysis(cachedAnalysisForGameMove(gameId, targetMove), quickAnalysis) ?? quickAnalysis
+              const totalVisits = candidateVisitsTotal(displayedQuick)
+              const bestVisits = candidateBestVisits(displayedQuick)
               rememberEvaluation(quickAnalysis)
               if (moveNumberRef.current === targetMove) {
-                setAnalysis(quickAnalysis)
+                setAnalysis((current) => preferAnalysis(current, quickAnalysis))
               }
               setLiveAnalysis((current) => ({
                 ...current,
@@ -1061,21 +1305,23 @@ export function App(): ReactElement {
         if (liveAnalysisRunId.current !== runId || selectedGameIdRef.current !== gameId) {
           return
         }
-        const totalVisits = candidateVisitsTotal(nextAnalysis)
-        const bestVisits = candidateBestVisits(nextAnalysis)
+        const displayedAnalysis = preferAnalysis(cachedAnalysisForGameMove(gameId, targetMove), nextAnalysis) ?? nextAnalysis
+        const progressVisits = candidateVisitsTotal(nextAnalysis)
+        const totalVisits = candidateVisitsTotal(displayedAnalysis)
+        const bestVisits = candidateBestVisits(displayedAnalysis)
         const sampledAt = performance.now()
         const sampleSeconds = Math.max(0.1, (sampledAt - lastSampleAt) / 1000)
-        const effectiveVisits = Math.max(totalVisits, maxVisits)
+        const effectiveVisits = Math.max(progressVisits, maxVisits)
         const visitsDelta = Math.max(0, effectiveVisits - lastEffectiveVisitSample)
         const visitsPerSecond = visitsDelta > 0
           ? visitsDelta / sampleSeconds
           : (benchmarkSpeed || totalVisits / Math.max(0.1, (Date.now() - startedAt) / 1000))
-        lastVisitSample = totalVisits
+        lastVisitSample = progressVisits
         lastEffectiveVisitSample = effectiveVisits
         lastSampleAt = sampledAt
         rememberEvaluation(nextAnalysis)
         if (moveNumberRef.current === targetMove) {
-          setAnalysis(nextAnalysis)
+          setAnalysis((current) => preferAnalysis(current, nextAnalysis))
         }
         setLiveAnalysis({
           running: true,
@@ -1138,7 +1384,7 @@ export function App(): ReactElement {
       pauseLiveAnalysis('老师讲解中，暂停精读')
     }
     setMoveNumber(targetMove)
-    setAnalysis(evaluations[targetMove] ?? null)
+    setAnalysis(analysisForMove(targetMove))
     setBusy('teacher')
     setError('')
     const ask = `分析第 ${targetMove} 手`
@@ -1150,7 +1396,7 @@ export function App(): ReactElement {
         moveNumber: targetMove,
         maxVisits: 520
       })
-      setAnalysis(nextAnalysis)
+      setAnalysis((current) => preferAnalysis(current, nextAnalysis))
       rememberEvaluation(nextAnalysis)
       const boardImageDataUrl = await renderBoardPng(record, targetMove, nextAnalysis)
       const result = await runTeacherTaskWithStream({
@@ -1163,7 +1409,7 @@ export function App(): ReactElement {
         prefetchedAnalysis: nextAnalysis
       }, assistantMessageId)
       const finalAnalysis = result.analysis ?? nextAnalysis
-      setAnalysis(finalAnalysis)
+      setAnalysis((current) => preferAnalysis(current, finalAnalysis))
       rememberEvaluation(finalAnalysis)
     } catch (cause) {
       updateMessage(assistantMessageId, (message) => ({
@@ -1206,7 +1452,7 @@ export function App(): ReactElement {
         playerName
       }, assistantMessageId)
       if (result.analysis) {
-        setAnalysis(result.analysis)
+        setAnalysis((current) => preferAnalysis(current, result.analysis))
         rememberEvaluation(result.analysis)
       }
     } catch (cause) {
@@ -1269,7 +1515,7 @@ export function App(): ReactElement {
           moveNumber,
           maxVisits: 520
         })
-        setAnalysis(nextAnalysis)
+        setAnalysis((current) => preferAnalysis(current, nextAnalysis))
         rememberEvaluation(nextAnalysis)
         const boardImageDataUrl = await renderBoardPng(record, moveNumber, nextAnalysis)
         const result = await runTeacherTaskWithStream({
@@ -1282,7 +1528,7 @@ export function App(): ReactElement {
           prefetchedAnalysis: nextAnalysis
         }, assistantMessageId)
         if (result.analysis) {
-          setAnalysis(result.analysis)
+          setAnalysis((current) => preferAnalysis(current, result.analysis))
           rememberEvaluation(result.analysis)
         }
       } else {
@@ -1850,6 +2096,53 @@ function ChatMarkdown({ text }: { text: string }): ReactElement {
   return <div className="chat-markdown">{nodes}</div>
 }
 
+function teacherToolTitle(log: TeacherTraceLog): string {
+  const byName: Record<string, string> = {
+    'library.findGames': '筛选棋谱',
+    'sgf.readGameRecord': '读取棋谱',
+    'katago.analyzePosition': 'KataGo 当前局面',
+    'katago.analyzeGameBatch': 'KataGo 整盘分析',
+    'board.captureTeachingImage': '读取棋盘图',
+    'knowledge.searchLocal': '检索知识库',
+    'studentProfile.read': '读取棋手画像',
+    'studentProfile.write': '更新棋手画像',
+    'system.detectEnvironment': '检查环境',
+    'settings.writeAppConfig': '写入设置',
+    'katago.verifyAnalysis': '验证 KataGo',
+    'web.searchGoKnowledge': '联网检索',
+    'filesystem.read': '读取文件',
+    'shell.exec': '执行 Shell',
+    'shell.kill': '停止 Shell',
+    'report.saveAnalysis': '保存报告'
+  }
+  return byName[log.name] ?? log.label ?? '调用工具'
+}
+
+async function copyTextToClipboard(text: string): Promise<void> {
+  const value = text.trim()
+  if (!value) {
+    return
+  }
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value)
+    return
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = value
+  textarea.setAttribute('readonly', 'true')
+  textarea.style.position = 'fixed'
+  textarea.style.left = '-9999px'
+  textarea.style.top = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+  const copied = document.execCommand('copy')
+  document.body.removeChild(textarea)
+  if (!copied) {
+    throw new Error('复制失败')
+  }
+}
+
 function TeacherInlineResponse({
   message,
   onJumpToMove,
@@ -1863,6 +2156,20 @@ function TeacherInlineResponse({
   const toolLogs = message.toolLogs ?? message.result?.toolLogs ?? []
   const isRunning = message.status === 'running'
   const isTeacher = message.role === 'teacher'
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
+  async function copyAssistantText(): Promise<void> {
+    if (!message.content.trim()) {
+      return
+    }
+    try {
+      await copyTextToClipboard(message.content)
+      setCopyState('copied')
+      window.setTimeout(() => setCopyState('idle'), 1400)
+    } catch {
+      setCopyState('failed')
+      window.setTimeout(() => setCopyState('idle'), 1800)
+    }
+  }
   return (
     <>
       {isTeacher && toolLogs.length > 0 ? (
@@ -1870,9 +2177,9 @@ function TeacherInlineResponse({
           <summary>工具调用 · {toolLogs.length}</summary>
           <div>
             {toolLogs.map((log) => (
-              <p key={log.id} className={`codex-tool-trace__row codex-tool-trace__row--${log.status}`}>
-                <strong>{log.label || log.name}</strong>
-                <span>{log.detail || log.status}</span>
+              <p key={log.id} className={`codex-tool-trace__row codex-tool-trace__row--${log.status}`} aria-label={`${teacherToolTitle(log)} · ${log.status}`}>
+                <span aria-hidden="true" />
+                <strong>{teacherToolTitle(log)}</strong>
               </p>
             ))}
           </div>
@@ -1886,6 +2193,13 @@ function TeacherInlineResponse({
           </div>
         ) : isTeacher ? (
           <>
+            {message.content.trim() ? (
+              <div className="assistant-copybar">
+                <button type="button" onClick={() => void copyAssistantText()} aria-label="复制老师回复">
+                  {copyState === 'copied' ? '已复制' : copyState === 'failed' ? '复制失败' : '复制'}
+                </button>
+              </div>
+            ) : null}
             <ChatMarkdown text={message.content} />
             {isRunning ? <span className="streaming-cursor" aria-label="正在输出" /> : null}
           </>
@@ -3052,7 +3366,7 @@ function gtpToPoint(gtp: string, size: number): { row: number; col: number } | n
   return { row, col }
 }
 
-async function renderBoardPng(record: GameRecord, moveNumber: number, analysis: KataGoMoveAnalysis | null): Promise<string> {
+async function renderBoardPng(record: GameRecord, moveNumber: number, analysis: KataGoMoveAnalysis | null, useExternalAssets = true): Promise<string> {
   const size = record.boardSize
   const canvas = document.createElement('canvas')
   canvas.width = 1000
@@ -3063,20 +3377,22 @@ async function renderBoardPng(record: GameRecord, moveNumber: number, analysis: 
   const step = (canvas.width - margin * 2) / (size - 1)
   const board = computeBoard(record, moveNumber)
   const lastMove = moveNumber > 0 ? record.moves[moveNumber - 1] : undefined
-  const [boardTexture, blackStone, whiteStone] = await Promise.all([
-    loadCanvasImage(lizzieBoardUrl),
-    loadCanvasImage(lizzieBlackStoneUrl),
-    loadCanvasImage(lizzieWhiteStoneUrl)
-  ])
+  const { boardTexture, blackStone, whiteStone } = useExternalAssets
+    ? await loadBoardPngAssets()
+    : { boardTexture: null, blackStone: null, whiteStone: null }
 
   ctx.fillStyle = '#0b0d10'
   ctx.fillRect(0, 0, canvas.width, canvas.height)
   ctx.save()
   roundedCanvasRect(ctx, boardInset, boardInset, canvas.width - boardInset * 2, canvas.height - boardInset * 2, 10)
   ctx.clip()
-  const boardPattern = ctx.createPattern(boardTexture, 'repeat')
-  ctx.fillStyle = boardPattern ?? '#d8b15e'
-  ctx.fillRect(boardInset, boardInset, canvas.width - boardInset * 2, canvas.height - boardInset * 2)
+  if (boardTexture) {
+    const boardPattern = ctx.createPattern(boardTexture, 'repeat')
+    ctx.fillStyle = boardPattern ?? '#d8b15e'
+    ctx.fillRect(boardInset, boardInset, canvas.width - boardInset * 2, canvas.height - boardInset * 2)
+  } else {
+    paintProceduralBoardTexture(ctx, boardInset, boardInset, canvas.width - boardInset * 2, canvas.height - boardInset * 2)
+  }
   ctx.restore()
 
   ctx.strokeStyle = '#11100d'
@@ -3123,7 +3439,12 @@ async function renderBoardPng(record: GameRecord, moveNumber: number, analysis: 
       ctx.shadowColor = 'rgba(0, 0, 0, 0.42)'
       ctx.shadowBlur = 7
       ctx.shadowOffsetY = 3
-      ctx.drawImage(stone === 'B' ? blackStone : whiteStone, x - stoneRadius, y - stoneRadius, stoneRadius * 2, stoneRadius * 2)
+      const stoneAsset = stone === 'B' ? blackStone : whiteStone
+      if (stoneAsset) {
+        ctx.drawImage(stoneAsset, x - stoneRadius, y - stoneRadius, stoneRadius * 2, stoneRadius * 2)
+      } else {
+        paintProceduralStone(ctx, x, y, stoneRadius, stone)
+      }
       ctx.restore()
       if (lastMove?.row === row && lastMove.col === col) {
         ctx.strokeStyle = stone === 'B' ? '#f4efe4' : '#17191a'
@@ -3179,7 +3500,27 @@ async function renderBoardPng(record: GameRecord, moveNumber: number, analysis: 
     ctx.fillText(`Loss ${analysis.playedMove.winrateLoss.toFixed(1)}% / ${analysis.playedMove.scoreLoss.toFixed(1)}目`, margin + 230, canvas.height - 28)
   }
 
-  return canvas.toDataURL('image/png')
+  try {
+    return canvas.toDataURL('image/png')
+  } catch (cause) {
+    if (useExternalAssets) {
+      return renderBoardPng(record, moveNumber, analysis, false)
+    }
+    throw cause
+  }
+}
+
+async function loadBoardPngAssets(): Promise<BoardPngAssets> {
+  const [boardTexture, blackStone, whiteStone] = await Promise.allSettled([
+    loadCanvasImage(lizzieBoardUrl),
+    loadCanvasImage(lizzieBlackStoneUrl),
+    loadCanvasImage(lizzieWhiteStoneUrl)
+  ])
+  return {
+    boardTexture: boardTexture.status === 'fulfilled' ? boardTexture.value : null,
+    blackStone: blackStone.status === 'fulfilled' ? blackStone.value : null,
+    whiteStone: whiteStone.status === 'fulfilled' ? whiteStone.value : null
+  }
 }
 
 function loadCanvasImage(src: string): Promise<HTMLImageElement> {
@@ -3189,6 +3530,53 @@ function loadCanvasImage(src: string): Promise<HTMLImageElement> {
     image.onerror = () => reject(new Error(`无法加载棋盘素材: ${src}`))
     image.src = src
   })
+}
+
+function paintProceduralBoardTexture(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number): void {
+  const base = ctx.createLinearGradient(x, y, x + width, y + height)
+  base.addColorStop(0, '#e5c36e')
+  base.addColorStop(0.48, '#d6aa55')
+  base.addColorStop(1, '#c89343')
+  ctx.fillStyle = base
+  ctx.fillRect(x, y, width, height)
+
+  ctx.save()
+  ctx.globalAlpha = 0.18
+  for (let i = -2; i < 46; i += 1) {
+    const startX = x + i * 28
+    ctx.strokeStyle = i % 3 === 0 ? '#f6d98d' : '#6d411d'
+    ctx.lineWidth = i % 5 === 0 ? 2.1 : 1.1
+    ctx.beginPath()
+    ctx.moveTo(startX, y)
+    ctx.bezierCurveTo(startX - 22, y + height * 0.32, startX + 24, y + height * 0.64, startX - 8, y + height)
+    ctx.stroke()
+  }
+  ctx.restore()
+}
+
+function paintProceduralStone(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, color: StoneColor): void {
+  const gradient = ctx.createRadialGradient(x - radius * 0.32, y - radius * 0.36, radius * 0.12, x, y, radius)
+  if (color === 'B') {
+    gradient.addColorStop(0, '#656b72')
+    gradient.addColorStop(0.34, '#25292d')
+    gradient.addColorStop(1, '#050607')
+  } else {
+    gradient.addColorStop(0, '#ffffff')
+    gradient.addColorStop(0.52, '#f0eadf')
+    gradient.addColorStop(1, '#b4ab9f')
+  }
+  ctx.fillStyle = gradient
+  ctx.beginPath()
+  ctx.arc(x, y, radius, 0, Math.PI * 2)
+  ctx.fill()
+
+  ctx.save()
+  ctx.globalAlpha = color === 'B' ? 0.18 : 0.34
+  ctx.fillStyle = color === 'B' ? '#ffffff' : '#ffffff'
+  ctx.beginPath()
+  ctx.ellipse(x - radius * 0.32, y - radius * 0.38, radius * 0.28, radius * 0.16, -0.35, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
 }
 
 function roundedCanvasRect(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number): void {

@@ -169,14 +169,14 @@ function CandidateMark({
       transform={`translate(${p.x} ${p.y}) scale(${scale})`}
     >
       <circle className="ks-candidate-hitarea" r="34" />
-      <circle className="ks-candidate-soft-glow" r="25" />
-      <circle className="ks-candidate-ring" r="23.6" />
-      <circle className="ks-candidate-disc" r="21.8" />
+      <circle className="ks-candidate-soft-glow" r="25.8" />
+      <circle className="ks-candidate-ring" r="24.2" />
+      <circle className="ks-candidate-disc" r="22.8" />
       <circle className="ks-candidate-rank-badge" cx="16.2" cy="-17" r="8.1" />
       <text className="ks-candidate-rank" x="16.2" y="-17">{candidate.rank}</text>
-      <text className="ks-candidate-winrate" y="-8.2">{winrate}</text>
-      <text className="ks-candidate-visits" y="3.6">{visits}</text>
-      <text className="ks-candidate-score" y="14.6">{score}</text>
+      <text className="ks-candidate-winrate" y="-8.3">{winrate}</text>
+      <text className="ks-candidate-visits" y="4.2">{visits}</text>
+      <text className="ks-candidate-score" y="15.4">{score}</text>
     </g>
   )
 }
@@ -240,14 +240,24 @@ function PlayedMoveMark({ played, boardSize }: { played: RenderPlayedMove; board
   const severity = loss >= 10 ? 'mistake' : loss >= 4 ? 'inaccuracy' : 'ok'
   return (
     <g className={`ks-played-move ks-played-move--${played.color} ks-played-move--${severity}`} transform={`translate(${p.x} ${p.y})`}>
-      <rect className="ks-played-move-frame" x="-28" y="-28" width="56" height="56" rx="9" />
-      <rect className="ks-played-move-panel" x="-21.5" y="-19.5" width="43" height="39" rx="8" />
+      <rect className="ks-played-move-frame" x="-29" y="-29" width="58" height="58" rx="9.5" />
+      <rect className="ks-played-move-panel" x="-23" y="-20.5" width="46" height="41" rx="8.5" />
       <rect className="ks-played-move-label-bg" x="-27" y="-32.5" width="30" height="13.5" rx="6.75" />
       <text className="ks-played-move-label" x="-12" y="-25.6">实战</text>
       <text className="ks-played-move-rank" x="13.5" y="-25.6">{rankLabel}</text>
-      <text className="ks-played-move-winrate" y="-7.5">{played.winrateLabel ?? '—'}</text>
-      <text className="ks-played-move-visits" y="4.3">{formatVisitsLabel(played.visitsLabel)}</text>
-      <text className="ks-played-move-score" y="15.8">{played.scoreLabel ?? '0.0'}</text>
+      <text className="ks-played-move-winrate" y="-7.6">{played.winrateLabel ?? '—'}</text>
+      <text className="ks-played-move-visits" y="5">{formatVisitsLabel(played.visitsLabel)}</text>
+      <text className="ks-played-move-score" y="16.4">{played.scoreLabel ?? '0.0'}</text>
+    </g>
+  )
+}
+
+function PreviousMoveMarker({ color }: { color: 'B' | 'W' }): ReactElement {
+  return (
+    <g className={`ks-previous-move ks-previous-move--${color}`} aria-label="当前手的上一手">
+      <rect className="ks-previous-move-shadow" x="-8.2" y="-8.2" width="16.4" height="16.4" rx="3.2" transform="rotate(45)" />
+      <rect className="ks-previous-move-gem" x="-7.1" y="-7.1" width="14.2" height="14.2" rx="2.8" transform="rotate(45)" />
+      <path className="ks-previous-move-glint" d="M -3.6 -5.4 L 5.2 3.4" />
     </g>
   )
 }
@@ -265,7 +275,7 @@ export function GoBoardV2({ record, moveNumber, analysis = null, keyMoves = [], 
     [activeCandidate, boardSize, variationFirstColor]
   )
   const variationPreviewMoves = useMemo(() => variationMoves.filter((move) => !move.isFirst), [variationMoves])
-  const lastStone = stones[stones.length - 1]
+  const previousMoveNumber = moveNumber > 1 ? moveNumber - 1 : -1
   const letters = coordinateLetters(boardSize)
   const lines = Array.from({ length: boardSize }, (_, index) => index)
 
@@ -442,13 +452,13 @@ export function GoBoardV2({ record, moveNumber, analysis = null, keyMoves = [], 
         <g className="ks-stones-layer">
           {stones.map((stone) => {
             const p = xy(stone, boardSize)
-            const isLast = stone.moveNumber === lastStone?.moveNumber
+            const isPreviousMove = stone.moveNumber === previousMoveNumber
             return (
-              <g key={stone.moveNumber} className={`ks-stone ks-stone--${stone.color}`} transform={`translate(${p.x} ${p.y})`}>
+              <g key={stone.moveNumber} className={`ks-stone ks-stone--${stone.color} ${isPreviousMove ? 'ks-stone--previous' : ''}`} transform={`translate(${p.x} ${p.y})`}>
                 <circle className="ks-stone-shadow" r="24" />
                 <circle className="ks-stone-body" r="22.2" />
                 <ellipse className="ks-stone-highlight" cx="-6.5" cy="-8.2" rx="8.6" ry="5.2" />
-                {isLast ? <circle className={`ks-last-move ks-last-move--${stone.color}`} r="8" /> : null}
+                {isPreviousMove ? <PreviousMoveMarker color={stone.color} /> : null}
               </g>
             )
           })}

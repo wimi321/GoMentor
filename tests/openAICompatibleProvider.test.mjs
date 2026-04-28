@@ -38,6 +38,8 @@ async function importProviderForTest() {
   return {
     postOpenAICompatibleChat: provider.postOpenAICompatibleChat,
     streamOpenAICompatibleChat: provider.streamOpenAICompatibleChat,
+    postOpenAICompatibleToolTurn: provider.postOpenAICompatibleToolTurn,
+    streamOpenAICompatibleToolTurn: provider.streamOpenAICompatibleToolTurn,
     probeOpenAICompatibleProvider: provider.probeOpenAICompatibleProvider,
     cleanup: () => rm(root, { recursive: true, force: true })
   }
@@ -242,6 +244,93 @@ test('streamOpenAICompatibleChat emits visible deltas as they arrive', async () 
     })
 
     assert.deepEqual(chunks, ['第一段', '，继续'])
+  } finally {
+    await cleanup()
+  }
+})
+
+test('tool-call turns return tool calls instead of empty-text errors', async () => {
+  const { postOpenAICompatibleToolTurn, cleanup } = await importProviderForTest()
+  const requests = []
+  try {
+    await withMockChatServer((body) => {
+      requests.push(body)
+      return {
+        payload: {
+          choices: [{
+            finish_reason: 'tool_calls',
+            message: {
+              content: '',
+              tool_calls: [{
+                id: 'call_1',
+                type: 'function',
+                function: {
+                  name: 'katago_analyzePosition',
+                  arguments: '{"gameId":"g1","moveNumber":42}'
+                }
+              }]
+            }
+          }],
+          usage: { prompt_tokens: 8, completion_tokens: 12, total_tokens: 20 }
+        }
+      }
+    }, async (baseUrl) => {
+      const turn = await postOpenAICompatibleToolTurn(
+        settings(baseUrl),
+        [{ role: 'user', content: '分析当前手' }],
+        [{
+          type: 'function',
+          function: {
+            name: 'katago_analyzePosition',
+            description: 'Analyze a Go position',
+            parameters: { type: 'object', properties: {} }
+          }
+        }],
+        512
+      )
+      assert.equal(turn.text, '')
+      assert.equal(turn.toolCalls.length, 1)
+      assert.equal(turn.toolCalls[0].function.name, 'katago_analyzePosition')
+      assert.match(turn.toolCalls[0].function.arguments, /moveNumber/)
+    })
+
+    assert.equal(requests[0].tools[0].function.name, 'katago_analyzePosition')
+  } finally {
+    await cleanup()
+  }
+})
+
+test('stream tool turns accumulate streamed tool-call arguments', async () => {
+  const { streamOpenAICompatibleToolTurn, cleanup } = await importProviderForTest()
+  try {
+    await withMockChatServer((body) => {
+      assert.equal(body.stream, true)
+      return {
+        payload: [
+          'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_s","type":"function","function":{"name":"knowledge_searchLocal","arguments":"{\\"text\\":"}}]},"finish_reason":null}]}',
+          'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\\"定式\\"}"}}]},"finish_reason":null}]}',
+          'data: [DONE]',
+          ''
+        ].join('\n\n')
+      }
+    }, async (baseUrl) => {
+      const turn = await streamOpenAICompatibleToolTurn(
+        settings(baseUrl),
+        [{ role: 'user', content: '查知识库' }],
+        [{
+          type: 'function',
+          function: {
+            name: 'knowledge_searchLocal',
+            description: 'Search local knowledge',
+            parameters: { type: 'object', properties: {} }
+          }
+        }],
+        512
+      )
+      assert.equal(turn.toolCalls.length, 1)
+      assert.equal(turn.toolCalls[0].function.name, 'knowledge_searchLocal')
+      assert.equal(turn.toolCalls[0].function.arguments, '{"text":"定式"}')
+    })
   } finally {
     await cleanup()
   }
