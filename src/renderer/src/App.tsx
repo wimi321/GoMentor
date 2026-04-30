@@ -2017,15 +2017,25 @@ function DesktopPreferencesModal({
   if (!open) {
     return null
   }
+  const katagoReady = katagoAssets?.ready || dashboard.systemProfile.katagoReady
+  const llmReady = dashboard.systemProfile.hasLlmApiKey
   return (
     <div className="desktop-preferences" role="dialog" aria-modal="true" aria-label="GoMentor 设置" onMouseDown={onClose}>
       <section className="desktop-preferences__window" onMouseDown={(event) => event.stopPropagation()}>
         <header className="desktop-preferences__titlebar">
-          <div>
-            <span>设置</span>
-            <strong>桌面运行设置</strong>
+          <div className="desktop-preferences__heading">
+            <span className="desktop-preferences__mark" aria-hidden="true" />
+            <div>
+              <span>GoMentor 设置</span>
+              <strong>模型、KataGo 与运行诊断</strong>
+              <p>把老师、棋盘分析和本机资源配置在一个地方。</p>
+            </div>
           </div>
-          <button type="button" onClick={onClose}>关闭</button>
+          <div className="desktop-preferences__meta" aria-label="设置状态">
+            <em className={katagoReady ? 'is-ready' : ''}>KataGo {katagoReady ? 'ready' : '待配置'}</em>
+            <em className={llmReady ? 'is-ready' : ''}>LLM {llmReady ? 'ready' : '待配置'}</em>
+            <button type="button" onClick={onClose} aria-label="关闭设置">关闭</button>
+          </div>
         </header>
         <SettingsDrawer
           dashboard={dashboard}
@@ -2365,6 +2375,9 @@ function SettingsDrawer({
   const [llmModelsRefreshing, setLlmModelsRefreshing] = useState(false)
   const [llmModelRefreshMessage, setLlmModelRefreshMessage] = useState('')
   const [selectedLlmModel, setSelectedLlmModel] = useState(dashboard.settings.llmModel)
+  const [savedLlmApiKey, setSavedLlmApiKey] = useState('')
+  const [showLlmApiKey, setShowLlmApiKey] = useState(false)
+  const [llmKeyMessage, setLlmKeyMessage] = useState('')
   const modelPresets = dashboard.systemProfile.katagoModelPresets
   const [selectedPresetId, setSelectedPresetId] = useState<KataGoModelPresetId>(dashboard.settings.katagoModelPreset)
   const selectedPreset = modelPresets.find((preset) => preset.id === selectedPresetId) ?? modelPresets[0]
@@ -2488,6 +2501,23 @@ function SettingsDrawer({
     setSelectedLlmModel(dashboard.settings.llmModel)
   }, [dashboard.settings.llmModel])
 
+  async function revealSavedLlmApiKey(): Promise<void> {
+    setLlmKeyMessage('')
+    try {
+      const result = await window.gomentor.getSavedLlmApiKey()
+      if (!result.hasKey || !result.apiKey) {
+        setSavedLlmApiKey('')
+        setShowLlmApiKey(false)
+        setLlmKeyMessage('还没有保存 API Key。')
+        return
+      }
+      setSavedLlmApiKey(result.apiKey)
+      setShowLlmApiKey(true)
+    } catch (cause) {
+      setLlmKeyMessage(`读取 API Key 失败: ${String(cause)}`)
+    }
+  }
+
   return (
     <form
       key={`${dashboard.settings.katagoModelPreset}|${dashboard.settings.llmBaseUrl}|${dashboard.settings.llmModel}|${dashboard.settings.reviewLanguage}`}
@@ -2557,16 +2587,43 @@ function SettingsDrawer({
       </section>
       <label>
         LLM Base URL
-        <input name="llmBaseUrl" defaultValue={dashboard.settings.llmBaseUrl} />
-      </label>
-      <label>
-        LLM API Key
         <input
-          name="llmApiKey"
-          type="password"
-          placeholder={dashboard.systemProfile.hasLlmApiKey ? '已安全保存；留空则继续使用' : '需要支持图片输入的模型 API key'}
+          className="llm-config-input"
+          name="llmBaseUrl"
+          defaultValue={dashboard.settings.llmBaseUrl}
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
         />
+        <small>当前 API：{dashboard.settings.llmBaseUrl || '未配置'}</small>
       </label>
+      <div className="llm-api-key-field">
+        <label>
+          LLM API Key
+          <div className="llm-secret-input-row">
+            <input
+              className="llm-config-input"
+              name="llmApiKey"
+              type={showLlmApiKey ? 'text' : 'password'}
+              defaultValue={showLlmApiKey ? savedLlmApiKey : ''}
+              placeholder={dashboard.systemProfile.hasLlmApiKey ? '已安全保存；留空则继续使用' : '需要支持图片输入的模型 API key'}
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+            />
+            <button
+              className="ghost-button"
+              type="button"
+              onClick={() => showLlmApiKey ? setShowLlmApiKey(false) : void revealSavedLlmApiKey()}
+              disabled={busy !== ''}
+            >
+              {showLlmApiKey ? '隐藏' : '显示 Key'}
+            </button>
+          </div>
+        </label>
+        <small>{showLlmApiKey ? '当前已显示保存的 Key；编辑后点击保存会覆盖。右键或 Cmd/Ctrl+V 可以粘贴新的 Key。' : dashboard.systemProfile.hasLlmApiKey ? '已保存 Key；点击“显示 Key”可核对，也可以直接粘贴新 Key 覆盖。' : '尚未保存 Key；可从代理后台复制后右键粘贴。'}</small>
+        {llmKeyMessage ? <small>{llmKeyMessage}</small> : null}
+      </div>
       <label>
         多模态模型
         <div className="llm-model-picker">

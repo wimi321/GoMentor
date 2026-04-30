@@ -4,6 +4,20 @@ All notable changes to GoMentor will be documented here.
 
 This project follows semantic versioning once public releases begin.
 
+## 0.3.4 - Settings Paste and Desktop Polish
+
+### Added
+
+- Native Electron edit menu and editable-field context menu so Base URL, model name, and API Key fields support normal copy/paste behavior.
+- Settings can reveal the saved LLM API Key on demand for user verification without exposing it in the public dashboard payload.
+- Contract coverage for LLM settings paste-friendly inputs and Electron native paste controls.
+
+### Improved
+
+- Reworked the desktop settings header into the light GoMentor visual system with compact KataGo/LLM readiness badges.
+- LLM settings inputs now disable browser-style autocorrect/autocapitalization and use monospace text for easier API configuration checks.
+- API Key helper copy was removed from the settings row so the expected workflow is clear: paste from the provider dashboard, optionally reveal to verify, then save.
+
 ## 0.3.3 - Teacher Pacing Control
 
 ### Added

@@ -79,6 +79,7 @@ declare global {
       onTeacherRunProgress: (handler: (payload: TeacherRunProgress) => void) => () => void
       testLlmSettings: (payload: LlmSettingsTestRequest) => Promise<LlmSettingsTestResult>
       listLlmModels: (payload: LlmModelsListRequest) => Promise<LlmModelsListResult>
+      getSavedLlmApiKey: () => Promise<{ hasKey: boolean; apiKey: string }>
       getReleaseReadiness: () => Promise<ReleaseReadinessResult>
       openPath: (filePath: string) => Promise<void>
       onDesktopCommand?: (handler: (command: DesktopCommand) => void) => () => void

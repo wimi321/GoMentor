@@ -49,14 +49,14 @@ KataGo is the source of truth. The LLM is the teacher that turns those facts int
 
 Current release:
 
-[GoMentor v0.3.3](https://github.com/wimi321/GoMentor/releases/tag/v0.3.3)
+[GoMentor v0.3.4](https://github.com/wimi321/GoMentor/releases/tag/v0.3.4)
 
 | Platform | Download |
 | --- | --- |
-| macOS Apple Silicon | [GoMentor-0.3.3-mac-arm64.dmg](https://github.com/wimi321/GoMentor/releases/download/v0.3.3/GoMentor-0.3.3-mac-arm64.dmg) |
-| macOS Intel | [GoMentor-0.3.3-mac-x64.dmg](https://github.com/wimi321/GoMentor/releases/download/v0.3.3/GoMentor-0.3.3-mac-x64.dmg) |
-| Windows x64 portable ZIP | [GoMentor-0.3.3-win-x64-portable.zip](https://github.com/wimi321/GoMentor/releases/download/v0.3.3/GoMentor-0.3.3-win-x64-portable.zip) |
-| Windows x64 installer | [GoMentor-0.3.3-win-x64.exe](https://github.com/wimi321/GoMentor/releases/download/v0.3.3/GoMentor-0.3.3-win-x64.exe) |
+| macOS Apple Silicon | [GoMentor-0.3.4-mac-arm64.dmg](https://github.com/wimi321/GoMentor/releases/download/v0.3.4/GoMentor-0.3.4-mac-arm64.dmg) |
+| macOS Intel | [GoMentor-0.3.4-mac-x64.dmg](https://github.com/wimi321/GoMentor/releases/download/v0.3.4/GoMentor-0.3.4-mac-x64.dmg) |
+| Windows x64 portable ZIP | [GoMentor-0.3.4-win-x64-portable.zip](https://github.com/wimi321/GoMentor/releases/download/v0.3.4/GoMentor-0.3.4-win-x64-portable.zip) |
+| Windows x64 installer | [GoMentor-0.3.4-win-x64.exe](https://github.com/wimi321/GoMentor/releases/download/v0.3.4/GoMentor-0.3.4-win-x64.exe) |
 
 Release caveats:
 

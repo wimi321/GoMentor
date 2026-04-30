@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell, type ContextMenuParams, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron'
 import { isAbsolute, relative, resolve, join } from 'node:path'
 import { appHome, findGame, getGames, getSettings, hasLlmApiKey, replaceSettings, setSettings, upsertGames } from './lib/store'
 import type { AnalyzeGameQuickRequest, AnalyzePositionRequest, AppSettings, DashboardData, FoxSyncRequest, KataGoAssetInstallRequest, KataGoBenchmarkRequest, KataGoCancelAnalysisRequest, LlmModelsListRequest, LlmSettingsTestRequest, ReviewRequest, TeacherRunRequest } from './lib/types'
@@ -69,6 +69,38 @@ function safeSendToRenderer(event: IpcMainInvokeEvent, channel: string, payload:
   }
 }
 
+function attachTextEditingContextMenu(window: BrowserWindow): void {
+  window.webContents.on('context-menu', (_event, params: ContextMenuParams) => {
+    const hasSelection = params.selectionText.trim().length > 0
+    const isEditable = params.isEditable
+    if (!isEditable && !hasSelection) {
+      return
+    }
+
+    const template: MenuItemConstructorOptions[] = [
+      ...(isEditable
+        ? [
+            { role: 'undo' as const },
+            { role: 'redo' as const },
+            { type: 'separator' as const },
+            { role: 'cut' as const, enabled: hasSelection },
+            { role: 'copy' as const, enabled: hasSelection },
+            { role: 'paste' as const },
+            { role: 'pasteAndMatchStyle' as const },
+            { role: 'delete' as const, enabled: hasSelection },
+            { type: 'separator' as const },
+            { role: 'selectAll' as const }
+          ]
+        : [
+            { role: 'copy' as const, enabled: hasSelection },
+            { type: 'separator' as const },
+            { role: 'selectAll' as const }
+          ])
+    ]
+    Menu.buildFromTemplate(template).popup({ window })
+  })
+}
+
 async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
     width: 1460,
@@ -96,6 +128,7 @@ async function createWindow(): Promise<void> {
     shell.openExternal(url)
     return { action: 'deny' }
   })
+  attachTextEditingContextMenu(mainWindow)
 
   if (process.env.ELECTRON_RENDERER_URL) {
     await mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
@@ -137,6 +170,21 @@ function buildApplicationMenu(): void {
         { label: 'Command Palette...', accelerator: 'CommandOrControl+K', click: () => sendDesktopCommand('open-command-palette') },
         { label: 'Settings...', accelerator: process.platform === 'darwin' ? 'Command+,' : 'Control+,', click: () => sendDesktopCommand('open-settings') },
         ...(process.platform === 'darwin' ? [] : [{ type: 'separator' as const }, { role: 'quit' as const }])
+      ]
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'pasteAndMatchStyle' },
+        { role: 'delete' },
+        { type: 'separator' },
+        { role: 'selectAll' }
       ]
     },
     {
@@ -318,6 +366,13 @@ app.whenReady().then(() => {
   )
   ipcMain.handle('llm:test', async (_event, payload: LlmSettingsTestRequest) => testLlmSettings(payload))
   ipcMain.handle('llm:list-models', async (_event, payload: LlmModelsListRequest) => listLlmModels(payload))
+  ipcMain.handle('llm:get-saved-api-key', async () => {
+    const settings = getSettings()
+    return {
+      hasKey: settings.llmApiKey.trim().length > 0,
+      apiKey: settings.llmApiKey
+    }
+  })
   ipcMain.handle('release:readiness', async () => inspectReleaseReadiness())
   ipcMain.handle('path:open', async (_event, filePath: string) => shell.showItemInFolder(assertManagedPath(filePath)))
 

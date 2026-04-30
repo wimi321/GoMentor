@@ -94,6 +94,7 @@ const api = {
   },
   testLlmSettings: (payload: LlmSettingsTestRequest): Promise<LlmSettingsTestResult> => ipcRenderer.invoke('llm:test', payload),
   listLlmModels: (payload: LlmModelsListRequest): Promise<LlmModelsListResult> => ipcRenderer.invoke('llm:list-models', payload),
+  getSavedLlmApiKey: (): Promise<{ hasKey: boolean; apiKey: string }> => ipcRenderer.invoke('llm:get-saved-api-key'),
   getReleaseReadiness: (): Promise<ReleaseReadinessResult> => ipcRenderer.invoke('release:readiness'),
   openPath: (filePath: string): Promise<void> => ipcRenderer.invoke('path:open', filePath),
   onDesktopCommand: (handler: (command: DesktopCommand) => void): (() => void) => {

@@ -519,6 +519,11 @@ export interface LlmModelsListResult {
   message: string
 }
 
+export interface LlmSavedApiKeyResult {
+  hasKey: boolean
+  apiKey: string
+}
+
 export interface DashboardData {
   settings: AppSettings
   games: LibraryGame[]
