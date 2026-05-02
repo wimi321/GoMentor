@@ -325,23 +325,28 @@ app.whenReady().then(() => {
   ipcMain.handle('katago:analyze-position', async (_event, payload: AnalyzePositionRequest) =>
     analyzePosition(payload.gameId, payload.moveNumber, payload.maxVisits ?? 500)
   )
-  ipcMain.handle('katago:analyze-position-stream', async (event, payload: AnalyzePositionRequest) =>
-    analyzePositionWithProgress(
-      payload.gameId,
-      payload.moveNumber,
-      payload.maxVisits ?? 500,
-      (analysis, isFinal) => {
-        safeSendToRenderer(event, 'katago:analyze-position-progress', {
-          runId: payload.runId,
-          gameId: payload.gameId,
-          moveNumber: payload.moveNumber,
-          analysis,
-          isFinal
-        })
-      },
-      payload.reportDuringSearchEvery ?? 0.2
-    )
-  )
+  ipcMain.handle('katago:analyze-position-stream', async (event, payload: AnalyzePositionRequest) => {
+    try {
+      return await analyzePositionWithProgress(
+        payload.gameId,
+        payload.moveNumber,
+        payload.maxVisits ?? 500,
+        (analysis, isFinal) => {
+          safeSendToRenderer(event, 'katago:analyze-position-progress', {
+            runId: payload.runId,
+            gameId: payload.gameId,
+            moveNumber: payload.moveNumber,
+            analysis,
+            isFinal
+          })
+        },
+        payload.reportDuringSearchEvery ?? 0.2
+      )
+    } catch (error) {
+      if (String(error).includes('已取消')) return null
+      throw error
+    }
+  })
   ipcMain.handle('katago:analyze-game-quick', async (event, payload: AnalyzeGameQuickRequest) =>
     analyzeGameQuick(payload.gameId, payload.maxVisits, (progress) => {
       safeSendToRenderer(event, 'katago:analyze-game-quick-progress', {

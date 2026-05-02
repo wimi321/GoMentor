@@ -581,6 +581,14 @@ export async function analyzePositionWithProgress(
       replaceGroup: true
     })
   } catch (error) {
+    if (String(error).includes('已取消')) {
+      if (latestBefore?.rootInfo && latestAfter?.rootInfo) {
+        const partial = buildMoveAnalysis(gameId, moveNumber, record.boardSize, currentMove, latestBefore, latestAfter, latestActual)
+        onProgress?.(partial, true)
+        return partial
+      }
+      throw error
+    }
     if (String(error).includes('KataGo 分析超时') && latestBefore?.rootInfo && latestAfter?.rootInfo) {
       const partial = buildMoveAnalysis(gameId, moveNumber, record.boardSize, currentMove, latestBefore, latestAfter, latestActual)
       onProgress?.(partial, true)

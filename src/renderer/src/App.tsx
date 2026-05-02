@@ -467,6 +467,9 @@ export function App(): ReactElement {
   const autoAnalysisRequestId = useRef('')
   const userPausedLiveAnalysisRef = useRef(false)
   const moveNumberRef = useRef(moveNumber)
+  const recordRef = useRef<GameRecord | null>(record)
+  const jumpToMoveRef = useRef<(next: number) => void>(() => {})
+  const teacherBusyRef = useRef(false)
   const selectedGameIdRef = useRef('')
   const selectedEvaluationCacheKeyRef = useRef('')
   const evaluationCacheRef = useRef<Record<string, EvaluationByMove>>({})
@@ -583,7 +586,13 @@ export function App(): ReactElement {
 
   useEffect(() => {
     moveNumberRef.current = moveNumber
-  }, [moveNumber])
+    recordRef.current = record
+  }, [moveNumber, record])
+
+  useEffect(() => {
+    jumpToMoveRef.current = jumpToMove
+    teacherBusyRef.current = busy === 'teacher'
+  })
 
   useEffect(() => {
     selectedGameIdRef.current = selectedGame?.id ?? ''
@@ -606,6 +615,7 @@ export function App(): ReactElement {
     return () => dispose?.()
   }, [selectedGame?.id, moveNumber, busy, record, dashboard.games.length])
 
+  const arrowDebounceRef = useRef(0)
   useEffect(() => {
     function handleKeyDown(event: globalThis.KeyboardEvent): void {
       const key = event.key.toLowerCase()
@@ -617,9 +627,39 @@ export function App(): ReactElement {
         setCommandPaletteOpen(false)
         setSettingsOpen(false)
       }
+      const target = event.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return
+      }
+      const rec = recordRef.current
+      if (!rec || teacherBusyRef.current) return
+      let nextMove = -1
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault()
+        nextMove = Math.max(0, moveNumberRef.current - 1)
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault()
+        nextMove = Math.min(rec.moves.length, moveNumberRef.current + 1)
+      } else if (event.key === 'Home') {
+        event.preventDefault()
+        nextMove = 0
+      } else if (event.key === 'End') {
+        event.preventDefault()
+        nextMove = rec.moves.length
+      }
+      if (nextMove < 0) return
+      setMoveNumber(nextMove)
+      moveNumberRef.current = nextMove
+      clearTimeout(arrowDebounceRef.current)
+      arrowDebounceRef.current = window.setTimeout(() => {
+        jumpToMoveRef.current(nextMove)
+      }, 150)
     }
     window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      clearTimeout(arrowDebounceRef.current)
+    }
   }, [])
 
   async function refresh(): Promise<void> {
