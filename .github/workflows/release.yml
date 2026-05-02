@@ -5,6 +5,12 @@ on:
     tags:
       - "v*.*.*"
   workflow_dispatch:
+    inputs:
+      katago_asset_release_tag:
+        description: "Release tag to reuse bundled KataGo assets from when secrets are not configured"
+        required: false
+        default: "v0.3.4"
+        type: string
 
 permissions:
   contents: write
@@ -28,13 +34,17 @@ jobs:
           GOMENTOR_KATAGO_ASSET_DIR: ${{ secrets.GOMENTOR_KATAGO_ASSET_DIR }}
           GOMENTOR_KATAGO_BINARY: ${{ secrets.GOMENTOR_KATAGO_BINARY }}
           GOMENTOR_KATAGO_MODEL: ${{ secrets.GOMENTOR_KATAGO_MODEL }}
+          GOMENTOR_KATAGO_ASSET_RELEASE_TAG: ${{ inputs.katago_asset_release_tag || 'v0.3.4' }}
         run: |
           if [[ -n "${GOMENTOR_KATAGO_ASSET_DIR}" || ( -n "${GOMENTOR_KATAGO_BINARY}" && -n "${GOMENTOR_KATAGO_MODEL}" ) ]]; then
             echo "can-package=true" >> "${GITHUB_OUTPUT}"
             echo "KataGo release asset source is configured."
+          elif [[ -n "${GOMENTOR_KATAGO_ASSET_RELEASE_TAG}" ]]; then
+            echo "can-package=true" >> "${GITHUB_OUTPUT}"
+            echo "KataGo release assets will be restored from ${GOMENTOR_KATAGO_ASSET_RELEASE_TAG}."
           else
             echo "can-package=false" >> "${GITHUB_OUTPUT}"
-            echo "::notice title=Release packaging skipped::KataGo release assets are not configured. Set GOMENTOR_KATAGO_ASSET_DIR or both GOMENTOR_KATAGO_BINARY and GOMENTOR_KATAGO_MODEL to enable automated packaging."
+            echo "::notice title=Release packaging skipped::KataGo release assets are not configured. Set GOMENTOR_KATAGO_ASSET_DIR, both GOMENTOR_KATAGO_BINARY and GOMENTOR_KATAGO_MODEL, or katago_asset_release_tag to enable automated packaging."
           fi
 
   package:
@@ -83,11 +93,24 @@ jobs:
       - name: Prepare KataGo assets
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           GOMENTOR_KATAGO_ASSET_DIR: ${{ secrets.GOMENTOR_KATAGO_ASSET_DIR }}
           GOMENTOR_KATAGO_BINARY: ${{ secrets.GOMENTOR_KATAGO_BINARY }}
           GOMENTOR_KATAGO_MODEL: ${{ secrets.GOMENTOR_KATAGO_MODEL }}
+          GOMENTOR_KATAGO_ASSET_RELEASE_TAG: ${{ inputs.katago_asset_release_tag || 'v0.3.4' }}
         run: |
-          node scripts/prepare_katago_assets.mjs
+          if [[ -n "${GOMENTOR_KATAGO_ASSET_DIR}" || ( -n "${GOMENTOR_KATAGO_BINARY}" && -n "${GOMENTOR_KATAGO_MODEL}" ) ]]; then
+            node scripts/prepare_katago_assets.mjs
+          else
+            mkdir -p .katago-asset-source/extracted
+            gh release download "${GOMENTOR_KATAGO_ASSET_RELEASE_TAG}" \
+              --repo "${{ github.repository }}" \
+              --pattern "GoMentor-*-win-x64-portable.zip" \
+              --dir .katago-asset-source
+            asset_zip="$(find .katago-asset-source -maxdepth 1 -name 'GoMentor-*-win-x64-portable.zip' | head -n 1)"
+            tar -xf "${asset_zip}" -C .katago-asset-source/extracted
+            node scripts/prepare_katago_assets.mjs --asset-dir=".katago-asset-source/extracted/resources/data/katago"
+          fi
           node scripts/check_katago_assets.mjs --mode=release
 
       - name: Package desktop app

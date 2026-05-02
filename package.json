@@ -74,6 +74,8 @@
       "out/**/*",
       "scripts/**/*",
       "data/**/*",
+      "!data/katago/bin/**/*",
+      "!data/katago/models/**/*",
       "assets/**/*",
       "package.json"
     ],
