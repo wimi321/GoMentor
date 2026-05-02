@@ -106,14 +106,21 @@ export function classifyTeacherIntent(request: TeacherRunRequest): TeacherIntent
     }
   }
 
-  if (request.mode === 'move-range' || request.moveRange || parseMoveRangeFromPrompt(request.prompt ?? '')) {
+  if (request.mode === 'move-range') {
     return {
       intent: 'move-range',
       confidence: 'high',
-      rationale: request.mode === 'move-range'
-        ? 'front-end requested move-range mode'
-        : 'prompt contains a parseable move range',
-      matchedSignals: [request.mode === 'move-range' ? 'mode=move-range' : 'parsed-move-range']
+      rationale: 'front-end requested move-range mode',
+      matchedSignals: ['mode=move-range']
+    }
+  }
+
+  if (request.gameId && (request.moveRange || parseMoveRangeFromPrompt(request.prompt ?? ''))) {
+    return {
+      intent: 'move-range',
+      confidence: 'high',
+      rationale: request.moveRange ? 'request includes moveRange' : 'prompt contains a parseable move range',
+      matchedSignals: [request.moveRange ? 'request.moveRange' : 'parsed-move-range']
     }
   }
 

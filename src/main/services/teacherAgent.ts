@@ -845,9 +845,9 @@ function createTeacherAgentTools(state: TeacherAgentSessionState): TeacherAgentT
         const gameId = state.request.gameId
         if (!gameId) throw new Error('katago.analyzeMoveRange 需要 gameId。')
         const fallback = state.request.moveRange ?? parseMoveRangeFromPrompt(state.request.prompt ?? '')
-        const startMove = numberInput(input, 'startMove', fallback?.start ?? 0, 1, 400)
-        const endMove = numberInput(input, 'endMove', fallback?.end ?? 0, startMove, 400)
-        if (!startMove || !endMove || endMove <= startMove) {
+        const startMove = Math.trunc(numberInput(input, 'startMove', fallback?.start ?? 0))
+        const endMove = Math.trunc(numberInput(input, 'endMove', fallback?.end ?? 0))
+        if (startMove < 1 || endMove <= startMove) {
           throw new Error('katago.analyzeMoveRange 需要明确的 startMove/endMove 或 request.moveRange。')
         }
         const analyses = await analyzeMoveRange(gameId, startMove, endMove, 200)
@@ -1221,6 +1221,9 @@ export async function runTeacherTask(request: TeacherRunRequest, onProgress?: Te
   const normalizedRequest: TeacherRunRequest = {
     ...request,
     moveRange: request.moveRange ?? parseMoveRangeFromPrompt(request.prompt ?? '') ?? undefined
+  }
+  if (normalizedRequest.mode === 'move-range' && !normalizedRequest.gameId) {
+    throw new Error('move-range 任务需要 gameId。')
   }
   const logs: TeacherToolLog[] = []
   const intentClassification = classifyTeacherIntent(normalizedRequest)
