@@ -1,0 +1,44 @@
+{
+  "id": "endgame-reverse-sente-001",
+  "category": "endgame",
+  "sgf": "(;GM[1]FF[4]SZ[19]KM[7.5]PB[Black]PW[White];B[pd];W[dd];B[qp];W[dp];B[pp];W[dc];B[ce];W[cf];B[de];W[ed];B[fd];W[ec];B[fe];W[gc];B[gd];W[hc];B[hd];W[id])",
+  "moveNumber": 18,
+  "studentLevel": "intermediate",
+  "expected": {
+    "allowedBestMoves": [
+      "H16",
+      "G16",
+      "J16"
+    ],
+    "forbiddenMoves": [
+      "A1"
+    ],
+    "motifs": [
+      "endgame_sente",
+      "reverse_sente"
+    ],
+    "mustMention": [
+      "先手",
+      "逆收",
+      "目差"
+    ],
+    "mustNotMention": [
+      "胜率决定一切"
+    ],
+    "numericTolerance": {
+      "winrateLoss": 0.5,
+      "scoreLoss": 0.5
+    },
+    "claims": [
+      {
+        "id": "claim-endgame-sente",
+        "type": "sente_gote",
+        "text": "官子判断必须引用先后手或目差证据。",
+        "evidenceRefs": [
+          "analysisQuality",
+          "tacticalSignals"
+        ]
+      }
+    ]
+  }
+}

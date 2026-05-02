@@ -1,0 +1,164 @@
+{
+  "schemaVersion": 1,
+  "requiredSourceRefs": [
+    "katago-analysis-engine-docs",
+    "sgf-ff4-red-bean",
+    "sgfmill-ff4-properties",
+    "sensei-go-terms",
+    "josekipedia-game-collection",
+    "gnu-go-pattern-docs",
+    "gnu-go-eyes-docs",
+    "kombilo-pattern-search",
+    "gomentor-curated-original"
+  ],
+  "requiredPacks": [
+    "elite-pattern-cards-v9.json",
+    "elite-pattern-cards-v10.json",
+    "elite-pattern-cards-v11.json"
+  ],
+  "requiredTopics": [
+    {
+      "id": "ownership-evidence",
+      "mustMatchAny": [
+        "katago_ownership",
+        "ownership",
+        "厚薄"
+      ]
+    },
+    {
+      "id": "policy-prior",
+      "mustMatchAny": [
+        "katago_policy_prior",
+        "prior",
+        "policy"
+      ]
+    },
+    {
+      "id": "pv-visits",
+      "mustMatchAny": [
+        "pv_visit_integrity",
+        "pvVisits"
+      ]
+    },
+    {
+      "id": "sgf-setup",
+      "mustMatchAny": [
+        "sgf_setup_properties",
+        "AB",
+        "AW",
+        "AE"
+      ]
+    },
+    {
+      "id": "source-policy",
+      "mustMatchAny": [
+        "do_not_import_boundary",
+        "source_ref_boundary"
+      ]
+    },
+    {
+      "id": "aji",
+      "mustMatchAny": [
+        "aji_management",
+        "味"
+      ]
+    },
+    {
+      "id": "sabaki",
+      "mustMatchAny": [
+        "sabaki",
+        "治孤"
+      ]
+    },
+    {
+      "id": "semeai",
+      "mustMatchAny": [
+        "semeai_liberty_order",
+        "对杀"
+      ]
+    },
+    {
+      "id": "seki",
+      "mustMatchAny": [
+        "seki_shared_liberties",
+        "双活"
+      ]
+    },
+    {
+      "id": "reverse-sente",
+      "mustMatchAny": [
+        "reverse_sente_yose",
+        "逆收"
+      ]
+    },
+    {
+      "id": "connection-shape",
+      "mustMatchAny": [
+        "connection_shape_choice",
+        "竹节"
+      ]
+    },
+    {
+      "id": "ladder-net",
+      "mustMatchAny": [
+        "ladder_net_choice",
+        "征子",
+        "枷"
+      ]
+    },
+    {
+      "id": "attack-profit",
+      "mustMatchAny": [
+        "attack_profit_not_capture",
+        "攻击收益"
+      ]
+    },
+    {
+      "id": "endgame-counting",
+      "mustMatchAny": [
+        "endgame_counting_risk",
+        "官子"
+      ]
+    },
+    {
+      "id": "local-pattern-symmetry",
+      "mustMatchAny": [
+        "local_pattern_symmetry",
+        "八方向",
+        "mirror"
+      ]
+    },
+    {
+      "id": "shape-counter-evidence",
+      "mustMatchAny": [
+        "shape_counter_evidence",
+        "counterEvidence",
+        "安全措辞"
+      ]
+    },
+    {
+      "id": "katago-shape-feature-fusion",
+      "mustMatchAny": [
+        "katago_shape_feature_fusion",
+        "pvVisits",
+        "ownership"
+      ]
+    },
+    {
+      "id": "eye-topology-shape",
+      "mustMatchAny": [
+        "eye_topology_shape",
+        "假眼",
+        "half eye"
+      ]
+    },
+    {
+      "id": "shape-recognition-eval",
+      "mustMatchAny": [
+        "shape_recognition_eval",
+        "eval:shape-recognition",
+        "expectedShapes"
+      ]
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { profileStore } from '@main/lib/store'
 import type { CoachUserLevel, StudentProfile } from '@main/lib/types'
+import { summarizeProfileQualityForPrompt } from './teacher/studentProfileQuality'
 
 export type { StudentProfile } from '@main/lib/types'
 
@@ -345,6 +346,7 @@ export function formatStudentProfileForPrompt(student: StudentProfile | null): s
     `死活弱点: ${(student.lifeDeathWeaknesses ?? []).join('；') || '暂无'}`,
     `手筋弱点: ${(student.tesujiWeaknesses ?? []).join('；') || '暂无'}`,
     `近期模式: ${student.recentPatterns.join('；') || '暂无'}`,
-    `训练重点: ${student.trainingFocus.join('；') || '暂无'}`
+    `训练重点: ${student.trainingFocus.join('；') || '暂无'}`,
+    `画像可信度: ${summarizeProfileQualityForPrompt(student)}`
   ].join('\n')
 }

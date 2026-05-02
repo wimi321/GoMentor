@@ -90,7 +90,16 @@ function dataRoot(): string {
 
 function loadEliteCards(root = dataRoot()): ElitePatternCard[] {
   if (cachedCards && cachedCardsRoot === root) return cachedCards
-  const filenames = ['elite-pattern-cards.json', 'elite-pattern-cards-v4.json']
+  const filenames = [
+    'elite-pattern-cards.json',
+    'elite-pattern-cards-v4.json',
+    'elite-pattern-cards-v6.json',
+    'elite-pattern-cards-v7.json',
+    'elite-pattern-cards-v8.json',
+    'elite-pattern-cards-v9.json',
+    'elite-pattern-cards-v10.json',
+    'elite-pattern-cards-v11.json'
+  ]
   const loaded: ElitePatternCard[] = []
   for (const filename of filenames) {
     const path = join(root, 'knowledge', filename)

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "cut-connection-cut-point-001",
+  "category": "cut-connection",
+  "description": "斜邻连接点应识别为断点/连接形，不能误报为定式。",
+  "sgf": "(;GM[1]FF[4]SZ[19]KM[7.5]AB[pd][dp][dd][jj][jk]AW[pp][dc][pq][ij]PL[B];B[jj])",
+  "moveNumber": 1,
+  "studentLevel": "intermediate",
+  "expectedShapes": ["cut_point", "local_shape_detail"],
+  "forbiddenShapes": ["joseki", "ko_shape"],
+  "mustHaveEvidence": ["anchor", "friendly", "empty"],
+  "maxConfidenceWithoutKataGo": "medium"
+}

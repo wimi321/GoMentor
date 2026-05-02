@@ -1,6 +1,7 @@
 import type { TeacherRunRequest } from '@main/lib/types'
+import { parseMoveRangeFromPrompt } from '@shared/moveRange'
 
-export type TeacherIntent = 'current-move' | 'game-review' | 'batch-review' | 'training-plan' | 'open-ended'
+export type TeacherIntent = 'current-move' | 'game-review' | 'batch-review' | 'training-plan' | 'open-ended' | 'move-range'
 
 export interface TeacherIntentClassification {
   intent: TeacherIntent
@@ -105,6 +106,24 @@ export function classifyTeacherIntent(request: TeacherRunRequest): TeacherIntent
     }
   }
 
+  if (request.mode === 'move-range') {
+    return {
+      intent: 'move-range',
+      confidence: 'high',
+      rationale: 'front-end requested move-range mode',
+      matchedSignals: ['mode=move-range']
+    }
+  }
+
+  if (request.gameId && (request.moveRange || parseMoveRangeFromPrompt(request.prompt ?? ''))) {
+    return {
+      intent: 'move-range',
+      confidence: 'high',
+      rationale: request.moveRange ? 'request includes moveRange' : 'prompt contains a parseable move range',
+      matchedSignals: [request.moveRange ? 'request.moveRange' : 'parsed-move-range']
+    }
+  }
+
   const prompt = (request.prompt ?? '').trim()
   if (!prompt) {
     return {
@@ -120,14 +139,16 @@ export function classifyTeacherIntent(request: TeacherRunRequest): TeacherIntent
     'game-review': 0,
     'batch-review': 0,
     'training-plan': 0,
-    'open-ended': 0
+    'open-ended': 0,
+    'move-range': 0
   }
   const labels: Record<TeacherIntent, string[]> = {
     'current-move': [],
     'game-review': [],
     'batch-review': [],
     'training-plan': [],
-    'open-ended': []
+    'open-ended': [],
+    'move-range': []
   }
 
   for (const signal of SIGNALS) {

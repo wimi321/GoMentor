@@ -4,6 +4,28 @@ All notable changes to GoMentor will be documented here.
 
 This project follows semantic versioning once public releases begin.
 
+## 0.3.6 - Grounded Shape Recognition and Move Range Review
+
+### Added
+
+- Grounded shape recognition engine with KataGo-derived shape features and local pattern matching.
+- Knowledge cards v6-v11, source registry coverage, and source-policy gates for local teaching evidence.
+- Optimized move-range review from PR #5 with Alt+drag timeline selection, shared multilingual range parser, and key-move screenshots.
+- Teacher quality checks for claim verification, structured output gating, knowledge coverage, shape recognition, and move-range contracts.
+
+### Improved
+
+- Move-range teaching now starts from range trends and then focuses on top-loss key moves instead of逐手 expensive long-range analysis.
+- The teacher prompt now asks each key move to cite KataGo evidence, analysis quality, and shape or tactical signals.
+- Renderer and main process share `src/shared/moveRange.ts`, keeping renderer runtime away from main-only imports.
+- Japanese learning intent detection keeps `強くな` as a training signal while adding move-range intent detection.
+
+### Thanks
+
+- Thanks to layiku for PR #3 and PR #4 on global arrow-key navigation; PR #4 is merged and improves review操作 flow.
+- Thanks to layiku for PR #5's move-range review direction, Alt+drag interaction, and multilingual parser, now integrated with quality gates and shape evidence.
+- Thanks to wimi321 for PR #1 and PR #2, which established the P0 beta, v5 teaching knowledge, joseki data, and evidence chain foundation.
+
 ## 0.3.5 - Keyboard Move Navigation
 
 ### Added

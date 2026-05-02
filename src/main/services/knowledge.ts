@@ -10,6 +10,7 @@ import {
   type PatternSearchMatch
 } from './knowledge/patterns'
 import { formatKnowledgeMatchForPrompt, searchKnowledgeMatchEngine, type BoardSnapshotStone, type LocalWindow } from './knowledge/matchEngine'
+import { recognizedShapesToKnowledgePackets, recognizeShapes } from './knowledge/shapeRecognitionEngine'
 
 interface KnowledgeEntry {
   id: string
@@ -218,6 +219,7 @@ export function searchKnowledge(query: KnowledgeQuery): KnowledgePacket[] {
     ...query,
     maxResults: 6
   })
+  const recognizedShapes = recognizeShapes(query)
 
   for (const entry of entries) {
     if (!entry.content || !entry.levels.includes(query.userLevel)) {
@@ -339,7 +341,9 @@ export function searchKnowledge(query: KnowledgeQuery): KnowledgePacket[] {
       score: match.score + 5
     }))
 
-  return [...markdownPackets, ...p0Packets, ...patternPackets, ...matchPackets]
+  const shapePackets = recognizedShapesToKnowledgePackets(recognizedShapes)
+
+  return [...shapePackets, ...markdownPackets, ...p0Packets, ...patternPackets, ...matchPackets]
     .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title))
     .slice(0, query.maxResults ?? 4)
 }

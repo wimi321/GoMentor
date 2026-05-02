@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "eye-shape-false-eye-001",
+  "category": "eye-shape",
+  "description": "边角眼位旁有敌方压力，应识别为假眼风险而不是直接说活。",
+  "sgf": "(;GM[1]FF[4]SZ[19]KM[7.5]AB[aa][ba][ab][bb]AW[ca][ac][cb]PL[B];B[bc])",
+  "moveNumber": 1,
+  "studentLevel": "beginner",
+  "expectedShapes": ["false_eye_risk", "eye_topology_shape"],
+  "forbiddenShapes": ["alive-certain", "joseki"],
+  "mustHaveEvidence": ["eye", "enemy", "edge"],
+  "maxConfidenceWithoutKataGo": "medium"
+}

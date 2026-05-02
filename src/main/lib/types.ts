@@ -83,12 +83,20 @@ export interface GameMove {
   pass: boolean
 }
 
+export interface BoardSetupStone {
+  color: StoneColor
+  point: string
+  row: number
+  col: number
+}
+
 export interface GameRecord {
   game: LibraryGame
   boardSize: number
   komi: string
   handicap: string
   moves: GameMove[]
+  initialStones?: BoardSetupStone[]
 }
 
 export interface ReviewArtifact {
@@ -223,7 +231,7 @@ export interface ReviewRequest {
 }
 
 export type CoachUserLevel = 'beginner' | 'intermediate' | 'advanced' | 'dan'
-export type TeacherRunMode = 'current-move' | 'freeform'
+export type TeacherRunMode = 'current-move' | 'freeform' | 'move-range'
 export type TeacherToolStatus = 'running' | 'done' | 'error' | 'skipped'
 
 export interface TeacherToolLog {
@@ -310,7 +318,57 @@ export interface KataGoCandidate {
   visits: number
   order: number
   prior: number
+  lcb?: number
+  utility?: number
+  scoreStdev?: number
+  edgeVisits?: number
+  pvVisits?: number[]
+  ownership?: number[]
+  ownershipStdev?: number[]
+  humanPrior?: number
+  humanScoreMean?: number
   pv: string[]
+}
+
+export type AnalysisConfidence = 'high' | 'medium' | 'low'
+
+export interface AnalysisQuality {
+  phase: 'opening' | 'middle' | 'endgame'
+  totalVisits: number
+  bestVisits: number
+  actualVisits: number
+  candidateSpreadWinrate: number
+  candidateSpreadScore: number
+  pvStable: boolean
+  confidence: AnalysisConfidence
+  reason: string
+  deepenRecommended: boolean
+}
+
+export interface HumanWinrateCalibration {
+  aiWinrate?: number
+  humanWinrateEstimate?: number
+  scoreLead: number
+  level: CoachUserLevel
+  confidence: AnalysisConfidence
+  explanation: string
+}
+
+export interface OwnershipDeltaSummary {
+  biggestSwingRegions: Array<{
+    region: string
+    avgDelta: number
+    points: string[]
+    humanLabel: string
+  }>
+  note: string
+}
+
+export interface TacticalSignal {
+  type: string
+  confidence: AnalysisConfidence
+  evidence: string[]
+  relatedMoves: string[]
 }
 
 export interface KataGoMoveAnalysis {
@@ -341,6 +399,10 @@ export interface KataGoMoveAnalysis {
     scoreLoss: number
   }
   judgement: 'good_move' | 'inaccuracy' | 'mistake' | 'blunder' | 'unknown'
+  analysisQuality?: AnalysisQuality
+  humanCalibration?: HumanWinrateCalibration
+  ownershipSummary?: OwnershipDeltaSummary
+  tacticalSignals?: TacticalSignal[]
 }
 
 export interface StudentProfile {
@@ -393,7 +455,7 @@ export interface TeacherKeyMistake {
 }
 
 export interface StructuredTeacherResult {
-  taskType: 'current-move' | 'full-game' | 'recent-games' | 'freeform'
+  taskType: 'current-move' | 'full-game' | 'recent-games' | 'freeform' | 'move-range'
   headline: string
   summary: string
   keyMistakes: TeacherKeyMistake[]
@@ -411,6 +473,25 @@ export interface StructuredTeacherResult {
   }
 }
 
+export interface MoveRangeKeyMoveSummary {
+  moveNumber: number
+  playedMove?: string
+  bestMove?: string
+  winrateLoss: number
+  scoreLoss: number
+  judgement?: string
+  evidenceRefs: string[]
+}
+
+export interface MoveRangeReviewSummary {
+  start: number
+  end: number
+  totalMoves: number
+  keyMoves: MoveRangeKeyMoveSummary[]
+  omittedMoves: number
+  analysisMethod: string
+}
+
 export interface TeacherRunRequest {
   runId?: string
   mode?: TeacherRunMode
@@ -419,6 +500,9 @@ export interface TeacherRunRequest {
   moveNumber?: number
   playerName?: string
   boardImageDataUrl?: string
+  boardImageDataUrls?: string[]
+  moveRange?: { start: number; end: number }
+  moveRangeSummary?: MoveRangeReviewSummary
   prefetchedAnalysis?: KataGoMoveAnalysis
 }
 

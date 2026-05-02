@@ -779,6 +779,28 @@
   font-size: 12px;
 }
 
+.ks-timeline-range-highlight {
+  fill: rgba(79, 163, 145, 0.18);
+  stroke: rgba(79, 163, 145, 0.5);
+  stroke-width: 1;
+  rx: 2;
+}
+
+.ks-timeline-range-badge {
+  position: absolute;
+  top: 6px;
+  right: 120px;
+  padding: 3px 10px;
+  border-radius: 10px;
+  background: rgba(79, 163, 145, 0.85);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  pointer-events: none;
+  z-index: var(--ks-z-tooltip, 30);
+}
+
 .ks-board-insight {
   display: grid;
   gap: 12px;
