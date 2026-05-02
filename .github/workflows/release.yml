@@ -120,6 +120,7 @@ jobs:
           node scripts/check_katago_assets.mjs --mode=release
 
       - name: Package desktop app
+        shell: bash
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
@@ -134,7 +135,29 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_KEYCHAIN: ${{ secrets.APPLE_KEYCHAIN }}
           APPLE_KEYCHAIN_PROFILE: ${{ secrets.APPLE_KEYCHAIN_PROFILE }}
-        run: ${{ matrix.command }}
+        run: |
+          for name in \
+            CSC_LINK \
+            CSC_KEY_PASSWORD \
+            WIN_CSC_LINK \
+            WIN_CSC_KEY_PASSWORD \
+            APPLE_API_KEY \
+            APPLE_API_KEY_ID \
+            APPLE_API_ISSUER \
+            APPLE_ID \
+            APPLE_APP_SPECIFIC_PASSWORD \
+            APPLE_TEAM_ID \
+            APPLE_KEYCHAIN \
+            APPLE_KEYCHAIN_PROFILE
+          do
+            if [[ -z "${!name:-}" ]]; then
+              unset "${name}"
+            fi
+          done
+          if [[ "${RUNNER_OS}" == "macOS" && -z "${CSC_LINK:-}" ]]; then
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+          fi
+          ${{ matrix.command }}
 
       - name: Upload packaged artifacts
         uses: actions/upload-artifact@v4
