@@ -18,7 +18,8 @@ export default defineConfig({
     plugins: [react()],
     resolve: {
       alias: {
-        '@renderer': resolve('src/renderer/src')
+        '@renderer': resolve('src/renderer/src'),
+        '@main': resolve('src/main')
       }
     }
   }

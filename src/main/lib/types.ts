@@ -223,7 +223,7 @@ export interface ReviewRequest {
 }
 
 export type CoachUserLevel = 'beginner' | 'intermediate' | 'advanced' | 'dan'
-export type TeacherRunMode = 'current-move' | 'freeform'
+export type TeacherRunMode = 'current-move' | 'freeform' | 'move-range'
 export type TeacherToolStatus = 'running' | 'done' | 'error' | 'skipped'
 
 export interface TeacherToolLog {
@@ -393,7 +393,7 @@ export interface TeacherKeyMistake {
 }
 
 export interface StructuredTeacherResult {
-  taskType: 'current-move' | 'full-game' | 'recent-games' | 'freeform'
+  taskType: 'current-move' | 'full-game' | 'recent-games' | 'freeform' | 'move-range'
   headline: string
   summary: string
   keyMistakes: TeacherKeyMistake[]
@@ -419,6 +419,8 @@ export interface TeacherRunRequest {
   moveNumber?: number
   playerName?: string
   boardImageDataUrl?: string
+  boardImageDataUrls?: string[]
+  moveRange?: { start: number; end: number }
   prefetchedAnalysis?: KataGoMoveAnalysis
 }
 

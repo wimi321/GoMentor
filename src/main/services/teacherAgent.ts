@@ -21,7 +21,8 @@ import type {
   TeacherToolLog
 } from '@main/lib/types'
 import type { ChatMessage, ChatTool, ChatToolCall, ProviderSettings } from './llm/provider'
-import { analyzePosition } from './katago'
+import { analyzePosition, analyzeMoveRange } from './katago'
+import { parseMoveRangeFromPrompt } from '@main/lib/moveRange'
 import { searchKnowledge, searchKnowledgeMatches } from './knowledge'
 import { recommendedProblemsFromMatches, type BoardSnapshotStone, type LocalWindow } from './knowledge/matchEngine'
 import { readGameRecord } from './sgf'
@@ -499,6 +500,7 @@ function taskTypeForIntent(intent: TeacherIntent): StructuredTeacherResult['task
   if (intent === 'current-move') return 'current-move'
   if (intent === 'game-review') return 'full-game'
   if (intent === 'batch-review') return 'recent-games'
+  if (intent === 'move-range') return 'move-range'
   return 'freeform'
 }
 
@@ -509,19 +511,36 @@ function initialAgentUserMessage(state: TeacherAgentSessionState): ChatMessage {
     gameId: state.request.gameId,
     moveNumber: state.request.moveNumber,
     playerName: state.request.playerName || state.studentName,
-    boardImageAttached: Boolean(state.request.boardImageDataUrl),
+    boardImageAttached: Boolean(state.request.boardImageDataUrl) || (state.request.boardImageDataUrls?.length ?? 0) > 0,
+    boardImagesAttached: state.request.boardImageDataUrls?.length ?? 0,
+    moveRange: state.request.moveRange,
     prefetchedAnalysisAvailable: Boolean(state.request.prefetchedAnalysis),
     note: '请按需要调用工具取得事实；没有工具证据时不要猜坐标、胜率、PV、定式名或来源。'
   }
   const text = [
     '任务说明：请根据 intent 完成用户请求。',
     '如果 intent 是 current-move，请先观察随消息附带的棋盘图片，再调用 KataGo 和知识库工具核对事实。',
+    '如果 intent 是 move-range，请依次观察附带的棋盘图片（每张对应区间内的一手关键棋），先概括区间内胜率走势和整体特征，然后重点讲解胜率损失最大的关键手，说明每手的得失和更好的选点。',
     '当前手讲解要按工具返回的 teachingDensity 掌握详略：常规定式少讲；定式分支或相似型列关键变化；中盘战、攻杀、转换要讲目的、对方应手、后续变化和实战评价。',
     'boardImageAttached=true 表示本轮用户消息已附棋盘图，请把图片中的棋形、厚薄、急所和全局方向作为局面判断依据。',
+    'boardImagesAttached>0 表示附带了多张区间关键手棋盘图。',
     'prefetchedAnalysisAvailable=true 表示 katago.analyzePosition 可复用已缓存的 KataGo 分析结果。',
     '上下文JSON：',
     JSON.stringify(context)
   ].join('\n')
+  if (state.request.boardImageDataUrls?.length) {
+    const imageBlocks = state.request.boardImageDataUrls.map((url) => ({
+      type: 'image_url' as const,
+      image_url: { url }
+    }))
+    return {
+      role: 'user',
+      content: [
+        { type: 'text', text },
+        ...imageBlocks
+      ]
+    }
+  }
   if (state.request.boardImageDataUrl) {
     return {
       role: 'user',
@@ -814,16 +833,64 @@ function createTeacherAgentTools(state: TeacherAgentSessionState): TeacherAgentT
       }
     },
     {
+      apiName: 'katago_analyzeMoveRange',
+      canonicalName: 'katago.analyzeMoveRange',
+      label: 'KataGo 区间分析',
+      description: '分析指定手数区间内每一手的胜率变化、胜率损失和判断，返回按损失排序的关键手。注意：renderer 通常已随消息附带了区间关键手的截图和概要数据，如需更详细的逐手分析再调用此工具。',
+      parameters: schema({
+        startMove: { type: 'number', description: '起始手数' },
+        endMove: { type: 'number', description: '结束手数' }
+      }),
+      execute: async (input) => {
+        const gameId = state.request.gameId
+        if (!gameId) throw new Error('katago.analyzeMoveRange 需要 gameId。')
+        const fallback = state.request.moveRange ?? parseMoveRangeFromPrompt(state.request.prompt ?? '')
+        const startMove = Math.trunc(numberInput(input, 'startMove', fallback?.start ?? 0))
+        const endMove = Math.trunc(numberInput(input, 'endMove', fallback?.end ?? 0))
+        if (startMove < 1 || endMove <= startMove) {
+          throw new Error('katago.analyzeMoveRange 需要明确的 startMove/endMove 或 request.moveRange。')
+        }
+        const analyses = await analyzeMoveRange(gameId, startMove, endMove, 200)
+        const summaries = analyses
+          .map((a) => ({
+            moveNumber: a.moveNumber,
+            playedMove: a.playedMove?.move,
+            winrateLoss: a.playedMove?.winrateLoss ?? 0,
+            scoreLoss: a.playedMove?.scoreLoss ?? 0,
+            judgement: a.judgement,
+            bestMove: a.before.topMoves[0]?.move,
+            bestWinrate: a.before.topMoves[0]?.winrate
+          }))
+          .sort((a, b) => b.winrateLoss - a.winrateLoss)
+        return {
+          startMove,
+          endMove,
+          totalMoves: endMove - startMove + 1,
+          analyses: summaries,
+          topLossMoves: summaries.filter((s) => s.winrateLoss > 2).slice(0, 8)
+        }
+      }
+    },
+    {
       apiName: 'board_captureTeachingImage',
       canonicalName: 'board.captureTeachingImage',
       label: '棋盘截图',
       description: '确认当前棋盘截图是否已经作为图片输入提供给模型。',
       parameters: schema({}),
-      execute: async () => ({
-        available: Boolean(state.request.boardImageDataUrl),
-        imageAttachedToConversation: Boolean(state.request.boardImageDataUrl),
-        note: state.request.boardImageDataUrl ? '当前棋盘图片已在用户消息中随本轮对话发送。' : '本轮没有棋盘图片。'
-      })
+      execute: async () => {
+        const single = Boolean(state.request.boardImageDataUrl)
+        const multi = (state.request.boardImageDataUrls?.length ?? 0) > 0
+        return {
+          available: single || multi,
+          imageAttachedToConversation: single || multi,
+          imageCount: (state.request.boardImageDataUrls?.length ?? 0) + (single ? 1 : 0),
+          note: state.request.boardImageDataUrls?.length
+            ? `${state.request.boardImageDataUrls.length} 张区间棋盘图片已在用户消息中随本轮对话发送。`
+            : state.request.boardImageDataUrl
+              ? '当前棋盘图片已在用户消息中随本轮对话发送。'
+              : '本轮没有棋盘图片。'
+        }
+      }
     },
     {
       apiName: 'knowledge_searchLocal',
@@ -1111,6 +1178,8 @@ async function runTeacherAgentSession(
   const structured = structuredFromTeacherText(finalText, taskType, state.knowledge, state.knowledgeMatches, state.recommendedProblems)
   const title = intent === 'current-move'
     ? `第 ${request.moveNumber ?? state.lastAnalysis?.moveNumber ?? 0} 手分析`
+    : intent === 'move-range'
+      ? `第 ${request.moveRange?.start ?? '?'}-${request.moveRange?.end ?? '?'} 手区间分析`
     : intent === 'game-review'
       ? '整盘复盘'
       : intent === 'batch-review'
@@ -1131,7 +1200,7 @@ async function runTeacherAgentSession(
   })
   return {
     id,
-    mode: intent === 'current-move' ? 'current-move' : 'freeform',
+    mode: intent === 'current-move' ? 'current-move' : intent === 'move-range' ? 'move-range' : 'freeform',
     title,
     markdown: finalText,
     toolLogs: logs,
@@ -1149,8 +1218,15 @@ async function runTeacherAgentSession(
 
 export async function runTeacherTask(request: TeacherRunRequest, onProgress?: TeacherProgressEmitter): Promise<TeacherRunResult> {
   const id = request.runId || randomUUID()
+  const normalizedRequest: TeacherRunRequest = {
+    ...request,
+    moveRange: request.moveRange ?? parseMoveRangeFromPrompt(request.prompt ?? '') ?? undefined
+  }
+  if (normalizedRequest.mode === 'move-range' && !normalizedRequest.gameId) {
+    throw new Error('move-range 任务需要 gameId。')
+  }
   const logs: TeacherToolLog[] = []
-  const intentClassification = classifyTeacherIntent(request)
+  const intentClassification = classifyTeacherIntent(normalizedRequest)
   const intent = intentClassification.intent
   const context: TeacherRunContext = {
     runId: id,
@@ -1161,6 +1237,8 @@ export async function runTeacherTask(request: TeacherRunRequest, onProgress?: Te
       stage: 'queued',
       message: intent === 'current-move'
         ? '收到当前手分析任务。'
+      : intent === 'move-range'
+        ? '收到区间分析任务。'
       : intent === 'game-review'
         ? '收到整盘复盘任务。'
         : intent === 'batch-review'
@@ -1180,7 +1258,7 @@ export async function runTeacherTask(request: TeacherRunRequest, onProgress?: Te
   })
 
   try {
-    const result = await runTeacherAgentSession(request, logs, id, intent, context)
+    const result = await runTeacherAgentSession(normalizedRequest, logs, id, intent, context)
     emitProgress(context, {
       stage: 'done',
       markdown: result.markdown,

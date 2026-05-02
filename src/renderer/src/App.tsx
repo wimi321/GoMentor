@@ -20,6 +20,7 @@ import type {
   TeacherRunProgress,
   TeacherRunResult
 } from '@main/lib/types'
+import { parseMoveRangeFromPrompt } from '@main/lib/moveRange'
 import lizzieBlackStoneUrl from './assets/lizzie/black.png'
 import lizzieBoardUrl from './assets/lizzie/board.png'
 import lizzieWhiteStoneUrl from './assets/lizzie/white.png'
@@ -438,6 +439,7 @@ export function App(): ReactElement {
   const [foxKeyword, setFoxKeyword] = useState('')
   const [playerName, setPlayerName] = useState('')
   const [prompt, setPrompt] = useState('')
+  const [moveRange, setMoveRange] = useState<{ start: number; end: number } | null>(null)
   const [busy, setBusy] = useState('')
   const [graphBusy, setGraphBusy] = useState(false)
   const [graphProgress, setGraphProgress] = useState('')
@@ -706,6 +708,7 @@ export function App(): ReactElement {
       setMoveNumber(next.moves.length)
       setAnalysis(cachedCurrent)
       setEvaluations(cachedEvaluations)
+      setMoveRange(null)
       if (hasCompleteEvaluationGraph(cachedEvaluations, next.moves.length)) {
         setGraphBusy(false)
         setGraphProgress('')
@@ -1126,6 +1129,40 @@ export function App(): ReactElement {
     if (record && selectedGame && !userPausedLiveAnalysisRef.current) {
       queueAutoLiveAnalysis(selectedGame.id, record, targetMove)
     }
+  }
+
+  function handleTimelineRangeSelect(start: number, end: number): void {
+    setMoveRange({ start, end })
+    setPrompt(`分析第${start}手到第${end}手`)
+    jumpToMove(start)
+  }
+
+  function handleTimelineRangeClear(): void {
+    setMoveRange(null)
+  }
+
+  function identifyKeyMoves(rangeAnalyses: KataGoMoveAnalysis[], rangeStart: number, rangeEnd: number, maxCount = 5): number[] {
+    const byLoss = rangeAnalyses
+      .filter((a) => a.playedMove && a.playedMove.winrateLoss > 0)
+      .sort((a, b) => (b.playedMove?.winrateLoss ?? 0) - (a.playedMove?.winrateLoss ?? 0))
+    const topLoss = byLoss.slice(0, 3).map((a) => a.moveNumber)
+    const moves = new Set<number>([rangeStart, rangeEnd, ...topLoss])
+    return Array.from(moves).sort((a, b) => a - b).slice(0, maxCount)
+  }
+
+  async function renderRangeBoardPngs(
+    targetRecord: GameRecord,
+    keyMoveNumbers: number[],
+    rangeAnalyses: KataGoMoveAnalysis[]
+  ): Promise<string[]> {
+    const analysisMap = new Map(rangeAnalyses.map((a) => [a.moveNumber, a]))
+    const images: string[] = []
+    for (const moveNum of keyMoveNumbers) {
+      const moveAnalysis = analysisMap.get(moveNum) ?? null
+      const png = await renderBoardPng(targetRecord, moveNum, moveAnalysis)
+      images.push(png)
+    }
+    return images
   }
 
   function pauseLiveAnalysis(message = '已暂停精读', manual = false): void {
@@ -1556,6 +1593,10 @@ export function App(): ReactElement {
     setBusy('teacher')
     try {
       const wantsCurrentMove = /当前手|这手|这一手|本手/.test(text)
+      const parsedRange = parseMoveRangeFromPrompt(text, record?.moves.length)
+      const selectedRangeText = moveRange ? `分析第${moveRange.start}手到第${moveRange.end}手` : ''
+      const range = parsedRange ?? (text === selectedRangeText ? moveRange : null)
+      const wantsMoveRange = range !== null
       if (wantsCurrentMove && record && selectedGame) {
         const nextAnalysis = await window.gomentor.analyzePosition({
           gameId: selectedGame.id,
@@ -1578,6 +1619,51 @@ export function App(): ReactElement {
           setAnalysis((current) => preferAnalysis(current, result.analysis))
           rememberEvaluation(result.analysis)
         }
+      } else if (wantsMoveRange && record && selectedGame) {
+        if (!range) {
+          await runTeacherTaskWithStream({
+            mode: 'freeform',
+            prompt: text,
+            gameId: selectedGame?.id,
+            moveNumber,
+            playerName
+          }, assistantMessageId)
+        } else {
+          const { start: rangeStart, end: rangeEnd } = range
+          const uncachedMoves: number[] = []
+          for (let m = rangeStart; m <= rangeEnd; m++) {
+            if (!evaluations[m]) uncachedMoves.push(m)
+          }
+          const merged = new Map<number, KataGoMoveAnalysis>()
+          for (const a of Object.values(evaluations)) merged.set(a.moveNumber, a)
+          if (uncachedMoves.length > 0) {
+            const allAnalyses = await window.gomentor.analyzeGameQuick({
+              gameId: selectedGame.id,
+              maxVisits: 200
+            })
+            for (const a of allAnalyses) {
+              merged.set(a.moveNumber, preferAnalysis(merged.get(a.moveNumber), a) ?? a)
+              rememberEvaluation(a)
+            }
+          }
+          const rangeSlice = [...merged.values()]
+            .filter((a) => a.moveNumber >= rangeStart && a.moveNumber <= rangeEnd)
+          const keyMoves = identifyKeyMoves(rangeSlice, rangeStart, rangeEnd)
+          const boardImageDataUrls = await renderRangeBoardPngs(record, keyMoves, rangeSlice)
+          const result = await runTeacherTaskWithStream({
+            mode: 'move-range',
+            prompt: text,
+            gameId: selectedGame.id,
+            moveNumber,
+            playerName,
+            moveRange: { start: rangeStart, end: rangeEnd },
+            boardImageDataUrls
+          }, assistantMessageId)
+          if (result.analysis) {
+            setAnalysis((current) => preferAnalysis(current, result.analysis))
+            rememberEvaluation(result.analysis)
+          }
+        }
       } else {
         await runTeacherTaskWithStream({
           mode: 'freeform',
@@ -1594,6 +1680,7 @@ export function App(): ReactElement {
         content: message.content || `任务失败：${String(cause)}`
       }))
     } finally {
+      setMoveRange(null)
       setBusy('')
     }
   }
@@ -1697,6 +1784,10 @@ export function App(): ReactElement {
                   loading={graphBusy}
                   loadingLabel={graphProgress}
                   onMove={jumpToMove}
+                  onRangeSelect={handleTimelineRangeSelect}
+                  onRangeClear={handleTimelineRangeClear}
+                  rangeStart={moveRange?.start ?? null}
+                  rangeEnd={moveRange?.end ?? null}
                 />
               </>
             ) : (
