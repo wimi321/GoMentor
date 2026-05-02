@@ -468,6 +468,7 @@ export function App(): ReactElement {
   const userPausedLiveAnalysisRef = useRef(false)
   const moveNumberRef = useRef(moveNumber)
   const recordRef = useRef<GameRecord | null>(record)
+  const jumpToMoveRef = useRef<(next: number) => void>(() => {})
   const selectedGameIdRef = useRef('')
   const selectedEvaluationCacheKeyRef = useRef('')
   const evaluationCacheRef = useRef<Record<string, EvaluationByMove>>({})
@@ -588,6 +589,10 @@ export function App(): ReactElement {
   }, [moveNumber, record])
 
   useEffect(() => {
+    jumpToMoveRef.current = jumpToMove
+  })
+
+  useEffect(() => {
     selectedGameIdRef.current = selectedGame?.id ?? ''
     selectedEvaluationCacheKeyRef.current = selectedGame ? analysisCacheKeyForGame(selectedGame.id) : ''
   }, [selectedGame?.id, dashboard.settings.katagoModelPreset, dashboard.settings.katagoModel])
@@ -627,16 +632,16 @@ export function App(): ReactElement {
       if (!rec) return
       if (event.key === 'ArrowLeft') {
         event.preventDefault()
-        jumpToMove(Math.max(0, moveNumberRef.current - 1))
+        jumpToMoveRef.current(Math.max(0, moveNumberRef.current - 1))
       } else if (event.key === 'ArrowRight') {
         event.preventDefault()
-        jumpToMove(Math.min(rec.moves.length, moveNumberRef.current + 1))
+        jumpToMoveRef.current(Math.min(rec.moves.length, moveNumberRef.current + 1))
       } else if (event.key === 'Home') {
         event.preventDefault()
-        jumpToMove(0)
+        jumpToMoveRef.current(0)
       } else if (event.key === 'End') {
         event.preventDefault()
-        jumpToMove(rec.moves.length)
+        jumpToMoveRef.current(rec.moves.length)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
