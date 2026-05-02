@@ -613,6 +613,7 @@ export function App(): ReactElement {
     return () => dispose?.()
   }, [selectedGame?.id, moveNumber, busy, record, dashboard.games.length])
 
+  const arrowDebounceRef = useRef(0)
   useEffect(() => {
     function handleKeyDown(event: globalThis.KeyboardEvent): void {
       const key = event.key.toLowerCase()
@@ -630,22 +631,33 @@ export function App(): ReactElement {
       }
       const rec = recordRef.current
       if (!rec) return
+      let nextMove = -1
       if (event.key === 'ArrowLeft') {
         event.preventDefault()
-        jumpToMoveRef.current(Math.max(0, moveNumberRef.current - 1))
+        nextMove = Math.max(0, moveNumberRef.current - 1)
       } else if (event.key === 'ArrowRight') {
         event.preventDefault()
-        jumpToMoveRef.current(Math.min(rec.moves.length, moveNumberRef.current + 1))
+        nextMove = Math.min(rec.moves.length, moveNumberRef.current + 1)
       } else if (event.key === 'Home') {
         event.preventDefault()
-        jumpToMoveRef.current(0)
+        nextMove = 0
       } else if (event.key === 'End') {
         event.preventDefault()
-        jumpToMoveRef.current(rec.moves.length)
+        nextMove = rec.moves.length
       }
+      if (nextMove < 0) return
+      setMoveNumber(nextMove)
+      moveNumberRef.current = nextMove
+      clearTimeout(arrowDebounceRef.current)
+      arrowDebounceRef.current = window.setTimeout(() => {
+        jumpToMoveRef.current(nextMove)
+      }, 150)
     }
     window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      clearTimeout(arrowDebounceRef.current)
+    }
   }, [])
 
   async function refresh(): Promise<void> {
