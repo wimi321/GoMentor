@@ -1,7 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { findGame, getSettings } from '@main/lib/store'
-import type { GameMove, KataGoAnalysisGroup, KataGoCandidate, KataGoMoveAnalysis } from '@main/lib/types'
+import type { AnalysisQuality, GameMove, KataGoAnalysisGroup, KataGoCandidate, KataGoMoveAnalysis } from '@main/lib/types'
 import { readGameRecord } from './sgf'
 import { resolveKataGoRuntime } from './katagoRuntime'
 import { ensureFoxGameDownloaded } from './fox'
@@ -13,6 +13,8 @@ interface KataGoResponse {
   rootInfo?: {
     winrate?: number
     scoreLead?: number
+    scoreStdev?: number
+    utility?: number
     scoreMean?: number
   }
   moveInfos?: Array<{
@@ -21,9 +23,18 @@ interface KataGoResponse {
     scoreLead?: number
     scoreMean?: number
     visits?: number
+    edgeVisits?: number
     order?: number
     prior?: number
+    lcb?: number
+    utility?: number
+    scoreStdev?: number
+    humanPrior?: number
+    humanScoreMean?: number
     pv?: string[]
+    pvVisits?: number[]
+    ownership?: number[]
+    ownershipStdev?: number[]
   }>
 }
 
@@ -34,7 +45,13 @@ interface AnalysisQuery {
   komi: number
   maxVisits: number
   reportDuringSearchEvery?: number
+  initialStones?: Array<[GameMove['color'], string]>
   overrideSettings?: Record<string, number | boolean | string>
+  includeOwnership?: boolean
+  includeMovesOwnership?: boolean
+  includeOwnershipStdev?: boolean
+  includePolicy?: boolean
+  includePVVisits?: boolean
   allowMoves?: Array<{
     player: GameMove['color']
     moves: string[]
@@ -94,6 +111,42 @@ function normalizeKomi(raw: string): number {
   return Math.abs(parsed) > 150 && Number.isInteger(parsed) ? parsed / 50 : parsed
 }
 
+function initialStonesFromRecord(record: ReturnType<typeof readGameRecord>): Array<[GameMove['color'], string]> {
+  return (record.initialStones ?? []).map((stone) => [stone.color, stone.point])
+}
+
+function inferPhase(moveNumber: number): AnalysisQuality['phase'] {
+  if (moveNumber <= 50) return 'opening'
+  if (moveNumber <= 160) return 'middle'
+  return 'endgame'
+}
+
+function buildAnalysisQuality(
+  moveNumber: number,
+  currentMove: GameMove | undefined,
+  topMoves: KataGoCandidate[],
+  forcedActual?: KataGoCandidate
+): AnalysisQuality {
+  const best = topMoves[0]
+  const second = topMoves[1]
+  const totalVisits = topMoves.reduce((sum, move) => sum + (move.visits ?? 0), 0)
+  const candidateSpreadWinrate = best && second ? Math.abs(best.winrate - second.winrate) : 99
+  const candidateSpreadScore = best && second ? Math.abs(best.scoreLead - second.scoreLead) : 99
+  const actualVisits = forcedActual?.visits ?? topMoves.find((move) => currentMove && moveKey(move.move) === moveKey(currentMove.gtp))?.visits ?? 0
+  const phase = inferPhase(moveNumber)
+  const pvStable = candidateSpreadWinrate >= 1.2 || candidateSpreadScore >= 0.8
+  const deepenRecommended =
+    totalVisits < 250 ||
+    (phase === 'middle' && totalVisits < 800) ||
+    (!pvStable && totalVisits < 1200) ||
+    (Boolean(currentMove) && actualVisits < 80)
+  const confidence = deepenRecommended ? (totalVisits >= 160 ? 'medium' : 'low') : 'high'
+  const reason = deepenRecommended
+    ? `visits=${totalVisits}, actualVisits=${actualVisits}, spread=${candidateSpreadWinrate.toFixed(1)}%, phase=${phase}; recommend deeper search before absolute teaching claims.`
+    : `visits=${totalVisits}, actualVisits=${actualVisits}, spread=${candidateSpreadWinrate.toFixed(1)}%; evidence is stable enough for teaching.`
+  return { phase, totalVisits, bestVisits: best?.visits ?? 0, actualVisits, candidateSpreadWinrate, candidateSpreadScore, pvStable, confidence, reason, deepenRecommended }
+}
+
 function root(response: KataGoResponse): { winrate: number; scoreLead: number } {
   if (!response.rootInfo) {
     throw new Error(`KataGo 没有返回 rootInfo${response.error ? `: ${response.error}` : ''}`)
@@ -111,7 +164,16 @@ function candidates(response: KataGoResponse): KataGoCandidate[] {
     scoreLead: Number(move.scoreLead ?? move.scoreMean ?? 0),
     visits: Number(move.visits ?? 0),
     order: Number(move.order ?? index),
+    edgeVisits: typeof move.edgeVisits === 'number' ? move.edgeVisits : undefined,
     prior: Number(move.prior ?? 0) * 100,
+    lcb: typeof move.lcb === 'number' ? move.lcb * 100 : undefined,
+    utility: typeof move.utility === 'number' ? move.utility : undefined,
+    scoreStdev: typeof move.scoreStdev === 'number' ? move.scoreStdev : undefined,
+    humanPrior: typeof move.humanPrior === 'number' ? move.humanPrior * 100 : undefined,
+    humanScoreMean: typeof move.humanScoreMean === 'number' ? move.humanScoreMean : undefined,
+    pvVisits: Array.isArray(move.pvVisits) ? move.pvVisits.map(Number).slice(0, 12) : undefined,
+    ownership: Array.isArray(move.ownership) ? move.ownership.map(Number) : undefined,
+    ownershipStdev: Array.isArray(move.ownershipStdev) ? move.ownershipStdev.map(Number) : undefined,
     pv: (move.pv ?? []).slice(0, 12)
   }))
 }
@@ -200,7 +262,8 @@ function forcePlayedMoveQuery(
   komi: number,
   maxVisits: number,
   reportDuringSearchEvery?: number,
-  overrideSettings?: AnalysisQuery['overrideSettings']
+  overrideSettings?: AnalysisQuery['overrideSettings'],
+  initialStones?: Array<[GameMove['color'], string]>
 ): AnalysisQuery | undefined {
   if (!currentMove || currentMove.pass || !moveKey(currentMove.gtp)) {
     return undefined
@@ -209,6 +272,7 @@ function forcePlayedMoveQuery(
     id,
     moves: moveHistory(moves),
     boardSize,
+    initialStones,
     komi,
     maxVisits,
     reportDuringSearchEvery,
@@ -376,7 +440,7 @@ async function queryKataGoBatch(
       const payload: Record<string, unknown> = {
         id: query.id,
         moves: query.moves,
-        initialStones: [],
+        initialStones: query.initialStones ?? [],
         rules: 'Chinese',
         komi: query.komi,
         boardXSize: query.boardSize,
@@ -385,6 +449,21 @@ async function queryKataGoBatch(
       }
       if (query.reportDuringSearchEvery !== undefined) {
         payload.reportDuringSearchEvery = query.reportDuringSearchEvery
+      }
+      if (query.includeOwnership) {
+        payload.includeOwnership = true
+      }
+      if (query.includeMovesOwnership) {
+        payload.includeMovesOwnership = true
+      }
+      if (query.includeOwnershipStdev) {
+        payload.includeOwnershipStdev = true
+      }
+      if (query.includePolicy) {
+        payload.includePolicy = true
+      }
+      if (query.includePVVisits) {
+        payload.includePVVisits = true
       }
       if (query.overrideSettings) {
         payload.overrideSettings = query.overrideSettings
@@ -428,6 +507,8 @@ export async function analyzePosition(
   const beforeMoves = record.moves.slice(0, Math.max(0, moveNumber - 1))
   const afterMoves = record.moves.slice(0, Math.max(0, moveNumber))
   const komi = normalizeKomi(record.komi)
+  const rootInitialStones = initialStonesFromRecord(record)
+  const deepEvidence = maxVisits >= 500
 
   const afterVisits = Math.max(24, Math.floor(maxVisits * 0.55))
   const beforeId = `${gameId}-before-${moveNumber}`
@@ -438,6 +519,10 @@ export async function analyzePosition(
       id: beforeId,
       moves: moveHistory(beforeMoves),
       boardSize: record.boardSize,
+      initialStones: rootInitialStones,
+      includeOwnership: deepEvidence,
+      includeMovesOwnership: deepEvidence,
+      includePVVisits: true,
       komi,
       maxVisits
     },
@@ -445,12 +530,16 @@ export async function analyzePosition(
       id: afterId,
       moves: moveHistory(afterMoves),
       boardSize: record.boardSize,
+      initialStones: rootInitialStones,
+      includeOwnership: deepEvidence,
+      includePVVisits: true,
       komi,
       maxVisits: afterVisits
     }
   ]
-  const actualQuery = forcePlayedMoveQuery(actualId, beforeMoves, currentMove, record.boardSize, komi, maxVisits)
+  const actualQuery = forcePlayedMoveQuery(actualId, beforeMoves, currentMove, record.boardSize, komi, maxVisits, undefined, undefined, rootInitialStones)
   if (actualQuery) {
+    actualQuery.includePVVisits = true
     queries.push(actualQuery)
   }
   const responses = await queryKataGoBatch(queries)
@@ -508,7 +597,8 @@ function buildMoveAnalysis(
           scoreLoss
         }
       : undefined,
-    judgement: judgement(winrateLoss, scoreLoss)
+    judgement: judgement(winrateLoss, scoreLoss),
+    analysisQuality: buildAnalysisQuality(moveNumber, currentMove, searchMoves, forcedActual)
   }
 }
 
@@ -579,6 +669,8 @@ export async function analyzePositionWithProgress(
   const beforeMoves = record.moves.slice(0, Math.max(0, moveNumber - 1))
   const afterMoves = record.moves.slice(0, Math.max(0, moveNumber))
   const komi = normalizeKomi(record.komi)
+  const rootInitialStones = initialStonesFromRecord(record)
+  const deepEvidence = maxVisits >= 500
   const afterVisits = Math.max(24, Math.floor(maxVisits * 0.55))
   const beforeId = `${gameId}-before-${moveNumber}-stream`
   const afterId = `${gameId}-after-${moveNumber}-stream`
@@ -594,6 +686,10 @@ export async function analyzePositionWithProgress(
         id: beforeId,
         moves: moveHistory(beforeMoves),
         boardSize: record.boardSize,
+        initialStones: rootInitialStones,
+        includeOwnership: deepEvidence,
+        includeMovesOwnership: deepEvidence,
+        includePVVisits: true,
         komi,
         maxVisits,
         reportDuringSearchEvery
@@ -602,13 +698,17 @@ export async function analyzePositionWithProgress(
         id: afterId,
         moves: moveHistory(afterMoves),
         boardSize: record.boardSize,
+        initialStones: rootInitialStones,
+        includeOwnership: deepEvidence,
+        includePVVisits: true,
         komi,
         maxVisits: afterVisits,
         reportDuringSearchEvery
       }
     ]
-    const actualQuery = forcePlayedMoveQuery(actualId, beforeMoves, currentMove, record.boardSize, komi, maxVisits, reportDuringSearchEvery)
+    const actualQuery = forcePlayedMoveQuery(actualId, beforeMoves, currentMove, record.boardSize, komi, maxVisits, reportDuringSearchEvery, undefined, rootInitialStones)
     if (actualQuery) {
+      actualQuery.includePVVisits = true
       queries.push(actualQuery)
     }
     responses = await queryKataGoBatch(queries, (response) => {
@@ -676,6 +776,7 @@ export async function analyzeGameQuick(
   const record = readGameRecord(game)
   const normalizedKomi = normalizeKomi(record.komi)
   const moves = record.moves
+  const rootInitialStones = initialStonesFromRecord(record)
   const queries: AnalysisQuery[] = []
   const quickVisits = Math.max(QUICK_ANALYSIS_FAST_VISITS, Math.round(maxVisits))
   const quickOverrideSettings = { wideRootNoise: QUICK_ANALYSIS_WIDE_ROOT_NOISE }
@@ -688,6 +789,7 @@ export async function analyzeGameQuick(
       id: `${gameId}-quick-${moveNumber}`,
       moves: moveHistory(moves.slice(0, moveNumber)),
       boardSize: record.boardSize,
+      initialStones: rootInitialStones,
       komi: normalizedKomi,
       maxVisits: quickVisits,
       overrideSettings: quickOverrideSettings

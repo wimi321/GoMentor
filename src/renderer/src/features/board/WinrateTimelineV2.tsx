@@ -93,7 +93,19 @@ function buildPoints(evaluations: KataGoMoveAnalysis[], totalMoves: number): Tim
     .sort((a, b) => a.moveNumber - b.moveNumber)
 }
 
-export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, loading = false, loadingLabel = '', onMove, onRangeSelect, onRangeClear, rangeStart: activeRangeStart, rangeEnd: activeRangeEnd, summary }: WinrateTimelineV2Props): ReactElement {
+export function WinrateTimelineV2({
+  evaluations,
+  currentMoveNumber,
+  totalMoves,
+  loading = false,
+  loadingLabel = '',
+  onMove,
+  onRangeSelect,
+  onRangeClear,
+  rangeStart: activeRangeStart,
+  rangeEnd: activeRangeEnd,
+  summary
+}: WinrateTimelineV2Props): ReactElement {
   const [dragging, setDragging] = useState(false)
   const [hoveredMove, setHoveredMove] = useState<number | null>(null)
   const [hoverLeft, setHoverLeft] = useState(0)
@@ -131,14 +143,13 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
     }, null)
   const currentPoint = points.find((point) => point.moveNumber === currentMoveNumber)
   const currentLossLabel = formatWinrateLoss(currentPoint?.loss)
-
   const hasActiveRange = activeRangeStart != null && activeRangeEnd != null
   const rangeLo = isRangeDragging
     ? Math.min(dragRangeStart ?? 0, dragRangeEnd ?? 0)
-    : hasActiveRange ? Math.min(activeRangeStart!, activeRangeEnd!) : null
+    : hasActiveRange ? Math.min(activeRangeStart, activeRangeEnd) : null
   const rangeHi = isRangeDragging
     ? Math.max(dragRangeStart ?? 0, dragRangeEnd ?? 0)
-    : hasActiveRange ? Math.max(activeRangeStart!, activeRangeEnd!) : null
+    : hasActiveRange ? Math.max(activeRangeStart, activeRangeEnd) : null
 
   function moveFromEvent(event: ReactPointerEvent<SVGSVGElement>): number {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -168,9 +179,7 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
       setDragRangeEnd(move)
       return
     }
-    if (hasActiveRange) {
-      onRangeClear?.()
-    }
+    if (hasActiveRange) onRangeClear?.()
     containerRef.current?.focus({ preventScroll: true })
     event.currentTarget.setPointerCapture(event.pointerId)
     draggingRef.current = true
@@ -219,6 +228,7 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
     if (event.key === 'Escape' && hasActiveRange) {
+      event.preventDefault()
       onRangeClear?.()
       return
     }
@@ -283,19 +293,19 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
           <line key={col} className="ks-timeline-grid ks-timeline-grid--vertical" x1={padX + col * plotW} y1={padY} x2={padX + col * plotW} y2={height - padY} />
         ))}
         <line className="ks-timeline-center" x1={padX} y1={y(0.5)} x2={width - padX} y2={y(0.5)} />
-        {path ? <path className="ks-timeline-line ks-timeline-line--winrate" d={path} /> : null}
-        {scorePath ? <path className="ks-timeline-line ks-timeline-line--score" d={scorePath} /> : null}
         {rangeLo !== null && rangeHi !== null ? (
           <g className="ks-timeline-range">
             <rect
               className="ks-timeline-range-highlight"
               x={x(rangeLo)}
               y={padY}
-              width={x(rangeHi) - x(rangeLo)}
+              width={Math.max(1, x(rangeHi) - x(rangeLo))}
               height={plotH}
             />
           </g>
         ) : null}
+        {path ? <path className="ks-timeline-line ks-timeline-line--winrate" d={path} /> : null}
+        {scorePath ? <path className="ks-timeline-line ks-timeline-line--score" d={scorePath} /> : null}
         <line className="ks-timeline-current" x1={x(currentMoveNumber)} y1={padY} x2={x(currentMoveNumber)} y2={height - padY} />
         {hoverPoint ? (
           <g className="ks-timeline-hover">
@@ -309,15 +319,15 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
         </g>
         {points.length === 0 ? <text className="ks-timeline-empty" x={width / 2} y={height / 2}>导入棋谱后生成胜率图</text> : null}
       </svg>
-      {rangeLo !== null && rangeHi !== null && !isRangeDragging ? (
-        <div className="ks-timeline-range-badge">
-          {rangeLo} - {rangeHi}
-        </div>
-      ) : null}
       {hoverPoint ? (
         <div className="ks-timeline-tooltip" style={{ left: `${Math.round(hoverLeft)}px` }}>
           <strong>第 {hoverPoint.moveNumber} 手 · {Math.round(hoverPoint.winrate * 100)}%</strong>
           <span>胜率差 {formatWinrateLoss(hoverPoint.loss)} · {severityLabel(hoverPoint.severity)}</span>
+        </div>
+      ) : null}
+      {rangeLo !== null && rangeHi !== null && !isRangeDragging ? (
+        <div className="ks-timeline-range-badge">
+          {rangeLo} - {rangeHi}
         </div>
       ) : null}
     </div>

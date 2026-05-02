@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "ladder-net-net-001",
+  "category": "ladder-net",
+  "description": "候选点封住逃跑路线，应识别为枷/网的训练信号。",
+  "sgf": "(;GM[1]FF[4]SZ[19]KM[7.5]AB[jj][lj][kk][kl]AW[kj][jk][jl]PL[B];B[lk])",
+  "moveNumber": 1,
+  "studentLevel": "advanced",
+  "expectedShapes": ["net", "pv_supported_shape"],
+  "forbiddenShapes": ["joseki"],
+  "mustHaveEvidence": ["enemy", "friendly", "escape"],
+  "maxConfidenceWithoutKataGo": "medium"
+}

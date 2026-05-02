@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { loadBundledJosekiSgfCards } from './josekiSgfDatabase'
+import { recognizeJosekiTrie } from './josekiTrie'
 
 export type JosekiConfidence = 'strong' | 'medium' | 'weak'
 export type JosekiCorner = 'SW' | 'SE' | 'NW' | 'NE'
@@ -244,13 +245,19 @@ export function recognizeJosekiPatterns(query: JosekiRecognitionQuery): Recogniz
       .map((move) => normalizeMove(move))
       .filter(Boolean) as string[]
   )
+  const trieMatches = recognizeJosekiTrie(cards, query)
   const signalText = [query.text, query.candidateMoves?.join(' '), query.principalVariation?.join(' ')].filter(Boolean).join(' | ')
   const results: RecognizedJosekiPattern[] = []
 
   for (const card of cards) {
     if (card.boardSize && card.boardSize !== query.boardSize) continue
     for (const corner of Object.keys(corners) as JosekiCorner[]) {
-      const { score, evidence, nextMoves } = scoreCard(card, query, corner, corners[corner], moveSet, signalText)
+      let { score, evidence, nextMoves } = scoreCard(card, query, corner, corners[corner], moveSet, signalText)
+      const trieMatch = trieMatches.find((match) => match.cardId === card.id && match.corner === corner)
+      if (trieMatch) {
+        score += trieMatch.confidence === 'strong' ? 6 : trieMatch.confidence === 'medium' ? 3 : 1
+        evidence = [...evidence, `sequence-trie:${trieMatch.safeWording}`, ...trieMatch.evidence.slice(0, 2)]
+      }
       if (score < 9) continue
       results.push({
         id: card.id,
@@ -260,7 +267,7 @@ export function recognizeJosekiPatterns(query: JosekiRecognitionQuery): Recogniz
         score: Math.round(score * 10) / 10,
         matchedCorner: corner,
         matchedRelativeStones: Array.from(corners[corner]).sort(),
-        evidence: [...evidence, `corner=${corner}`, `cornerMoves=${rawCornerMoves[corner].slice(-8).join(', ')}`].slice(0, 8),
+        evidence: [...evidence, `corner=${corner}`, `cornerMoves=${rawCornerMoves[corner].slice(-8).join(', ')}`].slice(0, 10),
         sourceRefs: card.sourceRefs ?? ['gomentor-curated-original'],
         sourceQuality: card.sourceQuality ?? 'curated',
         variationCount: card.variationCount,

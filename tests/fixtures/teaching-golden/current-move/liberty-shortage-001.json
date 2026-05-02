@@ -1,0 +1,46 @@
+{
+  "id": "current-liberty-shortage-001",
+  "category": "current-move",
+  "sgf": "(;GM[1]FF[4]SZ[19]KM[7.5]PB[Black]PW[White];B[pd];W[dd];B[qp];W[dp];B[fc];W[cf];B[cn];W[fq];B[dn];W[eq];B[cc];W[dc])",
+  "moveNumber": 12,
+  "studentLevel": "intermediate",
+  "expected": {
+    "allowedBestMoves": [
+      "D16",
+      "C17",
+      "E16"
+    ],
+    "forbiddenMoves": [
+      "Q4",
+      "T19"
+    ],
+    "motifs": [
+      "liberty_shortage",
+      "cut_or_connection"
+    ],
+    "mustMention": [
+      "气",
+      "连接",
+      "先读局部"
+    ],
+    "mustNotMention": [
+      "唯一",
+      "必败"
+    ],
+    "numericTolerance": {
+      "winrateLoss": 0.5,
+      "scoreLoss": 0.5
+    },
+    "claims": [
+      {
+        "id": "claim-liberty",
+        "type": "tactical",
+        "text": "讲解必须以气数或连接证据支撑局部判断。",
+        "evidenceRefs": [
+          "tacticalSignals",
+          "boardState.groups"
+        ]
+      }
+    ]
+  }
+}

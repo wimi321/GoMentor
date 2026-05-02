@@ -15,7 +15,7 @@ test('Teacher agent runtime uses a Claude Code style tool loop', () => {
   assert.match(agent, /executeAgentToolCall/)
   assert.match(agent, /maxTurns = 10/)
   assert.match(agent, /Agent 达到最大工具轮数/)
-  assert.match(agent, /runTeacherAgentSession\([\s\S]*?request[\s\S]*?logs[\s\S]*?id[\s\S]*?intent[\s\S]*?context/)
+  assert.match(agent, /runTeacherAgentSession\([^)]+,\s*logs,\s*id,\s*intent,\s*context\)/)
   assert.doesNotMatch(agent, /result = await runCurrentMove\(request/)
   assert.doesNotMatch(agent, /result = await runGameReview\(request/)
   assert.doesNotMatch(agent, /result = await runBatchReview\(request/)

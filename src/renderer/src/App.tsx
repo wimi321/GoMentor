@@ -16,11 +16,12 @@ import type {
   StudentBindingSuggestion,
   StudentProfile,
   ReleaseReadinessResult,
+  MoveRangeReviewSummary,
   TeacherRunRequest,
   TeacherRunProgress,
   TeacherRunResult
 } from '@main/lib/types'
-import { parseMoveRangeFromPrompt } from '@main/lib/moveRange'
+import { MOVE_RANGE_MAX_MOVES, describeMoveRange, parseMoveRangeFromPrompt, validateMoveRange } from '@shared/moveRange'
 import lizzieBlackStoneUrl from './assets/lizzie/black.png'
 import lizzieBoardUrl from './assets/lizzie/board.png'
 import lizzieWhiteStoneUrl from './assets/lizzie/white.png'
@@ -1132,37 +1133,64 @@ export function App(): ReactElement {
   }
 
   function handleTimelineRangeSelect(start: number, end: number): void {
-    setMoveRange({ start, end })
-    setPrompt(`分析第${start}手到第${end}手`)
-    jumpToMove(start)
+    const validation = validateMoveRange(start, end, record?.moves.length, MOVE_RANGE_MAX_MOVES)
+    if (!validation.ok || !validation.range) {
+      setPrompt(`区间过长或无效：${validation.reason ?? '请重新选择更短的手数区间'}`)
+      setMoveRange(null)
+      return
+    }
+    setMoveRange(validation.range)
+    setPrompt(`分析${describeMoveRange(validation.range)}`)
+    jumpToMove(validation.range.start)
   }
 
   function handleTimelineRangeClear(): void {
     setMoveRange(null)
   }
 
-  function identifyKeyMoves(rangeAnalyses: KataGoMoveAnalysis[], rangeStart: number, rangeEnd: number, maxCount = 5): number[] {
-    const byLoss = rangeAnalyses
-      .filter((a) => a.playedMove && a.playedMove.winrateLoss > 0)
-      .sort((a, b) => (b.playedMove?.winrateLoss ?? 0) - (a.playedMove?.winrateLoss ?? 0))
-    const topLoss = byLoss.slice(0, 3).map((a) => a.moveNumber)
-    const moves = new Set<number>([rangeStart, rangeEnd, ...topLoss])
-    return Array.from(moves).sort((a, b) => a - b).slice(0, maxCount)
+  function buildMoveRangeSummary(rangeAnalyses: KataGoMoveAnalysis[], rangeStart: number, rangeEnd: number, maxCount = 6): MoveRangeReviewSummary {
+    const sorted = [...rangeAnalyses].sort((a, b) => a.moveNumber - b.moveNumber)
+    const byLoss = [...sorted]
+      .filter((item) => item.playedMove)
+      .sort((left, right) =>
+        (right.playedMove?.winrateLoss ?? 0) - (left.playedMove?.winrateLoss ?? 0) ||
+        (right.playedMove?.scoreLoss ?? 0) - (left.playedMove?.scoreLoss ?? 0) ||
+        left.moveNumber - right.moveNumber
+      )
+    const keyNumbers = new Set<number>([rangeStart, rangeEnd])
+    for (const item of byLoss.slice(0, Math.max(0, maxCount - 2))) {
+      keyNumbers.add(item.moveNumber)
+    }
+    const keyMoves = Array.from(keyNumbers)
+      .sort((a, b) => a - b)
+      .map((moveNo) => sorted.find((item) => item.moveNumber === moveNo))
+      .filter((item): item is KataGoMoveAnalysis => Boolean(item))
+      .map((item) => ({
+        moveNumber: item.moveNumber,
+        playedMove: item.playedMove?.move ?? item.currentMove?.gtp,
+        bestMove: item.before.topMoves[0]?.move,
+        winrateLoss: Math.round((item.playedMove?.winrateLoss ?? 0) * 100) / 100,
+        scoreLoss: Math.round((item.playedMove?.scoreLoss ?? 0) * 100) / 100,
+        judgement: item.judgement,
+        evidenceRefs: [
+          `katago:move:${item.moveNumber}`,
+          item.analysisQuality ? `analysisQuality:${item.analysisQuality.confidence}` : '',
+          item.tacticalSignals?.[0]?.type ? `tactical:${item.tacticalSignals[0].type}` : ''
+        ].filter(Boolean)
+      }))
+    return {
+      start: rangeStart,
+      end: rangeEnd,
+      totalMoves: rangeEnd - rangeStart + 1,
+      keyMoves,
+      omittedMoves: Math.max(0, rangeEnd - rangeStart + 1 - keyMoves.length),
+      analysisMethod: 'cached evaluations or quick sweep, then top-loss key-move review'
+    }
   }
 
-  async function renderRangeBoardPngs(
-    targetRecord: GameRecord,
-    keyMoveNumbers: number[],
-    rangeAnalyses: KataGoMoveAnalysis[]
-  ): Promise<string[]> {
-    const analysisMap = new Map(rangeAnalyses.map((a) => [a.moveNumber, a]))
-    const images: string[] = []
-    for (const moveNum of keyMoveNumbers) {
-      const moveAnalysis = analysisMap.get(moveNum) ?? null
-      const png = await renderBoardPng(targetRecord, moveNum, moveAnalysis)
-      images.push(png)
-    }
-    return images
+  async function renderRangeBoardPngs(targetRecord: GameRecord, summary: MoveRangeReviewSummary, rangeAnalyses: KataGoMoveAnalysis[]): Promise<string[]> {
+    const analysisMap = new Map(rangeAnalyses.map((item) => [item.moveNumber, item]))
+    return Promise.all(summary.keyMoves.slice(0, 6).map((move) => renderBoardPng(targetRecord, move.moveNumber, analysisMap.get(move.moveNumber) ?? null)))
   }
 
   function pauseLiveAnalysis(message = '已暂停精读', manual = false): void {
@@ -1594,7 +1622,7 @@ export function App(): ReactElement {
     try {
       const wantsCurrentMove = /当前手|这手|这一手|本手/.test(text)
       const parsedRange = parseMoveRangeFromPrompt(text, record?.moves.length)
-      const selectedRangeText = moveRange ? `分析第${moveRange.start}手到第${moveRange.end}手` : ''
+      const selectedRangeText = moveRange ? `分析${describeMoveRange(moveRange)}` : ''
       const range = parsedRange ?? (text === selectedRangeText ? moveRange : null)
       const wantsMoveRange = range !== null
       if (wantsCurrentMove && record && selectedGame) {
@@ -1621,35 +1649,33 @@ export function App(): ReactElement {
         }
       } else if (wantsMoveRange && record && selectedGame) {
         if (!range) {
-          await runTeacherTaskWithStream({
-            mode: 'freeform',
-            prompt: text,
-            gameId: selectedGame?.id,
-            moveNumber,
-            playerName
-          }, assistantMessageId)
+          await runTeacherTaskWithStream({ mode: 'freeform', prompt: text, gameId: selectedGame.id, moveNumber, playerName }, assistantMessageId)
         } else {
-          const { start: rangeStart, end: rangeEnd } = range
-          const uncachedMoves: number[] = []
-          for (let m = rangeStart; m <= rangeEnd; m++) {
-            if (!evaluations[m]) uncachedMoves.push(m)
+          const validation = validateMoveRange(range.start, range.end, record.moves.length, MOVE_RANGE_MAX_MOVES)
+          if (!validation.ok || !validation.range) {
+            throw new Error(validation.reason ?? '区间复盘范围无效')
           }
+          const { start: rangeStart, end: rangeEnd } = validation.range
           const merged = new Map<number, KataGoMoveAnalysis>()
           for (const a of Object.values(evaluations)) merged.set(a.moveNumber, a)
-          if (uncachedMoves.length > 0) {
-            const allAnalyses = await window.gomentor.analyzeGameQuick({
-              gameId: selectedGame.id,
-              maxVisits: 200
-            })
+          const missing = []
+          for (let m = rangeStart; m <= rangeEnd; m += 1) {
+            if (!merged.has(m)) missing.push(m)
+          }
+          if (missing.length > 0) {
+            const allAnalyses = await window.gomentor.analyzeGameQuick({ gameId: selectedGame.id, maxVisits: 25, refineVisits: 120, refineTopN: 12 })
             for (const a of allAnalyses) {
-              merged.set(a.moveNumber, preferAnalysis(merged.get(a.moveNumber), a) ?? a)
-              rememberEvaluation(a)
+              const next = preferAnalysis(merged.get(a.moveNumber), a) ?? a
+              merged.set(a.moveNumber, next)
+              rememberEvaluation(next)
             }
           }
-          const rangeSlice = [...merged.values()]
-            .filter((a) => a.moveNumber >= rangeStart && a.moveNumber <= rangeEnd)
-          const keyMoves = identifyKeyMoves(rangeSlice, rangeStart, rangeEnd)
-          const boardImageDataUrls = await renderRangeBoardPngs(record, keyMoves, rangeSlice)
+          const rangeSlice = [...merged.values()].filter((a) => a.moveNumber >= rangeStart && a.moveNumber <= rangeEnd)
+          if (rangeSlice.length === 0) {
+            throw new Error('区间内还没有可用的 KataGo 评估，请先生成胜率图或缩小区间。')
+          }
+          const moveRangeSummary = buildMoveRangeSummary(rangeSlice, rangeStart, rangeEnd)
+          const boardImageDataUrls = await renderRangeBoardPngs(record, moveRangeSummary, rangeSlice)
           const result = await runTeacherTaskWithStream({
             mode: 'move-range',
             prompt: text,
@@ -1657,6 +1683,7 @@ export function App(): ReactElement {
             moveNumber,
             playerName,
             moveRange: { start: rangeStart, end: rangeEnd },
+            moveRangeSummary,
             boardImageDataUrls
           }, assistantMessageId)
           if (result.analysis) {

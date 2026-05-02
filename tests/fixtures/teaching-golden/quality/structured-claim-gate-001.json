@@ -1,0 +1,33 @@
+{
+  "id": "quality-structured-claim-gate-001",
+  "category": "quality",
+  "description": "Teacher answer must separate final explanation from evidence-backed claims so the local verifier can reject unsupported coordinates, numbers, PV lines, joseki names, and confidence overclaims.",
+  "sgf": "(;GM[1]FF[4]SZ[19]KM[7.5]PB[Black]PW[White];B[pd];W[dd];B[qp];W[dq];B[fc];W[cf];B[cn];W[fp];B[qf];W[nc])",
+  "moveNumber": 10,
+  "studentLevel": "intermediate",
+  "expected": {
+    "allowedBestMoves": ["Q16", "C6"],
+    "forbiddenMoves": ["K10", "T19"],
+    "motifs": ["claim_grounding", "low_visit_caution"],
+    "mustMention": ["证据", "置信度", "KataGo"],
+    "mustNotMention": ["唯一", "必败", "必杀"],
+    "numericTolerance": {
+      "winrateLoss": 0.5,
+      "scoreLoss": 0.5
+    },
+    "claims": [
+      {
+        "id": "numeric-evidence-grounding",
+        "type": "numeric",
+        "text": "胜率和目差数字必须来自 TeachingEvidence。",
+        "evidenceRefs": ["teachingEvidence.loss", "katago.analysisQuality"]
+      },
+      {
+        "id": "coordinate-evidence-grounding",
+        "type": "coordinate",
+        "text": "推荐坐标必须来自 actualMove、topCandidates、PV 或 recognizedMotifs.expectedNextMoves。",
+        "evidenceRefs": ["teachingEvidence.bestCandidates", "teachingEvidence.actualMove"]
+      }
+    ]
+  }
+}

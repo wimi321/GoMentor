@@ -13,6 +13,7 @@ import type {
   RecommendedProblem,
   ReviewArtifact,
   StructuredTeacherResult,
+  MoveRangeReviewSummary,
   StudentProfile,
   TeachingPacingAdvice,
   TeacherRunRequest,
@@ -21,10 +22,13 @@ import type {
   TeacherToolLog
 } from '@main/lib/types'
 import type { ChatMessage, ChatTool, ChatToolCall, ProviderSettings } from './llm/provider'
-import { analyzePosition, analyzeMoveRange } from './katago'
-import { parseMoveRangeFromPrompt } from '@main/lib/moveRange'
+import { analyzePosition } from './katago'
+import { MOVE_RANGE_KEY_MOVE_LIMIT, MOVE_RANGE_MAX_MOVES, parseMoveRangeFromPrompt, validateMoveRange } from '@shared/moveRange'
+import { formatMoveRangeSummaryForPrompt, selectMoveNumbersForRangeRefine } from './teacher/moveRangeReview'
 import { searchKnowledge, searchKnowledgeMatches } from './knowledge'
 import { recommendedProblemsFromMatches, type BoardSnapshotStone, type LocalWindow } from './knowledge/matchEngine'
+import { buildBoardState, boardStateToSnapshot } from './go/boardState'
+import { detectTacticalSignals } from './knowledge/tacticalDetectors'
 import { readGameRecord } from './sgf'
 import { ensureFoxGameDownloaded } from './fox'
 import { getStudentProfile, readStudentForGame, updateStudentProfile } from './studentProfile'
@@ -288,10 +292,14 @@ function systemPrompt(level: CoachUserLevel): string {
     '分析当前手时必须先看棋盘图片，再调用 KataGo 工具核对当前手、一选、胜率差、目差、搜索数和 PV，然后调用知识库工具匹配棋形、定式、死活、手筋或常见错误类型。',
     '工具结果和 KataGo 是事实依据。',
     '不要编造坐标、胜率、PV、定式名或来源。',
+    '每个关键结论都应能回指到工具证据；数字、坐标、PV、定式名、死活结论和先后手判断没有证据时必须降级成假设。',
+    '当 analysisQuality.confidence 不是 high，必须使用“AI 更倾向 / 更像 / 不宜下绝对结论”等低风险措辞。',
     '强匹配才能明确说定式、死活型或手筋名；相似匹配只能说“像某某型”。',
     '把握讲解火候：常规定式少讲，分支列变化，中盘战详细讲目的和后续。',
     '如果工具结果给出 teachingDensity，就按它控制详略：minimal 很短，branch 讲 1-2 个关键变化，detailed 讲目的、应手、后续变化和实战评价，caution 只说倾向。',
     '像老师讲棋：先帮学生看懂棋形和判断方法，再自然引用必要证据；不要按固定栏目或机器报告口吻堆字段。',
+    '区间复盘要先讲区间走势，再聚焦 3-5 个关键手；不要逐手流水账；每个关键手必须引用 KataGo、analysisQuality、棋形识别或战术信号。',
+    '区间过长或证据不足时要建议缩小范围或只做抽样总结，不能把低 visits 区间分析说成最终结论。',
     `学生水平：${level}。`
   ].join('\n')
 }
@@ -514,30 +522,29 @@ function initialAgentUserMessage(state: TeacherAgentSessionState): ChatMessage {
     boardImageAttached: Boolean(state.request.boardImageDataUrl) || (state.request.boardImageDataUrls?.length ?? 0) > 0,
     boardImagesAttached: state.request.boardImageDataUrls?.length ?? 0,
     moveRange: state.request.moveRange,
+    moveRangeSummary: state.request.moveRangeSummary,
     prefetchedAnalysisAvailable: Boolean(state.request.prefetchedAnalysis),
     note: '请按需要调用工具取得事实；没有工具证据时不要猜坐标、胜率、PV、定式名或来源。'
   }
   const text = [
     '任务说明：请根据 intent 完成用户请求。',
     '如果 intent 是 current-move，请先观察随消息附带的棋盘图片，再调用 KataGo 和知识库工具核对事实。',
-    '如果 intent 是 move-range，请依次观察附带的棋盘图片（每张对应区间内的一手关键棋），先概括区间内胜率走势和整体特征，然后重点讲解胜率损失最大的关键手，说明每手的得失和更好的选点。',
+    '如果 intent 是 move-range，请依次观察附带的区间关键手棋盘图片，先概括区间胜率/目差走势，再重点讲解 top-loss 关键手。',
     '当前手讲解要按工具返回的 teachingDensity 掌握详略：常规定式少讲；定式分支或相似型列关键变化；中盘战、攻杀、转换要讲目的、对方应手、后续变化和实战评价。',
     'boardImageAttached=true 表示本轮用户消息已附棋盘图，请把图片中的棋形、厚薄、急所和全局方向作为局面判断依据。',
-    'boardImagesAttached>0 表示附带了多张区间关键手棋盘图。',
+    'moveRangeSummary 是 renderer/cache 预先提取的区间关键手摘要；如证据不足，可调用 katago.analyzeMoveRangeKeyMoves 精读这些关键手。',
+    '区间摘要：',
+    formatMoveRangeSummaryForPrompt(state.request.moveRangeSummary),
     'prefetchedAnalysisAvailable=true 表示 katago.analyzePosition 可复用已缓存的 KataGo 分析结果。',
     '上下文JSON：',
     JSON.stringify(context)
   ].join('\n')
   if (state.request.boardImageDataUrls?.length) {
-    const imageBlocks = state.request.boardImageDataUrls.map((url) => ({
-      type: 'image_url' as const,
-      image_url: { url }
-    }))
     return {
       role: 'user',
       content: [
         { type: 'text', text },
-        ...imageBlocks
+        ...state.request.boardImageDataUrls.map((url) => ({ type: 'image_url' as const, image_url: { url } }))
       ]
     }
   }
@@ -586,6 +593,10 @@ function compactAnalysis(analysis: KataGoMoveAnalysis): JsonObject {
       topMoves: analysis.after.topMoves.slice(0, 5)
     },
     playedMove: analysis.playedMove,
+    analysisQuality: analysis.analysisQuality,
+    humanCalibration: analysis.humanCalibration,
+    ownershipSummary: analysis.ownershipSummary,
+    tacticalSignals: analysis.tacticalSignals,
     teachingPacing
   }
 }
@@ -600,15 +611,25 @@ async function knowledgeBundleForState(state: TeacherAgentSessionState, input: J
   const analysis = state.lastAnalysis
   const moveNumber = numberInput(input, 'moveNumber', analysis?.moveNumber ?? state.request.moveNumber ?? record?.moves.length ?? 80, 0, record?.moves.length ?? 400)
   const boardSize = record?.boardSize ?? analysis?.boardSize ?? 19
-  const boardSnapshot = record ? buildBoardSnapshot(record.moves, Math.max(0, moveNumber - 1), boardSize) : undefined
-  const anchors = analysis
+  const boardState = record ? buildBoardState({
+    boardSize,
+    moves: record.moves,
+    uptoMoveNumber: Math.max(0, moveNumber - 1),
+    initialStones: record.initialStones
+  }) : undefined
+  const boardSnapshot = boardState ? boardStateToSnapshot(boardState) : undefined
+  const anchors = (analysis
     ? [
         analysis.playedMove?.move ?? analysis.currentMove?.gtp,
         ...analysis.before.topMoves.slice(0, 6).map((candidate) => candidate.move),
         ...analysis.before.topMoves.slice(0, 2).flatMap((candidate) => candidate.pv.slice(0, 4))
       ]
-    : arrayInput(input, 'candidateMoves')
+    : arrayInput(input, 'candidateMoves')).filter((move): move is string => typeof move === 'string' && move.length > 0)
   const localWindows = boardSnapshot ? buildLocalWindows(boardSnapshot, anchors, boardSize) : undefined
+  const tacticalSignals = boardState ? detectTacticalSignals(boardState, anchors) : []
+  if (analysis) {
+    analysis.tacticalSignals = tacticalSignals
+  }
   const query = {
     text: stringInput(input, 'text', state.request.prompt),
     moveNumber,
@@ -833,41 +854,37 @@ function createTeacherAgentTools(state: TeacherAgentSessionState): TeacherAgentT
       }
     },
     {
-      apiName: 'katago_analyzeMoveRange',
-      canonicalName: 'katago.analyzeMoveRange',
-      label: 'KataGo 区间分析',
-      description: '分析指定手数区间内每一手的胜率变化、胜率损失和判断，返回按损失排序的关键手。注意：renderer 通常已随消息附带了区间关键手的截图和概要数据，如需更详细的逐手分析再调用此工具。',
+      apiName: 'katago_analyzeMoveRangeKeyMoves',
+      canonicalName: 'katago.analyzeMoveRangeKeyMoves',
+      label: 'KataGo 区间关键手精读',
+      description: '只精读区间内 top-loss 关键手，避免对长区间逐手高成本分析。返回每个关键手的 KataGo 证据、analysisQuality 和候选点。',
       parameters: schema({
-        startMove: { type: 'number', description: '起始手数' },
-        endMove: { type: 'number', description: '结束手数' }
+        moveNumbers: {
+          type: 'array',
+          items: { type: 'number' },
+          description: '需要精读的手数；为空时使用 moveRangeSummary.keyMoves。最多 6 手。'
+        }
       }),
       execute: async (input) => {
         const gameId = state.request.gameId
-        if (!gameId) throw new Error('katago.analyzeMoveRange 需要 gameId。')
-        const fallback = state.request.moveRange ?? parseMoveRangeFromPrompt(state.request.prompt ?? '')
-        const startMove = Math.trunc(numberInput(input, 'startMove', fallback?.start ?? 0))
-        const endMove = Math.trunc(numberInput(input, 'endMove', fallback?.end ?? 0))
-        if (startMove < 1 || endMove <= startMove) {
-          throw new Error('katago.analyzeMoveRange 需要明确的 startMove/endMove 或 request.moveRange。')
+        if (!gameId) throw new Error('katago.analyzeMoveRangeKeyMoves 需要 gameId。')
+        const fallbackRange = state.request.moveRange ?? parseMoveRangeFromPrompt(state.request.prompt ?? '') ?? undefined
+        const raw = Array.isArray(input.moveNumbers) ? input.moveNumbers : []
+        const requested = raw.map((value) => Number(value)).filter((value) => Number.isInteger(value) && value > 0)
+        const selected = (requested.length ? requested : selectMoveNumbersForRangeRefine(state.request.moveRangeSummary, fallbackRange))
+          .filter((moveNumber, index, all) => all.indexOf(moveNumber) === index)
+          .slice(0, MOVE_RANGE_KEY_MOVE_LIMIT)
+        if (!selected.length) {
+          throw new Error('没有可精读的区间关键手。请先提供 moveRangeSummary 或 moveNumbers。')
         }
-        const analyses = await analyzeMoveRange(gameId, startMove, endMove, 200)
-        const summaries = analyses
-          .map((a) => ({
-            moveNumber: a.moveNumber,
-            playedMove: a.playedMove?.move,
-            winrateLoss: a.playedMove?.winrateLoss ?? 0,
-            scoreLoss: a.playedMove?.scoreLoss ?? 0,
-            judgement: a.judgement,
-            bestMove: a.before.topMoves[0]?.move,
-            bestWinrate: a.before.topMoves[0]?.winrate
-          }))
-          .sort((a, b) => b.winrateLoss - a.winrateLoss)
+        const analyses = []
+        for (const moveNumber of selected) {
+          analyses.push(await analyzePosition(gameId, moveNumber, 500))
+        }
         return {
-          startMove,
-          endMove,
-          totalMoves: endMove - startMove + 1,
-          analyses: summaries,
-          topLossMoves: summaries.filter((s) => s.winrateLoss > 2).slice(0, 8)
+          moveRange: state.request.moveRange,
+          refinedMoveCount: analyses.length,
+          analyses: analyses.map(compactAnalysis)
         }
       }
     },
@@ -885,7 +902,7 @@ function createTeacherAgentTools(state: TeacherAgentSessionState): TeacherAgentT
           imageAttachedToConversation: single || multi,
           imageCount: (state.request.boardImageDataUrls?.length ?? 0) + (single ? 1 : 0),
           note: state.request.boardImageDataUrls?.length
-            ? `${state.request.boardImageDataUrls.length} 张区间棋盘图片已在用户消息中随本轮对话发送。`
+            ? `${state.request.boardImageDataUrls.length} 张区间关键手图片已在用户消息中随本轮对话发送。`
             : state.request.boardImageDataUrl
               ? '当前棋盘图片已在用户消息中随本轮对话发送。'
               : '本轮没有棋盘图片。'
@@ -1179,7 +1196,7 @@ async function runTeacherAgentSession(
   const title = intent === 'current-move'
     ? `第 ${request.moveNumber ?? state.lastAnalysis?.moveNumber ?? 0} 手分析`
     : intent === 'move-range'
-      ? `第 ${request.moveRange?.start ?? '?'}-${request.moveRange?.end ?? '?'} 手区间分析`
+      ? `第 ${request.moveRange?.start ?? '?'}-${request.moveRange?.end ?? '?'} 手区间复盘`
     : intent === 'game-review'
       ? '整盘复盘'
       : intent === 'batch-review'
@@ -1218,9 +1235,17 @@ async function runTeacherAgentSession(
 
 export async function runTeacherTask(request: TeacherRunRequest, onProgress?: TeacherProgressEmitter): Promise<TeacherRunResult> {
   const id = request.runId || randomUUID()
+  const parsedRange = request.moveRange ?? parseMoveRangeFromPrompt(request.prompt ?? '') ?? undefined
   const normalizedRequest: TeacherRunRequest = {
     ...request,
-    moveRange: request.moveRange ?? parseMoveRangeFromPrompt(request.prompt ?? '') ?? undefined
+    moveRange: parsedRange
+  }
+  if (normalizedRequest.moveRange) {
+    const validation = validateMoveRange(normalizedRequest.moveRange.start, normalizedRequest.moveRange.end, undefined, MOVE_RANGE_MAX_MOVES)
+    if (!validation.ok) {
+      throw new Error(`区间复盘范围无效：${validation.reason}`)
+    }
+    normalizedRequest.moveRange = validation.range
   }
   if (normalizedRequest.mode === 'move-range' && !normalizedRequest.gameId) {
     throw new Error('move-range 任务需要 gameId。')
@@ -1238,7 +1263,7 @@ export async function runTeacherTask(request: TeacherRunRequest, onProgress?: Te
       message: intent === 'current-move'
         ? '收到当前手分析任务。'
       : intent === 'move-range'
-        ? '收到区间分析任务。'
+        ? '收到区间复盘任务。'
       : intent === 'game-review'
         ? '收到整盘复盘任务。'
         : intent === 'batch-review'

@@ -1,0 +1,45 @@
+{
+  "id": "joseki-sequence-trie-001",
+  "category": "joseki",
+  "sgf": "(;GM[1]FF[4]SZ[19]KM[7.5]PB[Black]PW[White];B[pd];W[dp];B[pp];W[dd];B[qp];W[oq];B[qn];W[pq])",
+  "moveNumber": 8,
+  "studentLevel": "advanced",
+  "expected": {
+    "allowedBestMoves": [
+      "P3",
+      "Q3",
+      "O4"
+    ],
+    "forbiddenMoves": [
+      "K10"
+    ],
+    "motifs": [
+      "joseki_sequence_order",
+      "joseki"
+    ],
+    "mustMention": [
+      "手顺",
+      "颜色",
+      "KataGo"
+    ],
+    "mustNotMention": [
+      "固定这样下",
+      "唯一正解"
+    ],
+    "numericTolerance": {
+      "winrateLoss": 0.5,
+      "scoreLoss": 0.5
+    },
+    "claims": [
+      {
+        "id": "claim-joseki-sequence",
+        "type": "joseki",
+        "text": "定式判断必须说明这是序列匹配，不是只看棋子集合。",
+        "evidenceRefs": [
+          "josekiTrie",
+          "recognizedMotifs"
+        ]
+      }
+    ]
+  }
+}

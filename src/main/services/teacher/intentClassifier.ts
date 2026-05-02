@@ -1,5 +1,5 @@
 import type { TeacherRunRequest } from '@main/lib/types'
-import { parseMoveRangeFromPrompt } from '@main/lib/moveRange'
+import { parseMoveRangeFromPrompt } from '@shared/moveRange'
 
 export type TeacherIntent = 'current-move' | 'game-review' | 'batch-review' | 'training-plan' | 'open-ended' | 'move-range'
 
@@ -79,7 +79,7 @@ const SIGNALS: Signal[] = [
     intent: 'training-plan',
     weight: 4,
     label: 'learning-goal',
-    pattern: /提高|提升|进步|涨棋|变强|improve|study|learn|強にな|실력/i
+    pattern: /提高|提升|进步|涨棋|变强|improve|study|learn|強くな|실력/i
   }
 ]
 

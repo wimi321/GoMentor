@@ -3,6 +3,7 @@ import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, extname, join } from 'node:path'
 import { libraryDir } from '@main/lib/store'
 import type { GameMove, GameRecord, LibraryGame, StoneColor } from '@main/lib/types'
+import { extractInitialStonesFromSgf } from './go/boardState'
 
 const GTP_LETTERS = 'ABCDEFGHJKLMNOPQRSTUVWXYZ'
 
@@ -259,6 +260,7 @@ export function readGameRecord(game: LibraryGame): GameRecord {
     boardSize: size,
     komi: extract('KM', content) || '0',
     handicap: extract('HA', content) || '0',
-    moves: parseMoves(content, size)
+    moves: parseMoves(content, size),
+    initialStones: extractInitialStonesFromSgf(content, size)
   }
 }
