@@ -42,5 +42,5 @@ test('single-move prompt should not be move-range', () => {
 })
 
 test('intentClassifier imports shared parser from moveRange', () => {
-  assert.match(classifier, /import\s*\{[^}]*parseMoveRangeFromPrompt[^}]*\}\s*from\s*['"]@main\/lib\/moveRange['"]/)
+  assert.match(classifier, /import\s*\{[^}]*parseMoveRangeFromPrompt[^}]*\}\s*from\s*['"]@shared\/moveRange['"]/)
 })

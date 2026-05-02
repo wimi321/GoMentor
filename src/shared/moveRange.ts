@@ -117,8 +117,13 @@ export function parseMoveRangeFromPrompt(
 
 export interface MoveRangeKeyMoveSummary {
   moveNumber: number
+  moveColor?: 'B' | 'W'
   playedMove?: string
   bestMove?: string
+  blackWinrateBefore?: number
+  blackScoreLeadBefore?: number
+  blackWinrateAfter?: number
+  blackScoreLeadAfter?: number
   winrateLoss: number
   scoreLoss: number
   judgement?: string
@@ -132,6 +137,7 @@ export interface MoveRangeSummaryLike {
   keyMoves: MoveRangeKeyMoveSummary[]
   omittedMoves: number
   analysisMethod: string
+  progression?: import('./moveRangeAnalysis').MoveRangeProgression
 }
 
 export function selectKeyMoveNumbers(summary: MoveRangeSummaryLike | undefined, fallbackRange: ParsedMoveRange | undefined, limit = MOVE_RANGE_KEY_MOVE_LIMIT): number[] {

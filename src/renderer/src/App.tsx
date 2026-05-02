@@ -22,6 +22,7 @@ import type {
   TeacherRunResult
 } from '@main/lib/types'
 import { MOVE_RANGE_MAX_MOVES, describeMoveRange, parseMoveRangeFromPrompt, validateMoveRange } from '@shared/moveRange'
+import { buildMoveRangeProgression } from '@shared/moveRangeAnalysis'
 import lizzieBlackStoneUrl from './assets/lizzie/black.png'
 import lizzieBoardUrl from './assets/lizzie/board.png'
 import lizzieWhiteStoneUrl from './assets/lizzie/white.png'
@@ -1167,8 +1168,13 @@ export function App(): ReactElement {
       .filter((item): item is KataGoMoveAnalysis => Boolean(item))
       .map((item) => ({
         moveNumber: item.moveNumber,
+        moveColor: item.currentMove?.color,
         playedMove: item.playedMove?.move ?? item.currentMove?.gtp,
         bestMove: item.before.topMoves[0]?.move,
+        blackWinrateBefore: item.before.winrate,
+        blackScoreLeadBefore: item.before.scoreLead,
+        blackWinrateAfter: item.after.winrate,
+        blackScoreLeadAfter: item.after.scoreLead,
         winrateLoss: Math.round((item.playedMove?.winrateLoss ?? 0) * 100) / 100,
         scoreLoss: Math.round((item.playedMove?.scoreLoss ?? 0) * 100) / 100,
         judgement: item.judgement,
@@ -1178,13 +1184,25 @@ export function App(): ReactElement {
           item.tacticalSignals?.[0]?.type ? `tactical:${item.tacticalSignals[0].type}` : ''
         ].filter(Boolean)
       }))
+    const progression = buildMoveRangeProgression(
+      sorted.map((item) => ({
+        moveNumber: item.moveNumber,
+        blackWinrateBefore: item.before.winrate,
+        blackScoreLeadBefore: item.before.scoreLead,
+        blackWinrateAfter: item.after.winrate,
+        blackScoreLeadAfter: item.after.scoreLead,
+        winrateLoss: item.playedMove?.winrateLoss
+      })),
+      { expectedStart: rangeStart, expectedEnd: rangeEnd }
+    ) ?? undefined
     return {
       start: rangeStart,
       end: rangeEnd,
       totalMoves: rangeEnd - rangeStart + 1,
       keyMoves,
       omittedMoves: Math.max(0, rangeEnd - rangeStart + 1 - keyMoves.length),
-      analysisMethod: 'cached evaluations or quick sweep, then top-loss key-move review'
+      analysisMethod: 'cached evaluations or quick sweep, then top-loss key-move review',
+      progression
     }
   }
 

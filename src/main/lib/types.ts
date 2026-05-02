@@ -473,10 +473,18 @@ export interface StructuredTeacherResult {
   }
 }
 
+import type { MoveRangeProgression } from '@shared/moveRangeAnalysis'
+export type { MoveRangeProgression }
+
 export interface MoveRangeKeyMoveSummary {
   moveNumber: number
+  moveColor?: 'B' | 'W'
   playedMove?: string
   bestMove?: string
+  blackWinrateBefore?: number
+  blackScoreLeadBefore?: number
+  blackWinrateAfter?: number
+  blackScoreLeadAfter?: number
   winrateLoss: number
   scoreLoss: number
   judgement?: string
@@ -490,6 +498,7 @@ export interface MoveRangeReviewSummary {
   keyMoves: MoveRangeKeyMoveSummary[]
   omittedMoves: number
   analysisMethod: string
+  progression?: MoveRangeProgression
 }
 
 export interface TeacherRunRequest {
