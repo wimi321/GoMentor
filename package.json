@@ -1,6 +1,6 @@
 {
   "name": "gomentor",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "KataGo + multimodal LLM desktop workbench for Go students and teachers.",
   "main": "out/main/index.js",
   "type": "module",

@@ -4,6 +4,23 @@ All notable changes to GoMentor will be documented here.
 
 This project follows semantic versioning once public releases begin.
 
+## 0.3.5 - Keyboard Move Navigation
+
+### Added
+
+- Global Left/Right arrow navigation for stepping backward and forward through moves.
+- Home/End shortcuts for jumping to the first and final board position.
+
+### Improved
+
+- Rapid keyboard move stepping now debounces live KataGo analysis while keeping the board responsive.
+- Keyboard navigation stays out of editable fields, selection controls, buttons, and modified key combinations.
+- Cancelled live KataGo analysis can preserve a usable partial result instead of surfacing a cancellation error.
+
+### Fixed
+
+- LLM response helper tests now transpile the TypeScript source before importing it in Node's test runner.
+
 ## 0.3.4 - Settings Paste and Desktop Polish
 
 ### Added

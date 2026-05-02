@@ -627,8 +627,15 @@ export function App(): ReactElement {
         setCommandPaletteOpen(false)
         setSettingsOpen(false)
       }
-      const target = event.target as HTMLElement | null
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) {
+        return
+      }
+      const target = event.target instanceof HTMLElement ? event.target : null
+      if (
+        target &&
+        (target.isContentEditable ||
+          target.closest('input, textarea, select, button, [contenteditable="true"], [role="textbox"], [role="combobox"], [role="listbox"]'))
+      ) {
         return
       }
       const rec = recordRef.current

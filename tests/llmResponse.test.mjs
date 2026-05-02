@@ -1,6 +1,20 @@
 import assert from 'node:assert/strict'
+import { Buffer } from 'node:buffer'
+import { readFile } from 'node:fs/promises'
 import test from 'node:test'
-import { extractText, responseShapeDiagnostics } from '../src/main/services/llmResponse.ts'
+import ts from 'typescript'
+
+const source = await readFile(new URL('../src/main/services/llmResponse.ts', import.meta.url), 'utf8')
+const compiled = ts.transpileModule(source, {
+  compilerOptions: {
+    module: ts.ModuleKind.ES2022,
+    target: ts.ScriptTarget.ES2022,
+    verbatimModuleSyntax: false
+  }
+}).outputText
+const { extractText, responseShapeDiagnostics } = await import(
+  `data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`
+)
 
 test('extracts standard chat completion content', () => {
   assert.equal(extractText({
