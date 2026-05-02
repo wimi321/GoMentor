@@ -188,8 +188,29 @@ jobs:
           path: artifacts
           merge-multiple: true
 
+      - name: Generate checksums
+        shell: bash
+        run: |
+          shopt -s globstar nullglob
+          files=(
+            artifacts/**/GoMentor-*-mac-arm64.dmg
+            artifacts/**/GoMentor-*-mac-x64.dmg
+            artifacts/**/GoMentor-*-win-x64-portable.zip
+            artifacts/**/GoMentor-*-win-x64.exe
+          )
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "No release assets found for checksum generation." >&2
+            exit 1
+          fi
+          sha256sum "${files[@]}" | sed 's# .*/#  #' > artifacts/SHA256SUMS.txt
+
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/**
+          files: |
+            artifacts/**/GoMentor-*-mac-arm64.dmg
+            artifacts/**/GoMentor-*-mac-x64.dmg
+            artifacts/**/GoMentor-*-win-x64-portable.zip
+            artifacts/**/GoMentor-*-win-x64.exe
+            artifacts/SHA256SUMS.txt
           generate_release_notes: true
