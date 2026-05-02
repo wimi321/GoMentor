@@ -108,7 +108,13 @@ jobs:
               --pattern "GoMentor-*-win-x64-portable.zip" \
               --dir .katago-asset-source
             asset_zip="$(find .katago-asset-source -maxdepth 1 -name 'GoMentor-*-win-x64-portable.zip' | head -n 1)"
-            tar -xf "${asset_zip}" -C .katago-asset-source/extracted
+            if command -v unzip >/dev/null 2>&1; then
+              unzip -q "${asset_zip}" -d .katago-asset-source/extracted
+            elif command -v 7z >/dev/null 2>&1; then
+              7z x "${asset_zip}" -o.katago-asset-source/extracted
+            else
+              powershell -NoProfile -Command "Expand-Archive -LiteralPath '${asset_zip}' -DestinationPath '.katago-asset-source/extracted'"
+            fi
             node scripts/prepare_katago_assets.mjs --asset-dir=".katago-asset-source/extracted/resources/data/katago"
           fi
           node scripts/check_katago_assets.mjs --mode=release
@@ -119,6 +125,7 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.CSC_LINK != '' && 'true' || 'false' }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
