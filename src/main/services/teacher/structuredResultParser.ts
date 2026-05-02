@@ -73,7 +73,7 @@ function normalizeSeverity(value: unknown): 'inaccuracy' | 'mistake' | 'blunder'
 }
 
 function normalizeTaskType(value: unknown, defaultValue: TeacherTaskType): TeacherTaskType {
-  if (value === 'current-move' || value === 'full-game' || value === 'recent-games' || value === 'freeform') return value
+  if (value === 'current-move' || value === 'full-game' || value === 'recent-games' || value === 'freeform' || value === 'move-range') return value
   return defaultValue
 }
 

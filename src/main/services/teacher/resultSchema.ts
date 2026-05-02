@@ -1,4 +1,4 @@
-export type TeacherTaskType = 'current-move' | 'full-game' | 'recent-games' | 'freeform'
+export type TeacherTaskType = 'current-move' | 'full-game' | 'recent-games' | 'freeform' | 'move-range'
 
 export interface TeacherKeyMistake {
   moveNumber?: number

@@ -1,4 +1,4 @@
-import type { KeyboardEvent, ReactElement, ReactNode } from 'react'
+import type { KeyboardEvent, PointerEvent as ReactPointerEvent, ReactElement, ReactNode } from 'react'
 import { useMemo, useRef, useState } from 'react'
 import type { KataGoMoveAnalysis } from '@main/lib/types'
 import { getAnalysisMoveNumber, getAnalysisWinrate, classifyMoveLoss, normalizeWinrate } from './boardGeometry'
@@ -20,6 +20,10 @@ interface WinrateTimelineV2Props {
   loading?: boolean
   loadingLabel?: string
   onMove?: (moveNumber: number) => void
+  onRangeSelect?: (start: number, end: number) => void
+  onRangeClear?: () => void
+  rangeStart?: number | null
+  rangeEnd?: number | null
   summary?: ReactNode
 }
 
@@ -89,10 +93,13 @@ function buildPoints(evaluations: KataGoMoveAnalysis[], totalMoves: number): Tim
     .sort((a, b) => a.moveNumber - b.moveNumber)
 }
 
-export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, loading = false, loadingLabel = '', onMove, summary }: WinrateTimelineV2Props): ReactElement {
+export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, loading = false, loadingLabel = '', onMove, onRangeSelect, onRangeClear, rangeStart: activeRangeStart, rangeEnd: activeRangeEnd, summary }: WinrateTimelineV2Props): ReactElement {
   const [dragging, setDragging] = useState(false)
   const [hoveredMove, setHoveredMove] = useState<number | null>(null)
   const [hoverLeft, setHoverLeft] = useState(0)
+  const [dragRangeStart, setDragRangeStart] = useState<number | null>(null)
+  const [dragRangeEnd, setDragRangeEnd] = useState<number | null>(null)
+  const [isRangeDragging, setIsRangeDragging] = useState(false)
   const draggingRef = useRef(false)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const points = useMemo(() => buildPoints(evaluations, totalMoves), [evaluations, totalMoves])
@@ -125,7 +132,15 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
   const currentPoint = points.find((point) => point.moveNumber === currentMoveNumber)
   const currentLossLabel = formatWinrateLoss(currentPoint?.loss)
 
-  function moveFromEvent(event: React.PointerEvent<SVGSVGElement>): number {
+  const hasActiveRange = activeRangeStart != null && activeRangeEnd != null
+  const rangeLo = isRangeDragging
+    ? Math.min(dragRangeStart ?? 0, dragRangeEnd ?? 0)
+    : hasActiveRange ? Math.min(activeRangeStart!, activeRangeEnd!) : null
+  const rangeHi = isRangeDragging
+    ? Math.max(dragRangeStart ?? 0, dragRangeEnd ?? 0)
+    : hasActiveRange ? Math.max(activeRangeStart!, activeRangeEnd!) : null
+
+  function moveFromEvent(event: ReactPointerEvent<SVGSVGElement>): number {
     const rect = event.currentTarget.getBoundingClientRect()
     return moveFromPointer({
       clientX: event.clientX,
@@ -137,12 +152,25 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
     })
   }
 
-  function selectMove(event: React.PointerEvent<SVGSVGElement>): void {
+  function selectMove(event: ReactPointerEvent<SVGSVGElement>): void {
     if (!onMove) return
     onMove(moveFromEvent(event))
   }
 
-  function handlePointerDown(event: React.PointerEvent<SVGSVGElement>): void {
+  function handlePointerDown(event: ReactPointerEvent<SVGSVGElement>): void {
+    if (event.altKey) {
+      event.preventDefault()
+      containerRef.current?.focus({ preventScroll: true })
+      event.currentTarget.setPointerCapture(event.pointerId)
+      const move = moveFromEvent(event)
+      setIsRangeDragging(true)
+      setDragRangeStart(move)
+      setDragRangeEnd(move)
+      return
+    }
+    if (hasActiveRange) {
+      onRangeClear?.()
+    }
     containerRef.current?.focus({ preventScroll: true })
     event.currentTarget.setPointerCapture(event.pointerId)
     draggingRef.current = true
@@ -150,7 +178,11 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
     selectMove(event)
   }
 
-  function handlePointerMove(event: React.PointerEvent<SVGSVGElement>): void {
+  function handlePointerMove(event: ReactPointerEvent<SVGSVGElement>): void {
+    if (isRangeDragging) {
+      setDragRangeEnd(moveFromEvent(event))
+      return
+    }
     const move = moveFromEvent(event)
     const rect = event.currentTarget.getBoundingClientRect()
     const rawLeft = event.clientX - rect.left
@@ -161,7 +193,22 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
     }
   }
 
-  function handlePointerEnd(event: React.PointerEvent<SVGSVGElement>): void {
+  function handlePointerEnd(event: ReactPointerEvent<SVGSVGElement>): void {
+    if (isRangeDragging) {
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId)
+      }
+      const endMove = moveFromEvent(event)
+      setIsRangeDragging(false)
+      if (dragRangeStart !== null && endMove !== dragRangeStart) {
+        const lo = Math.min(dragRangeStart, endMove)
+        const hi = Math.max(dragRangeStart, endMove)
+        onRangeSelect?.(lo, hi)
+      }
+      setDragRangeStart(null)
+      setDragRangeEnd(null)
+      return
+    }
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
@@ -171,6 +218,10 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
+    if (event.key === 'Escape' && hasActiveRange) {
+      onRangeClear?.()
+      return
+    }
     if (!onMove || (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')) {
       return
     }
@@ -211,7 +262,7 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
         onPointerUp={handlePointerEnd}
         onPointerCancel={handlePointerEnd}
         onPointerLeave={() => {
-          if (!draggingRef.current) {
+          if (!draggingRef.current && !isRangeDragging) {
             setHoveredMove(null)
           }
         }}
@@ -234,6 +285,17 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
         <line className="ks-timeline-center" x1={padX} y1={y(0.5)} x2={width - padX} y2={y(0.5)} />
         {path ? <path className="ks-timeline-line ks-timeline-line--winrate" d={path} /> : null}
         {scorePath ? <path className="ks-timeline-line ks-timeline-line--score" d={scorePath} /> : null}
+        {rangeLo !== null && rangeHi !== null ? (
+          <g className="ks-timeline-range">
+            <rect
+              className="ks-timeline-range-highlight"
+              x={x(rangeLo)}
+              y={padY}
+              width={x(rangeHi) - x(rangeLo)}
+              height={plotH}
+            />
+          </g>
+        ) : null}
         <line className="ks-timeline-current" x1={x(currentMoveNumber)} y1={padY} x2={x(currentMoveNumber)} y2={height - padY} />
         {hoverPoint ? (
           <g className="ks-timeline-hover">
@@ -247,6 +309,11 @@ export function WinrateTimelineV2({ evaluations, currentMoveNumber, totalMoves, 
         </g>
         {points.length === 0 ? <text className="ks-timeline-empty" x={width / 2} y={height / 2}>导入棋谱后生成胜率图</text> : null}
       </svg>
+      {rangeLo !== null && rangeHi !== null && !isRangeDragging ? (
+        <div className="ks-timeline-range-badge">
+          {rangeLo} - {rangeHi}
+        </div>
+      ) : null}
       {hoverPoint ? (
         <div className="ks-timeline-tooltip" style={{ left: `${Math.round(hoverLeft)}px` }}>
           <strong>第 {hoverPoint.moveNumber} 手 · {Math.round(hoverPoint.winrate * 100)}%</strong>
