@@ -6,6 +6,7 @@ import { getGames, getSettings, replaceSettings, reportsDir } from '@main/lib/st
 import type {
   CoachUserLevel,
   GameMove,
+  GameRecord,
   KataGoMoveAnalysis,
   KnowledgeMatch,
   KnowledgePacket,
@@ -27,7 +28,8 @@ import { MOVE_RANGE_KEY_MOVE_LIMIT, MOVE_RANGE_MAX_MOVES, parseMoveRangeFromProm
 import { formatMoveRangeSummaryForPrompt, selectMoveNumbersForRangeRefine } from './teacher/moveRangeReview'
 import { searchKnowledge, searchKnowledgeMatches } from './knowledge'
 import { recommendedProblemsFromMatches, type BoardSnapshotStone, type LocalWindow } from './knowledge/matchEngine'
-import { buildBoardState, boardStateToSnapshot } from './go/boardState'
+import { buildBoardState, boardStateToSnapshot, coordToGtp, gtpToCoord } from './go/boardState'
+import { renderBoardText } from './go/boardTextRender'
 import { detectTacticalSignals } from './knowledge/tacticalDetectors'
 import { readGameRecord } from './sgf'
 import { ensureFoxGameDownloaded } from './fox'
@@ -138,7 +140,7 @@ function findGamesForStudent(studentName: string, count: number): LibraryGame[] 
   return (matched.length > 0 ? matched : games).slice(0, count)
 }
 
-function gtpToCoord(point: string, boardSize: number): { row: number; col: number } | null {
+function gtpToCoordLocal(point: string, boardSize: number): { row: number; col: number } | null {
   const match = point.trim().toUpperCase().match(/^([A-HJ-T])(\d{1,2})$/)
   if (!match) return null
   const letters = 'ABCDEFGHJKLMNOPQRST'
@@ -148,7 +150,7 @@ function gtpToCoord(point: string, boardSize: number): { row: number; col: numbe
   return { row: boardSize - number, col }
 }
 
-function coordToGtp(row: number, col: number, boardSize: number): string {
+function coordToGtpLocal(row: number, col: number, boardSize: number): string {
   const letters = 'ABCDEFGHJKLMNOPQRST'
   return `${letters[col]}${boardSize - row}`
 }
@@ -196,7 +198,7 @@ function buildBoardSnapshot(moves: GameMove[], uptoMoveNumber: number, boardSize
   const board = new Map<string, 'B' | 'W'>()
   for (const move of moves.slice(0, Math.max(0, uptoMoveNumber))) {
     if (move.pass) continue
-    const coord = move.row !== null && move.col !== null ? { row: move.row, col: move.col } : gtpToCoord(move.gtp, boardSize)
+    const coord = move.row !== null && move.col !== null ? { row: move.row, col: move.col } : gtpToCoordLocal(move.gtp, boardSize)
     if (!coord) continue
     const key = coordKey(coord.row, coord.col)
     board.set(key, move.color)
@@ -215,19 +217,19 @@ function buildBoardSnapshot(moves: GameMove[], uptoMoveNumber: number, boardSize
   }
   return [...board.entries()].map(([key, color]) => {
     const [row, col] = key.split(',').map(Number)
-    return { color, point: coordToGtp(row, col, boardSize) }
+    return { color, point: coordToGtpLocal(row, col, boardSize) }
   })
 }
 
 function buildLocalWindows(snapshot: BoardSnapshotStone[], anchors: Array<string | undefined>, boardSize: number): LocalWindow[] {
   return [...new Set(anchors.filter(Boolean) as string[])]
-    .filter((anchor) => gtpToCoord(anchor, boardSize))
+    .filter((anchor) => gtpToCoordLocal(anchor, boardSize))
     .map((anchor) => {
-      const anchorPoint = gtpToCoord(anchor, boardSize)!
+      const anchorPoint = gtpToCoordLocal(anchor, boardSize)!
       return {
         anchor,
         stones: snapshot.filter((stone) => {
-          const point = gtpToCoord(stone.point, boardSize)
+          const point = gtpToCoordLocal(stone.point, boardSize)
           if (!point) return false
           return Math.max(Math.abs(point.row - anchorPoint.row), Math.abs(point.col - anchorPoint.col)) <= 4
         })
@@ -529,7 +531,7 @@ function initialAgentUserMessage(state: TeacherAgentSessionState): ChatMessage {
   const text = [
     '任务说明：请根据 intent 完成用户请求。',
     '如果 intent 是 current-move，请先观察随消息附带的棋盘图片，再调用 KataGo 和知识库工具核对事实。',
-    '如果 intent 是 move-range，请依次观察附带的区间关键手棋盘图片，先概括区间胜率/目差走势，再重点讲解 top-loss 关键手。',
+    '如果 intent 是 move-range，请依次观察附带的区间关键手棋盘图片和走势概要。讲解时先概括区间整体走势（谁占优、转折在哪里），再重点讲解 top-loss 关键手。讲解关键手时，如有定式、死活、手筋或常见错误相关特征，请调用 knowledge.searchLocal 核对。需要查看已有图片之外的某手局面时，可调用 board.renderRangePosition 获取文本棋盘表示（每次最多5手）。',
     '当前手讲解要按工具返回的 teachingDensity 掌握详略：常规定式少讲；定式分支或相似型列关键变化；中盘战、攻杀、转换要讲目的、对方应手、后续变化和实战评价。',
     'boardImageAttached=true 表示本轮用户消息已附棋盘图，请把图片中的棋形、厚薄、急所和全局方向作为局面判断依据。',
     'moveRangeSummary 是 renderer/cache 预先提取的区间关键手摘要；如证据不足，可调用 katago.analyzeMoveRangeKeyMoves 精读这些关键手。',
@@ -599,6 +601,19 @@ function compactAnalysis(analysis: KataGoMoveAnalysis): JsonObject {
     tacticalSignals: analysis.tacticalSignals,
     teachingPacing
   }
+}
+
+function numberArrayInput(input: JsonObject, key: string): number[] {
+  const value = input[key]
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => {
+      if (typeof item === 'number') return item
+      if (typeof item === 'string' && item.trim() !== '') return Number(item)
+      return NaN
+    })
+    .filter(Number.isFinite)
+    .map((item) => Math.trunc(item))
 }
 
 async function knowledgeBundleForState(state: TeacherAgentSessionState, input: JsonObject): Promise<{
@@ -906,6 +921,62 @@ function createTeacherAgentTools(state: TeacherAgentSessionState): TeacherAgentT
             : state.request.boardImageDataUrl
               ? '当前棋盘图片已在用户消息中随本轮对话发送。'
               : '本轮没有棋盘图片。'
+        }
+      }
+    },
+    {
+      apiName: 'board_renderRangePosition',
+      canonicalName: 'board.renderRangePosition',
+      label: '渲染区间关键手棋盘',
+      description: '渲染区间内指定手数的棋盘局面文本表示，用于查看已有图片之外的关键手棋形。每次最多查询5手。',
+      parameters: schema({
+        moveNumbers: {
+          type: 'array',
+          items: { type: 'number' },
+          description: '需要渲染棋盘的手数列表（最多5个，应为区间内且已有图片未覆盖的手）'
+        }
+      }),
+      execute: async (input) => {
+        const record = await ensureSessionRecord(state)
+        if (!record) throw new Error('没有棋谱数据。')
+
+        const rawNumbers = numberArrayInput(input, 'moveNumbers')
+        const uniqueMoveNumbers = [...new Set(rawNumbers)]
+          .filter((mn) => mn >= 1 && mn <= record.moves.length)
+
+        const range = state.request.moveRange
+        const moveNumbers = range
+          ? [
+              ...uniqueMoveNumbers.filter((mn) => mn >= range.start && mn <= range.end),
+              ...uniqueMoveNumbers.filter((mn) => mn < range.start || mn > range.end)
+            ].slice(0, 5)
+          : uniqueMoveNumbers.slice(0, 5)
+
+        if (moveNumbers.length === 0) {
+          return { positions: [], note: '没有有效手数；请提供 1 到棋谱总手数之间的 moveNumbers。' }
+        }
+
+        return {
+          positions: moveNumbers.map((mn) => {
+            const boardState = buildBoardState({
+              boardSize: record.boardSize,
+              moves: record.moves,
+              uptoMoveNumber: mn,
+              initialStones: record.initialStones
+            })
+            const snapshot = boardStateToSnapshot(boardState)
+            const move = record.moves[mn - 1]
+            return {
+              moveNumber: mn,
+              moveColor: move?.color,
+              playedMove: move?.gtp,
+              board: renderBoardText(record, mn),
+              stoneCount: {
+                black: snapshot.filter((s) => s.color === 'B').length,
+                white: snapshot.filter((s) => s.color === 'W').length
+              }
+            }
+          })
         }
       }
     },

@@ -602,6 +602,56 @@ function buildMoveAnalysis(
   }
 }
 
+export async function analyzeMoveRange(
+  gameId: string,
+  startMove: number,
+  endMove: number,
+  maxVisits = 200
+): Promise<KataGoMoveAnalysis[]> {
+  const indexedGame = findGame(gameId)
+  if (!indexedGame) {
+    throw new Error(`找不到棋谱: ${gameId}`)
+  }
+  const game = await ensureFoxGameDownloaded(indexedGame)
+  const record = readGameRecord(game)
+  if (startMove < 1 || endMove > record.moves.length || endMove <= startMove) {
+    throw new Error(`区间无效: startMove=${startMove}, endMove=${endMove}, 总手数=${record.moves.length}`)
+  }
+  const komi = normalizeKomi(record.komi)
+  const afterVisits = Math.max(24, Math.floor(maxVisits * 0.55))
+  const queries: AnalysisQuery[] = []
+
+  for (let moveNumber = startMove; moveNumber <= endMove; moveNumber++) {
+    const currentMove = moveNumber > 0 ? record.moves[moveNumber - 1] : undefined
+    const beforeMoves = record.moves.slice(0, Math.max(0, moveNumber - 1))
+    const afterMoves = record.moves.slice(0, Math.max(0, moveNumber))
+    const beforeId = `${gameId}-range-before-${moveNumber}`
+    const afterId = `${gameId}-range-after-${moveNumber}`
+    const actualId = `${gameId}-range-actual-${moveNumber}`
+
+    queries.push({ id: beforeId, moves: moveHistory(beforeMoves), boardSize: record.boardSize, komi, maxVisits })
+    queries.push({ id: afterId, moves: moveHistory(afterMoves), boardSize: record.boardSize, komi, maxVisits: afterVisits })
+
+    const actualQuery = forcePlayedMoveQuery(actualId, beforeMoves, currentMove, record.boardSize, komi, maxVisits)
+    if (actualQuery) {
+      queries.push(actualQuery)
+    }
+  }
+
+  const responses = await queryKataGoBatch(queries)
+  const results: KataGoMoveAnalysis[] = []
+
+  for (let moveNumber = startMove; moveNumber <= endMove; moveNumber++) {
+    const beforeResponse = responses.get(`${gameId}-range-before-${moveNumber}`)
+    const afterResponse = responses.get(`${gameId}-range-after-${moveNumber}`)
+    if (!beforeResponse || !afterResponse) continue
+    const currentMove = moveNumber > 0 ? record.moves[moveNumber - 1] : undefined
+    results.push(buildMoveAnalysis(gameId, moveNumber, record.boardSize, currentMove, beforeResponse, afterResponse, responses.get(`${gameId}-range-actual-${moveNumber}`)))
+  }
+
+  return results
+}
+
 export async function analyzePositionWithProgress(
   gameId: string,
   moveNumber: number,
