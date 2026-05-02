@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import test from 'node:test'
+import { pathToFileURL } from 'node:url'
+import { tmpdir } from 'node:os'
+import { after, before, test } from 'node:test'
+import ts from 'typescript'
 
 // --- Contract tests: verify source patterns ---
 
@@ -36,100 +40,73 @@ test('renderBoardText passes initialStones to buildBoardState', () => {
 
 test('boardState coordToGtp uses GTP_LETTERS that skip I', () => {
   assert.match(boardStateSource, /GTP_LETTERS\s*=\s*['"]ABCDEFGHJKLMNOPQRST/)
-  // Verify no I in the letter table
   const match = boardStateSource.match(/GTP_LETTERS\s*=\s*['"]([^'"]+)['"]/)
   assert.ok(match, 'GTP_LETTERS constant not found')
   assert.ok(!match[1].includes('I'), 'GTP_LETTERS should not contain I')
 })
 
-// --- Functional tests: test the rendering logic directly ---
+// --- Compile + import real renderBoardText ---
 
-// Reproduce the key logic from boardTextRender/boardState inline
-// so we can test without the import chain.
+async function importBoardTextRenderForTest() {
+  const root = await mkdtemp(join(tmpdir(), 'gomentor-board-text-test-'))
+  const goDir = join(root, 'go')
+  await mkdir(goDir, { recursive: true })
+
+  const compilerOptions = {
+    module: ts.ModuleKind.ES2022,
+    target: ts.ScriptTarget.ES2022,
+    verbatimModuleSyntax: false
+  }
+
+  const boardStateSrc = await readFile(new URL('../src/main/services/go/boardState.ts', import.meta.url), 'utf8')
+  const boardTextRenderSrc = (await readFile(new URL('../src/main/services/go/boardTextRender.ts', import.meta.url), 'utf8'))
+    .replace(/from ['"]\.\/boardState['"]/, "from './boardState.js'")
+
+  await writeFile(join(goDir, 'boardState.js'), ts.transpileModule(boardStateSrc, { compilerOptions }).outputText, 'utf8')
+  await writeFile(join(goDir, 'boardTextRender.js'), ts.transpileModule(boardTextRenderSrc, { compilerOptions }).outputText, 'utf8')
+
+  const moduleUrl = pathToFileURL(join(goDir, 'boardTextRender.js')).href
+  const mod = await import(`${moduleUrl}?t=${Date.now()}`)
+  return {
+    renderBoardText: mod.renderBoardText,
+    cleanup: () => rm(root, { recursive: true, force: true })
+  }
+}
+
+// Shared test data helpers
+
 const GTP_LETTERS = 'ABCDEFGHJKLMNOPQRSTUVWXYZ'
 
-function coordToGtp(row, col, boardSize) {
-  return `${GTP_LETTERS[col] ?? '?'}${boardSize - row}`
-}
-
-function gtpToCoord(point, boardSize) {
-  const match = point.trim().toUpperCase().match(/^([A-HJ-Z])(\d{1,2})$/)
-  if (!match) return null
-  const col = GTP_LETTERS.indexOf(match[1])
-  const number = Number(match[2])
-  if (col < 0 || col >= boardSize || number < 1 || number > boardSize) return null
-  return { row: boardSize - number, col }
-}
-
-function buildStoneMap(boardSize, moves, uptoMoveNumber, initialStones) {
-  const board = new Map()
-  for (const stone of initialStones ?? []) {
-    board.set(`${stone.row},${stone.col}`, stone.color)
-  }
-  const safe = Math.max(0, Math.min(Math.trunc(uptoMoveNumber), moves.length))
-  for (const move of moves.slice(0, safe)) {
-    if (move.pass) continue
-    const row = move.row
-    const col = move.col
-    if (row === null || col === null) continue
-    board.set(`${row},${col}`, move.color)
-    // Simplified: no capture logic needed for the rendering tests
-    // (captures are tested through buildBoardState contract)
-  }
-  return board
-}
-
-function renderText(boardSize, stoneMap, lastMoveKey) {
-  const columns = Array.from({ length: boardSize }, (_, col) =>
-    coordToGtp(0, col, boardSize).replace(/\d+$/, '')
-  )
-  const lines = ['  ' + columns.join(' ')]
-  for (let row = 0; row < boardSize; row++) {
-    const rowNum = boardSize - row
-    const cells = []
-    for (let col = 0; col < boardSize; col++) {
-      const key = `${row},${col}`
-      const color = stoneMap.get(key)
-      const isLastMove = key === lastMoveKey
-      if (isLastMove) {
-        cells.push(color === 'B' ? '◉' : '◎')
-      } else if (color === 'B') {
-        cells.push('●')
-      } else if (color === 'W') {
-        cells.push('○')
-      } else {
-        cells.push('·')
-      }
-    }
-    lines.push(`${String(rowNum).padStart(2)} ${cells.join(' ')}`)
-  }
-  return lines.join('\n')
-}
-
 function makeMove(moveNumber, color, row, col, pass = false) {
-  const gtp = pass ? 'pass' : coordToGtp(row, col, 19)
+  const gtp = pass ? 'pass' : `${GTP_LETTERS[col]}${19 - row}`
   return { moveNumber, color, point: gtp, row: pass ? null : row, col: pass ? null : col, gtp, pass }
 }
 
 function makeStone(color, row, col) {
-  return { color, row, col, point: coordToGtp(row, col, 19) }
+  const gtp = `${GTP_LETTERS[col]}${19 - row}`
+  return { color, row, col, point: gtp }
 }
 
-function getLastMoveKey(moves, uptoMoveNumber) {
-  const safe = Math.max(0, Math.min(Math.trunc(uptoMoveNumber), moves.length))
-  if (safe === 0) return ''
-  const lastMove = moves[safe - 1]
-  if (lastMove && !lastMove.pass && lastMove.row !== null && lastMove.col !== null) {
-    return `${lastMove.row},${lastMove.col}`
-  }
-  return ''
-}
+// --- Functional tests: test the real compiled renderBoardText ---
+
+let renderBoardText
+let cleanup
+
+before(async () => {
+  const result = await importBoardTextRenderForTest()
+  renderBoardText = result.renderBoardText
+  cleanup = result.cleanup
+  assert.ok(typeof renderBoardText === 'function', 'renderBoardText should be a function')
+})
+
+after(async () => {
+  if (cleanup) await cleanup()
+})
 
 // GTP column letters skip I
 
 test('19x19 columns skip I', () => {
-  const stoneMap = buildStoneMap(19, [], 0, [])
-  const text = renderText(19, stoneMap, '')
+  const text = renderBoardText({ boardSize: 19, moves: [] }, 0)
   const header = text.split('\n')[0]
   const cols = header.trim().split(/\s+/)
   assert.equal(cols.length, 19)
@@ -139,8 +116,7 @@ test('19x19 columns skip I', () => {
 })
 
 test('9x9 columns skip I', () => {
-  const stoneMap = buildStoneMap(9, [], 0, [])
-  const text = renderText(9, stoneMap, '')
+  const text = renderBoardText({ boardSize: 9, moves: [] }, 0)
   const header = text.split('\n')[0]
   const cols = header.trim().split(/\s+/)
   assert.equal(cols.length, 9)
@@ -156,10 +132,7 @@ test('last move is pass → no ◉/◎ marker', () => {
     makeMove(2, 'W', 0, 1),
     makeMove(3, 'B', 0, 0, true) // pass
   ]
-  const stoneMap = buildStoneMap(19, moves, 3, [])
-  const lastMoveKey = getLastMoveKey(moves, 3)
-  assert.equal(lastMoveKey, '', 'pass should produce empty lastMoveKey')
-  const text = renderText(19, stoneMap, lastMoveKey)
+  const text = renderBoardText({ boardSize: 19, moves }, 3)
   assert.doesNotMatch(text, /◉/)
   assert.doesNotMatch(text, /◎/)
   assert.match(text, /●/)
@@ -171,25 +144,19 @@ test('last move is white placement → ◎ marker', () => {
     makeMove(1, 'B', 0, 0),
     makeMove(2, 'W', 0, 1)
   ]
-  const stoneMap = buildStoneMap(19, moves, 2, [])
-  const lastMoveKey = getLastMoveKey(moves, 2)
-  assert.equal(lastMoveKey, '0,1')
-  const text = renderText(19, stoneMap, lastMoveKey)
+  const text = renderBoardText({ boardSize: 19, moves }, 2)
   assert.match(text, /◎/)
   assert.doesNotMatch(text, /◉/)
 })
 
 test('last move is black placement → ◉ marker', () => {
   const moves = [makeMove(1, 'B', 3, 3)]
-  const stoneMap = buildStoneMap(19, moves, 1, [])
-  const lastMoveKey = getLastMoveKey(moves, 1)
-  assert.equal(lastMoveKey, '3,3')
-  const text = renderText(19, stoneMap, lastMoveKey)
+  const text = renderBoardText({ boardSize: 19, moves }, 1)
   assert.match(text, /◉/)
   assert.doesNotMatch(text, /◎/)
 })
 
-// initialStones are preserved
+// initialStones
 
 test('initialStones appear on empty board', () => {
   const stones = [
@@ -197,8 +164,7 @@ test('initialStones appear on empty board', () => {
     makeStone('W', 15, 15),
     makeStone('B', 3, 15),
   ]
-  const stoneMap = buildStoneMap(19, [], 0, stones)
-  const text = renderText(19, stoneMap, '')
+  const text = renderBoardText({ boardSize: 19, moves: [], initialStones: stones }, 0)
   const blackCount = (text.match(/●/g) || []).length
   const whiteCount = (text.match(/○/g) || []).length
   assert.equal(blackCount, 2)
@@ -211,20 +177,38 @@ test('initialStones coexist with played moves', () => {
     makeMove(1, 'W', 3, 3),
     makeMove(2, 'B', 3, 15),
   ]
-  const stoneMap = buildStoneMap(19, moves, 2, stones)
-  const lastMoveKey = getLastMoveKey(moves, 2)
-  const text = renderText(19, stoneMap, lastMoveKey)
+  const text = renderBoardText({ boardSize: 19, moves, initialStones: stones }, 2)
   const blackCount = (text.match(/●|◉/g) || []).length
   const whiteCount = (text.match(/○|◎/g) || []).length
   assert.equal(blackCount, 2)
   assert.equal(whiteCount, 1)
 })
 
+test('initialStones removed by capture from played moves', () => {
+  // Black initial stone at A19 (row=0, col=0)
+  // White plays B19, A18, B18 to surround and capture A19
+  const stones = [makeStone('B', 0, 0)]
+  const moves = [
+    makeMove(1, 'W', 0, 1),  // B19
+    makeMove(2, 'B', 18, 18), // A1 (unrelated)
+    makeMove(3, 'W', 1, 0),  // A18
+    makeMove(4, 'B', 17, 17), // B2 (unrelated)
+    makeMove(5, 'W', 1, 1),  // B18 — completes capture of A19
+  ]
+  const text = renderBoardText({ boardSize: 19, moves, initialStones: stones }, 5)
+  // A19 is row 19 (first data line) — the black stone should be gone
+  const row19 = text.split('\n')[1]
+  assert.doesNotMatch(row19, /●/, 'A19 black stone should be captured')
+  assert.doesNotMatch(row19, /◉/, 'A19 should not have last-move marker')
+  // White stones at B19, A18, B18 should exist
+  const whiteCount = (text.match(/○|◎/g) || []).length
+  assert.ok(whiteCount >= 3, `expected at least 3 white stones, got ${whiteCount}`)
+})
+
 // Board dimensions
 
 test('19x19 has 20 lines (1 header + 19 rows)', () => {
-  const stoneMap = buildStoneMap(19, [], 0, [])
-  const text = renderText(19, stoneMap, '')
+  const text = renderBoardText({ boardSize: 19, moves: [] }, 0)
   const lines = text.split('\n')
   assert.equal(lines.length, 20)
   assert.match(lines[1], /^19\b/)
@@ -232,8 +216,7 @@ test('19x19 has 20 lines (1 header + 19 rows)', () => {
 })
 
 test('9x9 has 10 lines (1 header + 9 rows)', () => {
-  const stoneMap = buildStoneMap(9, [], 0, [])
-  const text = renderText(9, stoneMap, '')
+  const text = renderBoardText({ boardSize: 9, moves: [] }, 0)
   const lines = text.split('\n')
   assert.equal(lines.length, 10)
   assert.match(lines[1], /^ 9\b/)
@@ -243,8 +226,7 @@ test('9x9 has 10 lines (1 header + 9 rows)', () => {
 // Empty board
 
 test('empty board is all dots', () => {
-  const stoneMap = buildStoneMap(9, [], 0, [])
-  const text = renderText(9, stoneMap, '')
+  const text = renderBoardText({ boardSize: 9, moves: [] }, 0)
   const dataLines = text.split('\n').slice(1)
   for (const line of dataLines) {
     const cells = line.trim().split(/\s+/).slice(1)
@@ -253,3 +235,19 @@ test('empty board is all dots', () => {
     }
   }
 })
+
+// Boundary: uptoMoveNumber clamping
+
+test('uptoMoveNumber=0 shows empty board', () => {
+  const moves = [makeMove(1, 'B', 3, 3)]
+  const text = renderBoardText({ boardSize: 19, moves }, 0)
+  assert.doesNotMatch(text, /●/)
+  assert.doesNotMatch(text, /◉/)
+})
+
+test('uptoMoveNumber exceeds moves.length → shows all moves', () => {
+  const moves = [makeMove(1, 'B', 3, 3)]
+  const text = renderBoardText({ boardSize: 19, moves }, 999)
+  assert.match(text, /◉/)
+})
+
