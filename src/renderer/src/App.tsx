@@ -467,6 +467,7 @@ export function App(): ReactElement {
   const autoAnalysisRequestId = useRef('')
   const userPausedLiveAnalysisRef = useRef(false)
   const moveNumberRef = useRef(moveNumber)
+  const recordRef = useRef<GameRecord | null>(record)
   const selectedGameIdRef = useRef('')
   const selectedEvaluationCacheKeyRef = useRef('')
   const evaluationCacheRef = useRef<Record<string, EvaluationByMove>>({})
@@ -583,7 +584,8 @@ export function App(): ReactElement {
 
   useEffect(() => {
     moveNumberRef.current = moveNumber
-  }, [moveNumber])
+    recordRef.current = record
+  }, [moveNumber, record])
 
   useEffect(() => {
     selectedGameIdRef.current = selectedGame?.id ?? ''
@@ -616,6 +618,25 @@ export function App(): ReactElement {
       if (event.key === 'Escape') {
         setCommandPaletteOpen(false)
         setSettingsOpen(false)
+      }
+      const target = event.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return
+      }
+      const rec = recordRef.current
+      if (!rec) return
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault()
+        jumpToMove(Math.max(0, moveNumberRef.current - 1))
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault()
+        jumpToMove(Math.min(rec.moves.length, moveNumberRef.current + 1))
+      } else if (event.key === 'Home') {
+        event.preventDefault()
+        jumpToMove(0)
+      } else if (event.key === 'End') {
+        event.preventDefault()
+        jumpToMove(rec.moves.length)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
